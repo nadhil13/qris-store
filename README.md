@@ -33,6 +33,16 @@ Buka [http://localhost:5500/index.html](http://localhost:5500/index.html).
 
 Jangan membuka `index.html` langsung dengan `file://`, karena module JavaScript, service worker, dan beberapa fitur browser membutuhkan HTTP server.
 
+## Verifikasi lokal
+
+Jalankan pemeriksaan syntax dan test suite dependency-free:
+
+```cmd
+node --check scripts\app.js
+node --check scripts\qris.js
+node tests\run-tests.mjs
+```
+
 ## Membuka admin
 
 Gunakan URL berikut:

@@ -18,6 +18,7 @@ Terima kasih sudah membantu memperbaiki Atelier Nusantara. Repository ini adalah
    ```cmd
    node --check scripts\app.js
    node --check scripts\qris.js
+   node tests\run-tests.mjs
    python -m http.server 5500
    ```
 

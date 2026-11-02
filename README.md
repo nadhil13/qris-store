@@ -96,7 +96,8 @@ Konversi payload QRIS di browser tidak sama dengan konfirmasi pembayaran. Status
 - [ ] Database katalog dan pesanan lintas perangkat.
 - [ ] Webhook settlement pembayaran.
 - [ ] Upload aset QRIS dengan validasi server.
-- [ ] Test suite otomatis dan deployment pipeline.
+- [x] Test suite otomatis dependency-free.
+- [ ] Deployment pipeline.
 
 Roadmap tidak menjanjikan tanggal rilis. Prioritas dapat berubah mengikuti kebutuhan implementasi.
 

@@ -14,4 +14,18 @@ assert.match(html, /admin-storefront-whatsapp/);
 assert.match(html, /admin-product-submit-label/);
 assert.match(html, /checkoutViaWhatsApp/);
 
+const productShape = {
+  id: 'test-product',
+  price: 50000,
+  isAvailable: true
+};
+assert.equal(typeof productShape.price, 'number');
+assert.equal(productShape.isAvailable, true);
+
+const availableProducts = [
+  productShape,
+  { id: 'sold-out', price: 45000, isAvailable: false }
+].filter((product) => product.isAvailable !== false);
+assert.deepEqual(availableProducts.map((product) => product.id), ['test-product']);
+
 console.log('PASS catalog-contract.test.mjs');

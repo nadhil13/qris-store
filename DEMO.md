@@ -26,4 +26,4 @@ Buka dua tab pada origin yang sama. Ubah stok atau produk dari admin pada satu t
 
 ## Recovery
 
-Jika state demo rusak, gunakan reset katalog atau bersihkan site data browser. Jangan membersihkan storage pada origin produksi tanpa memahami data yang akan hilang.
+Jika JSON pada localStorage malformed atau bentuk datanya tidak sesuai, aplikasi akan memakai fallback untuk domain yang terdampak. Gunakan reset katalog atau bersihkan site data browser setelah memahami bahwa data lokal dapat hilang. Jangan membersihkan storage pada origin produksi tanpa memahami data yang akan hilang.

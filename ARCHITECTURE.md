@@ -26,7 +26,7 @@ Atelier Nusantara adalah aplikasi web statis. Browser memuat `index.html`, style
 
 State utama berada pada object browser di `scripts/app.js`. Data yang bertahan antar reload memakai `localStorage`, termasuk keranjang, order aktif, order admin, konfigurasi QRIS, konfigurasi toko, produk custom, dan sesi admin demo.
 
-Data tersebut hanya berlaku pada origin dan browser yang menyimpannya. Membersihkan storage dapat menghapus data. Aplikasi tidak memiliki conflict resolution, audit log, multi-user access, atau backup server.
+Data tersebut hanya berlaku pada origin dan browser yang menyimpannya. Membersihkan storage dapat menghapus data. Jika JSON malformed atau bentuk data tidak sesuai, aplikasi membaca fallback per domain, sehingga domain yang rusak dapat kembali ke default atau kehilangan perubahan lokal sementara domain lain tetap berjalan. Aplikasi tidak memiliki conflict resolution, audit log, multi-user access, atau backup server.
 
 ## Realtime browser
 

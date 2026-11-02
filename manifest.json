@@ -1,0 +1,29 @@
+{
+  "name": "Atelier Nusantara: Butik Belanja Multi-Kategori",
+  "short_name": "Atelier Nusantara",
+  "description": "Butik kurasi belanja multi-kategori: makanan gourmet, kopi artisan, kriya nusantara, mode, dan gadget dengan pembayaran QRIS dinamis GoPay.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F8F5F0",
+  "theme_color": "#2E4532",
+  "orientation": "portrait-primary",
+  "categories": [
+    "shopping",
+    "food",
+    "lifestyle"
+  ],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' width='192' height='192'%3E%3Crect width='192' height='192' rx='42' fill='%232E4532'/%3E%3Ctext x='96' y='124' font-family='serif' font-weight='900' font-size='84' fill='%23F8F5F0' text-anchor='middle'%3EAN%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'%3E%3Crect width='512' height='512' rx='112' fill='%232E4532'/%3E%3Ctext x='256' y='330' font-family='serif' font-weight='900' font-size='220' fill='%23F8F5F0' text-anchor='middle'%3EAN%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atelier Nusantara: Butik Belanja Multi-Kategori | Makanan, Barang, Mode & Kriya</title>
+  <meta name="description"
+    content="Platform belanja kurasi serbaguna: makanan gourmet, minuman artisan, busana kriya, peralatan gaya hidup, gadget, dan produk digital dengan sistem pembayaran QRIS dinamis otomatis.">
+  <link rel="stylesheet" href="styles/main.css?v=20261102-admin-v1">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2E4532">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- Schema.org Rich Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "OnlineStore",
+    "name": "Atelier Nusantara",
+    "description": "Butik kurasi multi-kategori: makanan gourmet, kopi artisan, karya keramik, busana etis, gadget meja, dan voucher eksklusif dengan pembayaran QRIS dinamis.",
+    "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+    "priceRange": "Rp 36.000 - Rp 500.000",
+    "paymentAccepted": "QRIS, GoPay, BCA Virtual Account, Semua Bank",
+    "currenciesAccepted": "IDR"
+  }
+  </script>
+</head>
+
+<body>
+
+  <!-- ========================================================================
+       SITE HEADER / NAVIGATION
+       ======================================================================== -->
+  <header class="site-header" id="site-header">
+    <div class="container nav-inner">
+      <div class="brand-wrapper">
+        <div class="brand-mark">AN</div>
+        <div class="brand-title">
+          <span class="brand-name">Atelier Nusantara</span>
+          <span class="brand-tagline">Kurasi Makanan, Barang, Mode & Kriya</span>
+        </div>
+      </div>
+
+      <nav aria-label="Navigasi Utama">
+        <ul class="nav-links">
+          <li><a href="#katalog" class="nav-link active">Katalog</a></li>
+          <li><a href="#filosofi" class="nav-link">Cerita</a></li>
+          <li><a href="#pembayaran-info" class="nav-link">Pembayaran</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-actions">
+        <div class="status-badge" title="Dapur & Kurasi Buka">
+          <span class="beacon-dot"></span>
+          <span>Buka (08:00 - 22:00)</span>
+        </div>
+
+        <button class="audio-toggle" id="audio-toggle-btn" aria-label="Aktifkan atau matikan suara efek"
+          title="Pengaturan Audio Haptic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+        </button>
+
+        <button class="cart-button" id="header-cart-btn" onclick="window.openCartDrawer()"
+          aria-label="Lihat keranjang belanja">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
+          <span>Keranjang</span>
+          <span class="cart-badge" id="cart-badge">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======================================================================
+         SCROLL-CRAFT HERO SECTION
+         ====================================================================== -->
+    <section class="hero-section" id="hero">
+      <div class="container hero-grid">
+        <div class="hero-editorial">
+          <h1 class="hero-headline reveal-up">
+            Ritual yang lebih baik dimulai dari <em>detail yang terasa hidup.</em>
+          </h1>
+          <p class="hero-description reveal-up">
+            Dari kopi pagi yang memberi ketenangan, sampai benda yang menemani hari Anda dengan lebih tulus — kami
+            memilih hal-hal yang punya rasa, karakter, dan makna. Bukan sekadar belanja, tapi sebuah cara hidup yang lebih
+            tenang, lebih kaya, dan lebih istimewa.
+          </p>
+
+          <div class="hero-actions reveal-up">
+            <a href="#katalog" class="btn-primary">
+              <span>Jelajahi Koleksi</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </a>
+            <button class="btn-secondary" onclick="window.addToCart('prod-01')">
+              <span>+ Pesan Pilihan Chef</span>
+            </button>
+          </div>
+
+        </div>
+
+        <div class="hero-visual">
+          <div class="showcase-card">
+            <div class="showcase-tag">Pilihan Chef Hari Ini</div>
+            <div class="showcase-img-wrap">
+              <img src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80"
+                alt="Wagyu Se’i Sapi Asap Atelier Rasa" width="800" height="600" fetchpriority="high"
+                style="aspect-ratio: 4/3; object-fit: cover;" />
+            </div>
+            <div class="showcase-body">
+              <div class="showcase-meta">
+                <h2 class="showcase-title">Wagyu Se’i Sapi Asap</h2>
+                <span class="showcase-price">Rp 78.000</span>
+              </div>
+              <p class="showcase-desc">Daging wagyu meltique asap kayu kosambi 12 jam, sambal lu’at kecombrang segar,
+                dan jasmine rice wangi.</p>
+              <button class="showcase-btn" onclick="window.addToCart('prod-01')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span>Tambah ke Pesanan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         CATALOG SECTION (WITH STICKY FILTER TOOLBAR)
+         ====================================================================== -->
+    <section class="catalog-section reveal-section" id="katalog">
+      <div class="toolbar-wrapper">
+        <div class="container toolbar-inner">
+          <div class="toolbar-row">
+            <!-- Universal Multi-Category Selector Tabs -->
+            <div class="category-tabs" role="tablist">
+              <button class="tab-btn active" data-category="semua" role="tab">
+                <span>Semua Koleksi</span>
+                <span class="tab-count">18</span>
+              </button>
+              <button class="tab-btn" data-category="makanan" role="tab">
+                <span>Makanan Gourmet</span>
+                <span class="tab-count">4</span>
+              </button>
+              <button class="tab-btn" data-category="minuman" role="tab">
+                <span>Minuman Artisan</span>
+                <span class="tab-count">4</span>
+              </button>
+              <button class="tab-btn" data-category="barang" role="tab">
+                <span>Kriya & Rumah</span>
+                <span class="tab-count">4</span>
+              </button>
+              <button class="tab-btn" data-category="fashion" role="tab">
+                <span>Fashion & Busana</span>
+                <span class="tab-count">2</span>
+              </button>
+              <button class="tab-btn" data-category="gadget" role="tab">
+                <span>Gadget & Tech</span>
+                <span class="tab-count">2</span>
+              </button>
+              <button class="tab-btn" data-category="digital" role="tab">
+                <span>Produk Digital</span>
+                <span class="tab-count">2</span>
+              </button>
+            </div>
+
+            <!-- Search & Sort Controls -->
+            <div class="toolbar-controls">
+              <div class="search-box">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input type="text" id="search-input" class="search-input" placeholder="Cari menu, kopi, bahan..."
+                  aria-label="Cari produk" autocomplete="off" />
+                <span class="search-clear" id="search-clear" title="Hapus pencarian">&times;</span>
+              </div>
+
+              <select id="sort-select" class="sort-select" aria-label="Urutkan menu">
+                <option value="featured">Rekomendasi</option>
+                <option value="popular">Paling Populer</option>
+                <option value="price-low">Harga: Rendah ke Tinggi</option>
+                <option value="price-high">Harga: Tinggi ke Rendah</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="container">
+        <div class="catalog-header">
+          <h2 class="catalog-title">Menu & Karya Pilihan</h2>
+          <span class="catalog-results-count" id="results-count">Menampilkan 12 menu & barang pilihan</span>
+        </div>
+
+        <!-- Dynamic Product Grid -->
+        <div class="product-grid" id="product-grid">
+          <!-- Populated dynamically by scripts/app.js -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         LUXURY EDITORIAL STORY SECTION
+         ====================================================================== -->
+    <section class="luxury-story reveal-section" id="filosofi">
+      <div class="container story-grid">
+        <div class="story-copy">
+         <span class="section-kicker">Atelier kehidupan</span>
+         <h2>Lebih dari sekadar barang. Ini adalah rasa hidup yang lebih dihargai.</h2>
+         <p>
+           Kami memilih hal yang benar-benar memberi kedalaman: kopi yang dibakar dengan sabar, sajian yang mengajak
+           berhenti sejenak, dan benda yang hadir setiap hari dengan karakter yang terasa manusiawi. Setiap karya dibuat
+           untuk memperkaya ritme Anda — bukan sekadar menambah daftar belanja.
+         </p>
+         <div class="story-metrics">
+           <div>
+             <strong>12 jam</strong>
+             <span>proses slow-cook & smoke</span>
+           </div>
+           <div>
+             <strong>4.9/5</strong>
+             <span>ulang balik pelanggan</span>
+           </div>
+           <div>
+             <strong>100%</strong>
+             <span>pilihan yang kami sukai</span>
+           </div>
+         </div>
+        </div>
+
+        <div class="story-visual">
+         <div class="floating-card card-main">
+           <span class="mini-label">Hari ini</span>
+           <h3>Slow Morning Set</h3>
+           <ul>
+             <li>Wagyu se’i sapi asap</li>
+             <li>Jasmine rice wangi</li>
+             <li>Espresso matcha velvet</li>
+           </ul>
+           <div class="price-row">
+             <span>Mulai dari</span>
+             <strong>Rp 118.000</strong>
+           </div>
+         </div>
+         <div class="floating-card card-accent">
+           <span class="mini-label">Premium pick</span>
+           <h4>Keramik Kasongan</h4>
+           <p>Dipotong tangan, dibakar artisanal, siap menemani pagi Anda.</p>
+         </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         FINAL CTA BANNER
+         ====================================================================== -->
+    <section class="final-cta reveal-section">
+      <div class="container cta-shell">
+        <div class="cta-copy">
+         <span class="section-kicker dark">Mulai hari Anda dengan yang tepat</span>
+         <h2>Hadirkan momen yang terasa lebih istimewa, setiap hari.</h2>
+         <p>
+           Pilih kopi pagi yang memberi ritme baru, hidangan yang mengajak Anda berhenti sejenak, atau benda yang membuat
+           ruang Anda terasa lebih hidup. Setiap pesanan kami dibuat untuk memberi pengalaman yang bukan sekadar cepat,
+           tapi terasa berkelas, manusiawi, dan membawa sensasi yang benar-benar Anda rasakan.
+         </p>
+        </div>
+        <div class="cta-actions">
+         <a href="#katalog" class="btn-primary">
+           <span>Belanja Sekarang</span>
+           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+             <line x1="5" y1="12" x2="19" y2="12" />
+             <polyline points="12 5 19 12 12 19" />
+           </svg>
+         </a>
+         <a href="https://wa.me/6281234567890" class="btn-secondary light" target="_blank" rel="noreferrer">
+           Konsultasi via WhatsApp
+         </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         QRIS EXPLANATION BANNER
+         ====================================================================== -->
+    <section class="luxury-ritual reveal-section" id="pembayaran-info">
+      <div class="container ritual-shell">
+        <div class="ritual-copy">
+         <span class="section-kicker">Sistem Pembayaran Dinamis</span>
+         <h3>QRIS dinamis yang terasa mulus seperti bagian dari ritual Anda.</h3>
+         <p>
+           Ketika Anda memesan, sistem kami langsung mengonversi total tagihan menjadi barcode QRIS yang siap dipindai
+           dari GoPay, BCA, OVO, Dana, atau mobile banking favorit Anda. Tanpa input manual, tanpa jeda, dan tanpa mengambil
+           Anda dari momen yang sedang terasa tepat.
+         </p>
+        </div>
+
+        <div class="ritual-trust" aria-label="Metode pembayaran yang didukung">
+         <div class="ritual-badge badge-qris">
+           <span>QRIS</span>
+           <small>Standar Nasional</small>
+         </div>
+         <div class="ritual-badge badge-gopay">
+           <span>GoPay</span>
+           <small>Instan &amp; Cashback</small>
+         </div>
+         <div class="ritual-badge badge-va">
+           <span>BCA &amp; VA</span>
+           <small>Semua Bank</small>
+         </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================================================================
+       SLIDE-OVER CART DRAWER
+       ======================================================================== -->
+  <div class="drawer-backdrop" id="drawer-backdrop" onclick="window.closeCartDrawer()"></div>
+  <aside class="cart-drawer" id="cart-drawer" aria-label="Keranjang Belanja">
+    <div class="drawer-header">
+      <div class="drawer-title-wrap">
+        <h3 class="drawer-title">Pesanan Anda</h3>
+        <span class="drawer-count" id="drawer-count">(0 pesanan)</span>
+      </div>
+      <button class="drawer-close" onclick="window.closeCartDrawer()" aria-label="Tutup keranjang">&times;</button>
+    </div>
+
+    <!-- Items List Container -->
+    <div class="drawer-items" id="drawer-items">
+      <!-- Populated dynamically -->
+    </div>
+
+    <div class="drawer-footer">
+      <!-- Customer Information & Shipping Selector (Feature B) -->
+      <div class="cart-customer-section">
+        <div class="cart-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span>Data Pemesan & Pengiriman</span>
+        </div>
+        <div class="customer-fields-grid">
+          <input type="text" class="customer-input-field" id="customer-name" placeholder="Nama Lengkap Pemesan"
+            oninput="window.updateCustomerInfo()" />
+          <input type="tel" class="customer-input-field" id="customer-phone" placeholder="No. WhatsApp / HP (08...)"
+            oninput="window.updateCustomerInfo()" />
+          <input type="text" class="customer-input-field" id="customer-address"
+            placeholder="Alamat Pengantaran / Catatan Lokasi" oninput="window.updateCustomerInfo()" />
+        </div>
+
+        <div style="margin-top: 10px;">
+          <div class="cart-section-title" style="margin-bottom: 4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <rect x="1" y="3" width="15" height="13" />
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+              <circle cx="5.5" cy="18.5" r="2.5" />
+              <circle cx="18.5" cy="18.5" r="2.5" />
+            </svg>
+            <span>Metode Pengiriman</span>
+          </div>
+          <div class="shipping-methods-grid">
+            <div class="shipping-method-card active" id="ship-instant" onclick="window.selectShippingMethod('instant')">
+              <span class="shipping-name">GoSend Instan</span>
+              <span class="shipping-price">Rp 15.000</span>
+              <span class="shipping-eta">1 - 2 Jam</span>
+            </div>
+            <div class="shipping-method-card" id="ship-regular" onclick="window.selectShippingMethod('regular')">
+              <span class="shipping-name">Kurir Reguler</span>
+              <span class="shipping-price">Rp 10.000</span>
+              <span class="shipping-eta">1 - 2 Hari</span>
+            </div>
+            <div class="shipping-method-card" id="ship-pickup" onclick="window.selectShippingMethod('pickup')">
+              <span class="shipping-name">Ambil di Butik</span>
+              <span class="shipping-price">Rp 0</span>
+              <span class="shipping-eta">Siap 30 Mnt</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voucher Promo -->
+      <div class="voucher-row">
+        <input type="text" class="voucher-input" id="voucher-input" placeholder="Kode Promo (RASAHEMAT)" />
+        <button class="voucher-btn" onclick="window.applyVoucher()">Pasang</button>
+      </div>
+
+      <!-- Price Breakdown -->
+      <div class="price-summary">
+        <div class="summary-row">
+          <span>Subtotal Menu</span>
+          <span id="summary-subtotal">Rp 0</span>
+        </div>
+        <div class="summary-row" id="summary-discount-row" style="display: none; color: var(--status-success);">
+          <span>Diskon Promo (15%)</span>
+          <span id="summary-discount">- Rp 0</span>
+        </div>
+        <div class="summary-row">
+          <span>Ongkos Pengiriman</span>
+          <span id="summary-shipping">Rp 15.000</span>
+        </div>
+        <div class="summary-row">
+          <span>Kemasan Ramah Lingkungan</span>
+          <span>Rp 2.000</span>
+        </div>
+        <div class="summary-row total">
+          <span>Total Akhir</span>
+          <span class="price" id="summary-total">Rp 0</span>
+        </div>
+      </div>
+
+      <button class="btn-checkout" id="btn-checkout" onclick="window.openCheckoutModal()">
+        <span>Lanjut ke Pembayaran QRIS</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+
+      <button type="button" class="btn-whatsapp-order" onclick="window.checkoutViaWhatsApp()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path
+            d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+        <span>Pesan Langsung via WhatsApp</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ========================================================================
+       DYNAMIC PAYMENT CHECKOUT MODAL (QRIS & GATEWAY)
+       ======================================================================== -->
+  <div class="modal-backdrop" id="payment-modal-backdrop">
+    <div class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-payment-title">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 id="modal-payment-title">Pembayaran Pesanan</h3>
+          <p>Tagihan: <span id="payment-invoice-number"
+              style="font-family: var(--font-mono); font-weight: 600;">INV-RASA-000000</span></p>
+        </div>
+        <button class="drawer-close" onclick="window.closeCheckoutModal()"
+          aria-label="Tutup pembayaran">&times;</button>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="payment-tabs" role="tablist">
+        <button class="pay-tab active" data-target="view-qris" role="tab">QRIS Dinamis (GoPay / Semua Bank)</button>
+        <button class="pay-tab" data-target="view-va" role="tab">Virtual Account</button>
+      </div>
+
+      <div class="payment-content">
+        <!-- 1. QRIS TAB VIEW -->
+        <div class="payment-view" id="view-qris">
+          <div class="qris-card-wrapper">
+            <div class="qris-header-logos">
+              <span class="qris-national-logo">QRIS</span>
+              <span class="gopay-logo-pill">GoPay Merchant Dinamis</span>
+            </div>
+
+            <div class="qris-merchant-info">
+              <div class="merchant-name" id="qris-merchant-display">Toko Terpusat Belanja, Di</div>
+              <div class="merchant-nmid" id="qris-nmid-display">NMID: ID1026533086801 · JAKARTA BARAT</div>
+            </div>
+
+            <!-- Mode Switcher: Dinamis vs Statis Asli -->
+            <div class="qris-mode-switch"
+              style="display:flex; justify-content:center; gap:8px; margin: 10px 0 14px; background: rgba(0,0,0,0.04); padding: 4px; border-radius: 999px;">
+              <button type="button" id="btn-qris-mode-dynamic" onclick="window.switchQRISDisplayMode('dynamic')"
+                style="padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s ease; background: var(--accent-terracotta); color: #fff;">
+                ⚡ Dinamis: Nominal Terisi
+              </button>
+              <button type="button" id="btn-qris-mode-static" onclick="window.switchQRISDisplayMode('static')"
+                style="padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s ease; background: transparent; color: var(--ink-secondary);">
+                📄 Statis Asli: Poster Toko
+              </button>
+            </div>
+            <p id="qris-mode-helper"
+              style="font-size: 0.78rem; color: var(--ink-tertiary); margin-bottom: 12px; line-height: 1.4;">
+              Mode Dinamis: Tagihan terkunci otomatis di scanner aplikasi perbankan Anda.
+            </p>
+
+            <!-- Dynamic QR Code SVG Injection -->
+            <div class="qris-qr-box" id="qris-svg-container">
+              <!-- Rendered via scripts/qris.js -->
+            </div>
+
+            <div class="qris-amount-display">
+              <span class="amount-label" id="qris-amount-label">Total Tagihan Otomatis</span>
+              <div class="amount-number" id="qris-amount-number">Rp 0</div>
+            </div>
+
+            <div class="countdown-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>Batas Waktu Bayar: <strong id="payment-countdown-clock">05:00</strong></span>
+            </div>
+
+            <div class="polling-indicator">
+              <span class="radar-spinner"></span>
+              <span>Menunggu pembayaran otomatis dari aplikasi e-wallet Anda...</span>
+            </div>
+
+            <!-- FEATURE 1: Mobile Buyer QRIS Gallery Helper -->
+            <div class="qris-phone-helper-card">
+              <div class="phone-helper-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                  <line x1="12" y1="18" x2="12.01" y2="18" />
+                </svg>
+                <span>Buka Web dari HP Sendiri?</span>
+              </div>
+              <p style="font-size: 0.76rem; color: var(--ink-secondary); margin-bottom: 8px; line-height: 1.4;">
+                Simpan gambar QRIS ber-NMID resmi ke galeri foto HP Anda, lalu upload di menu <em>Scan dari Galeri</em>
+                pada aplikasi m-Banking atau E-Wallet:
+              </p>
+              <button type="button" class="btn-download-qris" id="btn-download-qris"
+                onclick="window.downloadQRISImage()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>📥 Simpan Gambar QRIS ke Galeri HP</span>
+              </button>
+              <div class="phone-steps-list">
+                <span>1. Simpan Gambar</span>
+                <span>›</span>
+                <span>2. Buka E-Wallet</span>
+                <span>›</span>
+                <span>3. Scan dari Galeri</span>
+              </div>
+              <div class="wallet-shortcuts">
+                <span class="wallet-label">Pintasan Buka Aplikasi:</span>
+                <div class="wallet-pill-group">
+                  <a href="gopay://" class="wallet-pill">GoPay</a>
+                  <a href="bca://" class="wallet-pill">BCA mobile</a>
+                  <a href="dana://" class="wallet-pill">DANA</a>
+                  <a href="shopeeid://" class="wallet-pill">ShopeePay</a>
+                  <a href="bankmandiri://" class="wallet-pill">Livin' Mandiri</a>
+                  <a href="ovo://" class="wallet-pill">OVO</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="simulator-actions">
+              <button class="btn-simulate-pay" id="btn-simulate-pay" onclick="window.simulatePaymentSuccess()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Konfirmasi Pembayaran Selesai (Dapatkan Struk & Lacak)</span>
+              </button>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn-copy-raw" style="flex: 1;" onclick="window.copyQRISPayload()">
+                  Salin String QRIS
+                </button>
+                <button class="btn-copy-raw" style="flex: 1; border-color: #25D366; color: #128C7E;"
+                  onclick="window.sendOrderToWhatsApp()">
+                  Kirim ke WhatsApp
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. VIRTUAL ACCOUNT TAB VIEW -->
+        <div class="payment-view" id="view-va" style="display: none;">
+          <div class="va-box">
+            <span style="font-size: 0.8rem; color: var(--ink-tertiary); font-weight: 600;">Bank Central Asia
+              (BCA)</span>
+            <div class="va-row">
+              <span class="va-number" id="va-code-number">88019123456789</span>
+              <button class="btn-copy-sm btn-copy-action" data-copy="88019123456789">Salin Nomor</button>
+            </div>
+            <p style="font-size: 0.82rem; color: var(--ink-secondary); line-height: 1.5;">
+              Transfer tepat sesuai nominal tagihan melalui m-BCA atau KlikBCA. Transaksi akan terkonfirmasi secara
+              real-time dalam 10 detik.
+            </p>
+            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-hairline);">
+              <button class="btn-simulate-pay" onclick="window.simulatePaymentSuccess()">
+                <span>Simulasi Konfirmasi Transfer VA</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       ORDER SUCCESS RECEIPT MODAL
+       ======================================================================== -->
+  <div class="modal-backdrop" id="receipt-modal-backdrop">
+    <div class="receipt-card">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="receipt-icon-circle">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </div>
+      <h3 class="receipt-title">Pembayaran Berhasil!</h3>
+      <p class="receipt-sub">Pesanan Anda telah diterima dapur dan sedang dipersiapkan.</p>
+
+      <div class="receipt-slip">
+        <!-- Thermal Printer POS Header (Active on window.print) -->
+        <div class="receipt-header-print" style="display: none;">
+          <h2>ATELIER NUSANTARA</h2>
+          <p>Jl. Senopati No. 88, Kebayoran Baru, Jakarta</p>
+          <p>NMID: ID1026533086801 · Telp/WA: 0812-3456-7890</p>
+        </div>
+
+        <div class="receipt-slip-row">
+          <span>No. Invoice</span>
+          <strong id="receipt-invoice">INV-RASA-000000</strong>
+        </div>
+        <div class="receipt-slip-row">
+          <span>Waktu Transaksi</span>
+          <span id="receipt-time">-</span>
+        </div>
+        <div class="receipt-slip-row">
+          <span>Metode Bayar</span>
+          <span>QRIS Dinamis (GoPay Verified)</span>
+        </div>
+        <div class="receipt-slip-row" id="receipt-customer-row">
+          <span>Pemesan</span>
+          <span id="receipt-customer-name">Pelanggan Umum</span>
+        </div>
+        <div class="receipt-slip-row" id="receipt-shipping-row">
+          <span>Pengiriman</span>
+          <span id="receipt-shipping-name">GoSend Instan</span>
+        </div>
+        <div id="receipt-items-list"
+          style="margin: 8px 0; border-top: 1px dashed var(--border-hairline); padding-top: 8px;">
+          <!-- Item breakdown -->
+        </div>
+        <div class="receipt-slip-row bold">
+          <span>Total Dibayar</span>
+          <span id="receipt-total" style="color: var(--status-success); font-family: var(--font-mono);">Rp 0</span>
+        </div>
+
+        <!-- Thermal Printer POS Footer (Active on window.print) -->
+        <div class="receipt-footer-print" style="display: none;">
+          <p>STRUK RESMI PEMBAYARAN QRIS DINAMIS</p>
+          <p>TERIMA KASIH ATAS KUNJUNGAN ANDA</p>
+          <p>Simpan struk ini sebagai bukti pembayaran sah.</p>
+        </div>
+      </div>
+
+      <div class="receipt-action-group">
+        <button class="btn-thermal-print" onclick="window.printThermalReceipt()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 6 2 18 2 18 9" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <rect x="6" y="14" width="12" height="8" />
+          </svg>
+          <span>Cetak Struk Kasir (Thermal POS)</span>
+        </button>
+        <button type="button" class="btn-whatsapp-order" onclick="window.shareReceiptWhatsApp()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path
+              d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+          <span>Kirim Salinan Struk ke WhatsApp</span>
+        </button>
+        <button class="btn-receipt-finish" onclick="window.closeReceiptModal()" style="margin-top: 4px;">
+          Kembali ke Katalog Menu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       QUICK VIEW & PRODUCT VARIANT MODAL
+       ======================================================================== -->
+  <div class="modal-backdrop" id="quick-view-modal-backdrop">
+    <div class="quick-view-modal" role="dialog" aria-modal="true" aria-labelledby="qv-title">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="modal-header">
+        <span
+          style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--accent-terracotta);">Kurasi
+          Detail Menu</span>
+        <button class="drawer-close" onclick="window.closeQuickView()" aria-label="Tutup detail produk">&times;</button>
+      </div>
+
+      <div class="quick-view-grid">
+        <div class="quick-view-media">
+          <img id="qv-img" src="" alt="Foto detail produk pilihan" width="400" height="300"
+            style="aspect-ratio: 4/3; object-fit: cover;" />
+        </div>
+        <div class="quick-view-body">
+          <div class="quick-view-header">
+            <div>
+              <h3 class="quick-view-title" id="qv-title">-</h3>
+              <div class="quick-view-facts" id="qv-facts" style="margin-top: 6px;"></div>
+            </div>
+            <div class="quick-view-price" id="qv-price">Rp 0</div>
+          </div>
+
+          <p class="quick-view-story" id="qv-story">-</p>
+
+          <div>
+            <div class="variant-group-title" id="qv-variant-title">Pilih Varian</div>
+            <div class="variant-options-grid" id="qv-variant-grid"></div>
+          </div>
+
+          <div class="quick-view-actions">
+            <button class="btn-add-variant" onclick="window.addQuickViewToCart()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span>Tambah ke Pesanan</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MERCHANT STATIC-TO-DYNAMIC QRIS CONFIGURATION MODAL
+       ======================================================================== -->
+  <div class="modal-backdrop" id="merchant-config-modal-backdrop">
+    <div class="merchant-config-modal" role="dialog" aria-modal="true" aria-labelledby="modal-merchant-title">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="modal-header" style="padding: 0 0 16px; border-bottom: 1px solid var(--border-hairline);">
+        <div>
+          <h3 id="modal-merchant-title" style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 700;">
+            Konfigurasi QRIS Toko</h3>
+          <p style="font-size: 0.8rem; color: var(--ink-tertiary);">Gunakan QRIS Demo atau konversi QRIS Statis GoPay
+            asli Anda menjadi dinamis.</p>
+        </div>
+        <button class="drawer-close" onclick="window.closeMerchantConfigModal()"
+          aria-label="Tutup pengaturan">&times;</button>
+      </div>
+
+      <div class="config-mode-toggle">
+        <label class="config-radio-label">
+          <input type="radio" name="qris-mode" id="mode-qris-default" value="default" />
+          <span>Demo Default (Atelier Rasa)</span>
+        </label>
+        <label class="config-radio-label">
+          <input type="radio" name="qris-mode" id="mode-qris-custom" value="custom" checked />
+          <span>QRIS Statis Toko / GoPay Asli (Aktif)</span>
+        </label>
+      </div>
+
+      <div class="config-input-group">
+        <label class="config-label" for="merchant-raw-qris-input">String EMVCo QRIS Statis Anda:</label>
+        <p class="config-desc">
+          String QRIS GoPay terverifikasi dari gambar poster (<code>Toko Terpusat Belanja, Di</code>, NMID:
+          <code>ID1026533086801</code>). Sistem otomatis mengonversi tag <code>01</code> ke <code>12</code> (dinamis),
+          menyuntikkan nominal tagihan, dan menghitung ulang checksum CRC16.
+        </p>
+        <textarea id="merchant-raw-qris-input" class="config-textarea"
+          rows="4">00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201</textarea>
+      </div>
+
+      <div
+        style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 12px; border-top: 1px solid var(--border-hairline);">
+        <button class="btn-secondary" onclick="window.closeMerchantConfigModal()">Batal</button>
+        <button class="btn-primary" onclick="window.saveMerchantQRISConfig()">Simpan & Terapkan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       LIVE ORDER TRACKER DOCK & MODAL
+       ======================================================================== -->
+  <div class="order-tracker-dock" id="order-tracker-dock" role="button" tabindex="0"
+    onclick="window.openOrderTrackerModal()"
+    onkeydown="if(event.key==='Enter'||event.key===' ') window.openOrderTrackerModal()"
+    aria-label="Buka pelacak langsung progres pesanan aktif" title="Klik untuk lihat progres pesanan Anda">
+    <div class="tracker-dock-indicator"></div>
+    <div>
+      <span class="tracker-dock-text" id="tracker-dock-text">Pesanan Aktif: -</span>
+      <span class="tracker-dock-status" id="tracker-dock-status">• Memasak</span>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="order-tracker-modal-backdrop">
+    <div class="order-tracker-modal" role="dialog" aria-modal="true" aria-labelledby="tracker-invoice">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="modal-header" style="padding: 0 0 16px; border-bottom: 1px solid var(--border-hairline);">
+        <div>
+          <span
+            style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--accent-terracotta);">Pelacak
+            Langsung</span>
+          <h3 id="tracker-invoice" style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 700;">
+            INV-RASA-000000</h3>
+        </div>
+        <button class="drawer-close" onclick="window.closeOrderTrackerModal()"
+          aria-label="Tutup pelacak">&times;</button>
+      </div>
+
+      <div class="tracker-timeline" id="tracker-timeline">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <div class="tracker-step-controls">
+        <button class="btn-secondary" onclick="window.advanceOrderStatus()" style="flex: 1; font-size: 0.85rem;">
+          Simulasi Majukan Status ➡️
+        </button>
+        <button class="btn-secondary" onclick="window.clearActiveOrder()"
+          style="font-size: 0.85rem; color: var(--accent-terracotta);">
+          Arsipkan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       ADMIN LOGIN MODAL
+       ======================================================================== -->
+  <div class="modal-backdrop" id="admin-login-modal-backdrop">
+    <div class="admin-auth-modal" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-hairline);">
+        <div>
+          <span style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--brand-forest);">Akses Terbatas</span>
+          <h3 id="admin-login-title" style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 700;">Login Admin</h3>
+        </div>
+        <button class="drawer-close" onclick="window.closeAdminLoginModal()" aria-label="Tutup login admin">&times;</button>
+      </div>
+
+      <div class="admin-auth-body">
+        <div class="admin-auth-icon">🔒</div>
+        <p class="admin-auth-copy">Panel operasional toko hanya untuk admin. Semua data, pembayaran, dan katalog diproteksi dari akses user umum.</p>
+
+        <div class="admin-auth-field">
+          <label for="admin-login-username">Username</label>
+          <input id="admin-login-username" type="text" class="customer-input-field" autocomplete="username" placeholder="admin" />
+        </div>
+
+        <div class="admin-auth-field">
+          <label for="admin-login-password">Password</label>
+          <input id="admin-login-password" type="password" class="customer-input-field" autocomplete="current-password" placeholder="••••••••" />
+        </div>
+
+        <div class="admin-auth-actions">
+          <button class="btn-secondary" type="button" onclick="window.closeAdminLoginModal()">Batal</button>
+          <button class="btn-primary" type="button" onclick="window.submitAdminLogin(event)">Masuk Dashboard</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       STORE ADMIN DASHBOARD MODAL (Feature E)
+       ======================================================================== -->
+  <div class="modal-backdrop" id="admin-dashboard-modal-backdrop">
+    <div class="admin-dashboard-modal admin-workspace-shell" id="admin-workspace-shell" role="dialog" aria-modal="true" aria-labelledby="modal-admin-title">
+      <div class="bottom-sheet-grabber" aria-hidden="true"></div>
+      <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-hairline);">
+        <div>
+          <span
+            style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--brand-forest);">Manajemen
+            Toko & Kasir</span>
+          <h3 id="modal-admin-title" style="font-family: var(--font-serif); font-size: 1.35rem; font-weight: 700;">
+            Dasbor Penjualan & Pesanan</h3>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap: wrap; justify-content:flex-end;">
+          <span class="status-badge-step admin-sync-badge" style="font-size:0.7rem;">
+            <span class="beacon-dot" style="width:7px; height:7px; margin-right:6px;"></span>Browser sync
+          </span>
+          <span id="admin-live-sync" style="font-size:0.72rem; color: var(--ink-tertiary); font-family: var(--font-mono);">Menyiapkan data...</span>
+          <button class="btn-secondary" type="button" onclick="window.logoutAdminSession()" style="padding: 7px 10px; font-size: 0.74rem;">Keluar</button>
+        </div>
+        <button class="drawer-close" onclick="window.closeAdminDashboardModal()"
+          aria-label="Tutup dasbor admin">&times;</button>
+      </div>
+
+      <div class="admin-workspace-frame">
+        <aside class="admin-workspace-rail" aria-label="Navigasi ruang kerja admin">
+          <div class="admin-rail-heading">
+            <span class="admin-section-kicker">Ruang kerja</span>
+            <strong>Atelier Nusantara</strong>
+          </div>
+          <nav class="admin-section-nav" aria-label="Bagian admin">
+            <button type="button" class="admin-section-nav-item active" data-admin-section="overview"
+              onclick="window.switchAdminSection('overview')">Ringkasan</button>
+            <button type="button" class="admin-section-nav-item" data-admin-section="orders"
+              onclick="window.switchAdminSection('orders')">Pesanan</button>
+            <button type="button" class="admin-section-nav-item" data-admin-section="catalog"
+              onclick="window.switchAdminSection('catalog')">Katalog</button>
+            <button type="button" class="admin-section-nav-item" data-admin-section="storefront"
+              onclick="window.switchAdminSection('storefront')">Storefront</button>
+            <button type="button" class="admin-section-nav-item" data-admin-section="payments"
+              onclick="window.switchAdminSection('payments')">Pembayaran</button>
+            <button type="button" class="admin-section-nav-item" data-admin-section="tools"
+              onclick="window.switchAdminSection('tools')">Tools</button>
+          </nav>
+          <div class="admin-rail-note">
+            <span>Browser sync</span>
+            <small>Perubahan di tab ini dibagikan ke tab Atelier Nusantara lain.</small>
+          </div>
+        </aside>
+
+        <main class="admin-workspace-main">
+          <!-- Admin Tab Switcher -->
+      <div class="admin-tabs-nav">
+        <button type="button" class="admin-nav-tab active" id="btn-admin-tab-orders"
+          onclick="window.switchAdminTab('orders')">
+          Pesanan & omzet
+        </button>
+        <button type="button" class="admin-nav-tab" id="btn-admin-tab-products"
+          onclick="window.switchAdminTab('products')">
+          Katalog & stok (<span id="admin-product-count-badge">0</span>)
+        </button>
+      </div>
+
+      <div class="admin-body">
+        <section id="admin-section-overview" class="admin-section-view" aria-labelledby="admin-overview-title">
+          <div class="admin-section-heading">
+            <div>
+              <span class="admin-section-kicker">Ringkasan operasional</span>
+              <h4 id="admin-overview-title">Pilih pekerjaan yang perlu diselesaikan</h4>
+              <p>Gunakan ruang kerja ini untuk berpindah dari pesanan ke katalog tanpa menutup dashboard.</p>
+            </div>
+            <div class="admin-section-actions">
+              <button type="button" class="btn-primary" onclick="window.switchAdminSection('orders')">Buka pesanan</button>
+              <button type="button" class="btn-secondary" onclick="window.switchAdminSection('catalog')">Kelola katalog</button>
+            </div>
+          </div>
+          <div class="admin-overview-grid">
+            <button type="button" class="admin-overview-link" onclick="window.switchAdminSection('orders')">
+              <span>Pesanan masuk</span>
+              <strong id="admin-overview-orders">Lihat antrean pesanan</strong>
+            </button>
+            <button type="button" class="admin-overview-link" onclick="window.switchAdminSection('catalog')">
+              <span>Produk toko</span>
+              <strong id="admin-overview-products">Kelola katalog dan stok</strong>
+            </button>
+            <button type="button" class="admin-overview-link" onclick="window.switchAdminSection('payments')">
+              <span>Pembayaran</span>
+              <strong>Atur QRIS toko</strong>
+            </button>
+          </div>
+        </section>
+
+        <section id="admin-section-orders" class="admin-section-view" aria-labelledby="admin-orders-section-title" hidden>
+          <h4 id="admin-orders-section-title" class="sr-only">Pesanan</h4>
+        <!-- TAB 1: ORDERS & SALES METRICS -->
+        <div id="admin-view-orders" class="admin-tab-view">
+          <section class="admin-ops-summary" id="admin-ops-summary" aria-label="Ringkasan operasional">
+            <div class="admin-ops-intro">
+              <span class="admin-section-kicker">Ruang kerja hari ini</span>
+              <h4>Pesanan yang perlu perhatian</h4>
+              <p id="admin-sync-status">Data lokal tersimpan di browser ini. Perubahan antar-tab akan muncul otomatis.</p>
+            </div>
+            <div class="admin-ops-counts">
+              <div class="admin-ops-count">
+                <span>Perlu tindakan</span>
+                <strong id="admin-needs-action">0</strong>
+              </div>
+              <div class="admin-ops-count">
+                <span>Pesanan aktif</span>
+                <strong id="admin-active-orders">0</strong>
+              </div>
+            </div>
+          </section>
+
+          <!-- Sales Metrics -->
+          <div class="admin-metrics-grid">
+            <div class="metric-card">
+              <span class="metric-title">Total Omzet Penjualan</span>
+              <span class="metric-value" id="admin-metric-omzet">Rp 0</span>
+              <span class="metric-sub">Seluruh transaksi sah</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Total Pesanan</span>
+              <span class="metric-value" id="admin-metric-orders">0</span>
+              <span class="metric-sub">Pesanan masuk</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Rata-rata Keranjang</span>
+              <span class="metric-value" id="admin-metric-aov">Rp 0</span>
+              <span class="metric-sub">Nilai transaksi per order</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-title">Pembayaran tercatat</span>
+              <span class="metric-value" id="admin-metric-settled">0</span>
+              <span class="metric-sub">Transaksi yang tersimpan di aplikasi</span>
+            </div>
+          </div>
+
+          <!-- WhatsApp Store Configuration -->
+          <div id="admin-view-tools"
+            style="background: var(--bg-canvas-subtle); border: 1px solid var(--border-hairline); border-radius: var(--radius-md); padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+            <div style="flex: 1; min-width: 240px;">
+              <label for="admin-merchant-phone"
+                style="font-size: 0.78rem; font-weight: 700; color: var(--ink-primary); display: block; margin-bottom: 4px;">
+                Nomor WhatsApp Toko (Penerima Pesanan):
+              </label>
+              <input type="tel" id="admin-merchant-phone" class="customer-input-field" value="6281234567890"
+                placeholder="Format: 62812..." style="max-width: 320px;" />
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="btn-primary" onclick="window.saveAdminMerchantPhone()"
+                style="padding: 8px 14px; font-size: 0.8rem;">
+                Simpan Nomor WA
+              </button>
+              <button class="btn-secondary" onclick="window.openMerchantConfigModal()"
+                style="padding: 8px 14px; font-size: 0.8rem;">
+                ⚙️ QRIS Toko
+              </button>
+              <button class="btn-secondary" onclick="window.exportOrdersCSV()"
+                style="padding: 8px 14px; font-size: 0.8rem;">
+                📥 Ekspor CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- Real-Time Push Notification & Sound Chime Panel -->
+          <div
+            style="background: rgba(46, 69, 50, 0.05); border: 1px solid var(--brand-forest); border-radius: var(--radius-md); padding: 14px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+            <div style="flex: 1; min-width: 240px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span style="font-size: 1.1rem;">🔔</span>
+                <strong style="font-size: 0.88rem; color: var(--brand-forest);">Notifikasi kasir di browser ini</strong>
+                <span id="notif-permission-status" class="status-badge-step"
+                  style="background: #FEF3C7; color: #92400E; font-size: 0.7rem;">Belum Diaktifkan</span>
+              </div>
+              <p style="font-size: 0.78rem; color: var(--ink-secondary); margin: 0; line-height: 1.4;">
+                Browser ini dapat membunyikan nada kasir dan menampilkan notifikasi untuk pembayaran yang tercatat di
+                aplikasi. Ini bukan verifikasi settlement dari penyedia QRIS.
+              </p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-primary" onclick="window.requestNotificationPermission()"
+                style="padding: 8px 14px; font-size: 0.8rem; background: var(--brand-forest);">
+                🔔 Aktifkan di HP
+              </button>
+              <button type="button" class="btn-secondary" onclick="window.testNotificationSound()"
+                style="padding: 8px 14px; font-size: 0.8rem;">
+                🔊 Tes Bunyi Kasir
+              </button>
+            </div>
+          </div>
+
+          <!-- Orders Table -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <div>
+                <span class="admin-section-kicker">Alur pesanan</span>
+                <h4 style="font-size: 0.95rem; font-weight: 700;">Pesanan terbaru</h4>
+              </div>
+              <span style="font-size: 0.76rem; color: var(--ink-tertiary);" id="admin-orders-count">0 pesanan
+                tercatat</span>
+            </div>
+            <p id="admin-empty-state" class="admin-empty-state" hidden>
+              Belum ada pesanan di browser ini. Pesanan baru dari storefront akan muncul di sini.
+            </p>
+            <div class="admin-table-container">
+              <table class="admin-orders-table">
+                <thead>
+                  <tr>
+                    <th>No. Invoice</th>
+                    <th>Waktu</th>
+                    <th>Pemesan</th>
+                    <th>Item Pesanan</th>
+                    <th>Metode</th>
+                    <th>Total Tagihan</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-orders-tbody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        </section>
+
+        <section id="admin-section-catalog" class="admin-section-view" aria-labelledby="admin-catalog-section-title" hidden>
+          <h4 id="admin-catalog-section-title" class="sr-only">Katalog</h4>
+        <!-- TAB 2: PRODUCT CATALOG MANAGEMENT (CRUD) -->
+        <div id="admin-view-products" class="admin-tab-view" style="display: none;">
+          <div
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+            <div>
+              <h4 style="font-size: 1rem; font-weight: 700; color: var(--ink-primary); margin-bottom: 2px;">Katalog
+                Produk & Stok Toko</h4>
+              <p style="font-size: 0.76rem; color: var(--ink-secondary); margin: 0;">Tambah produk baru, ubah
+                ketersediaan stok ready atau habis, atau hapus produk.</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-primary" onclick="window.toggleAddProductForm()"
+                style="padding: 8px 14px; font-size: 0.82rem; background: var(--brand-forest);">
+                + Tambah Produk Baru
+              </button>
+              <button type="button" class="btn-secondary" onclick="window.resetProductsToDefault()"
+                style="padding: 8px 12px; font-size: 0.8rem;" title="Pulihkan daftar produk bawaan awal">
+                ↺ Reset Default
+              </button>
+            </div>
+          </div>
+
+          <!-- Collapsible Add Product Form -->
+          <div id="admin-product-form-box" class="admin-product-form-box" style="display: none;">
+            <div
+              style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-hairline); padding-bottom: 8px;">
+              <strong style="font-size: 0.88rem; color: var(--brand-forest);">Tambah Produk Baru ke Toko</strong>
+              <button type="button" onclick="window.toggleAddProductForm(false)"
+                style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--ink-tertiary);">&times;</button>
+            </div>
+            <form id="admin-new-product-form" onsubmit="window.submitNewProduct(event)">
+              <div class="admin-form-grid">
+                <div class="admin-field-group">
+                  <label class="admin-field-label" for="new-prod-name">Nama Produk *</label>
+                  <input type="text" id="new-prod-name" class="customer-input-field"
+                    placeholder="Contoh: Kopi Susu Aren Gula Jawa" required />
+                </div>
+                <div class="admin-field-group">
+                  <label class="admin-field-label" for="new-prod-category">Kategori *</label>
+                  <select id="new-prod-category" class="customer-input-field" required>
+                    <option value="makanan">Makanan Gourmet</option>
+                    <option value="minuman">Minuman Artisan</option>
+                    <option value="barang">Kriya & Rumah</option>
+                    <option value="fashion">Fashion & Busana</option>
+                    <option value="gadget">Gadget & Tech</option>
+                    <option value="digital">Produk Digital</option>
+                  </select>
+                </div>
+                <div class="admin-field-group">
+                  <label class="admin-field-label" for="new-prod-price">Harga (Rp) *</label>
+                  <input type="number" id="new-prod-price" class="customer-input-field" placeholder="35000" min="1000"
+                    step="500" required />
+                </div>
+                <div class="admin-field-group">
+                  <label class="admin-field-label" for="new-prod-tag">Label / Badge</label>
+                  <input type="text" id="new-prod-tag" class="customer-input-field"
+                    placeholder="Contoh: Menu Baru, Best Seller" />
+                </div>
+                <div class="admin-field-group" style="grid-column: 1 / -1;">
+                  <label class="admin-field-label" for="new-prod-image">URL Foto Produk</label>
+                  <input type="url" id="new-prod-image" class="customer-input-field"
+                    placeholder="https://images.unsplash.com/... (kosongkan untuk gambar otomatis)" />
+                </div>
+                <div class="admin-field-group" style="grid-column: 1 / -1;">
+                  <label class="admin-field-label" for="new-prod-desc">Deskripsi Singkat</label>
+                  <input type="text" id="new-prod-desc" class="customer-input-field"
+                    placeholder="Deskripsi bahan, rasa, atau spesifikasi produk..." />
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
+                <button type="button" class="btn-secondary" onclick="window.toggleAddProductForm(false)"
+                  style="padding: 8px 14px; font-size: 0.82rem;">Batal</button>
+                <button type="submit" class="btn-primary"
+                  style="padding: 8px 18px; font-size: 0.82rem; background: var(--brand-forest);"><span id="admin-product-submit-label">Simpan Produk</span></button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Product Inventory Table -->
+          <div class="admin-table-container">
+            <table class="admin-orders-table">
+              <thead>
+                <tr>
+                  <th>Produk</th>
+                  <th>Kategori</th>
+                  <th>Harga</th>
+                  <th>Status Stok</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="admin-products-tbody">
+                <!-- Populated dynamically via renderAdminProductsTable() -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </section>
+
+        <section id="admin-section-storefront" class="admin-section-view" aria-labelledby="admin-storefront-title" hidden>
+          <div class="admin-section-heading">
+            <div>
+              <span class="admin-section-kicker">Storefront</span>
+              <h4 id="admin-storefront-title">Kontrol tampilan toko</h4>
+              <p>Atur data toko yang sudah terhubung ke tampilan pelanggan. Perubahan disimpan di browser ini dan dibagikan ke tab lain.</p>
+            </div>
+            <button type="button" class="btn-secondary" onclick="window.switchAdminSection('catalog')">Buka katalog</button>
+          </div>
+          <div class="admin-settings-grid">
+            <section class="admin-settings-card" aria-labelledby="admin-store-contact-title">
+              <span class="admin-section-kicker">Kontak toko</span>
+              <h5 id="admin-store-contact-title">Nomor WhatsApp penerima pesanan</h5>
+              <p>Nomor ini dipakai saat pelanggan mengirim ringkasan pesanan ke toko.</p>
+              <label class="admin-field-label" for="admin-storefront-whatsapp">Nomor WhatsApp</label>
+              <input type="tel" id="admin-storefront-whatsapp" class="customer-input-field" placeholder="62812..." />
+              <button type="button" class="btn-primary" onclick="window.saveAdminStorefrontSetting('merchantWhatsApp')">Simpan kontak</button>
+            </section>
+            <section class="admin-settings-card" aria-labelledby="admin-store-catalog-title">
+              <span class="admin-section-kicker">Katalog nyata</span>
+              <h5 id="admin-store-catalog-title">Produk yang tampil ke pelanggan</h5>
+              <p id="admin-storefront-catalog-status">Memuat jumlah produk dari katalog...</p>
+              <button type="button" class="btn-secondary" onclick="window.switchAdminSection('catalog')">Edit produk dan stok</button>
+            </section>
+            <section class="admin-settings-card admin-settings-card-muted" aria-labelledby="admin-storefront-scope-title">
+              <span class="admin-section-kicker">Batas konfigurasi</span>
+              <h5 id="admin-storefront-scope-title">Konten editorial</h5>
+              <p>Hero dan narasi editorial belum memiliki state editor. Bagian ini tidak dibuat sebagai tombol kosong.</p>
+            </section>
+          </div>
+        </section>
+
+        <section id="admin-section-payments" class="admin-section-view" aria-labelledby="admin-payments-title" hidden>
+          <div class="admin-section-heading">
+            <div>
+              <span class="admin-section-kicker">Pembayaran</span>
+              <h4 id="admin-payments-title">Konfigurasi QRIS toko</h4>
+              <p>Kelola konfigurasi pembayaran dari panel QRIS yang sudah tersedia. Upload statis dan manager payload akan ditambahkan di ruang ini.</p>
+            </div>
+            <button type="button" class="btn-primary" onclick="window.openMerchantConfigModal()">Buka pengaturan QRIS</button>
+          </div>
+        </section>
+
+        <section id="admin-section-tools" class="admin-section-view" aria-labelledby="admin-tools-title" hidden>
+          <div class="admin-section-heading">
+            <div>
+              <span class="admin-section-kicker">Tools</span>
+              <h4 id="admin-tools-title">Alat operasional toko</h4>
+              <p>Ekspor pesanan dan pengujian notifikasi browser tetap tersedia sebagai aksi yang dapat dijalankan.</p>
+            </div>
+            <div class="admin-section-actions">
+              <button type="button" class="btn-primary" onclick="window.exportOrdersCSV()">Ekspor CSV</button>
+              <button type="button" class="btn-secondary" onclick="window.requestNotificationPermission()">Aktifkan notifikasi</button>
+            </div>
+          </div>
+        </section>
+      </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Toaster -->
+  <div class="toast-toaster" id="toast-notification">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+    <span id="toast-text">Pemberitahuan</span>
+  </div>
+
+  <!-- ========================================================================
+       NATIVE MOBILE BOTTOM NAVIGATION DOCK (UI Mobility R-03, R-35)
+       ======================================================================== -->
+  <nav class="mobile-app-bar" aria-label="Navigasi Utama Ponsel">
+    <a href="#katalog" class="mobile-nav-item active" id="mob-nav-katalog" onclick="window.switchMobileTab('katalog')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+      </svg>
+      <span>Katalog</span>
+    </a>
+    <button type="button" class="mobile-nav-item" id="mob-nav-search" onclick="window.focusMobileSearch()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <span>Cari</span>
+    </button>
+    <button type="button" class="mobile-nav-item mobile-cart-highlight" id="mob-nav-cart"
+      onclick="window.openCartDrawer()">
+      <div class="mob-cart-icon-wrapper">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <path d="M16 10a4 4 0 0 1-8 0" />
+        </svg>
+        <span class="mob-cart-badge" id="mob-cart-badge">0</span>
+      </div>
+      <span>Keranjang</span>
+    </button>
+    <button type="button" class="mobile-nav-item" id="mob-nav-qris" onclick="window.openMerchantConfigModal()" aria-hidden="true" tabindex="-1">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+      <span>QRIS</span>
+    </button>
+    <button type="button" class="mobile-nav-item" id="mob-nav-admin" onclick="window.openAdminDashboardModal()" aria-hidden="true" tabindex="-1">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 20V10M12 20V4M6 20v-6" />
+      </svg>
+      <span>Admin</span>
+    </button>
+  </nav>
+
+  <!-- ========================================================================
+       FOOTER
+       ======================================================================== -->
+  <footer
+    style="background: var(--bg-card); border-top: 1px solid var(--border-hairline); padding: 48px 0 32px; margin-top: 40px;">
+    <div class="container"
+      style="display: flex; flex-direction: column; gap: 24px; align-items: center; text-align: center;">
+      <div style="font-family: var(--font-serif); font-size: 1.4rem; font-weight: 700; color: var(--ink-primary);">
+        Atelier Rasa</div>
+      <p style="font-size: 0.88rem; color: var(--ink-tertiary); max-width: 500px;">
+        Kurasi cita rasa dan estetika kriya tanah air. Dihidangkan dengan integritas, diracik dengan presisi.
+      </p>
+      <div
+        style="font-size: 0.8rem; color: var(--ink-tertiary); border-top: 1px solid var(--border-hairline); padding-top: 20px; width: 100%;">
+        &copy; 2026 Atelier Rasa. Hak Cipta Dilindungi. Sistem QRIS Dinamis Terintegrasi.
+      </div>
+    </div>
+  </footer>
+
+  <!-- QR Code & GSAP Animation Engines (Local & High Performance) -->
+  <script src="scripts/vendor/qrcode.min.js"></script>
+  <script src="scripts/vendor/gsap.min.js"></script>
+  <script src="scripts/vendor/ScrollTrigger.min.js"></script>
+  <script type="module" src="scripts/app.js?v=20261102-admin-v1"></script>
+</body>
+
+</html>

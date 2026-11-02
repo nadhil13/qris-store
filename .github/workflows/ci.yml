@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check scripts/app.js
+          node --check scripts/qris.js
+
+      - name: Run dependency-free tests
+        run: node tests/run-tests.mjs
+
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Check required files
+        run: |
+          test -f index.html
+          test -f README.md
+          test -f LICENSE
+          test -f scripts/app.js
+          test -f scripts/qris.js
+          test -f tests/run-tests.mjs
+          test -f .github/workflows/ci.yml

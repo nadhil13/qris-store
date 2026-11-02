@@ -40,3 +40,10 @@ body:
     attributes:
       label: Bukti
       description: Sertakan screenshot atau console error. Jangan sertakan secret atau data pelanggan.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Pemeriksaan keamanan
+      options:
+        - label: Saya tidak menyertakan password, token, QRIS privat, atau data pelanggan.
+          required: true

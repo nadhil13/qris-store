@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-C25E3B.svg)](LICENSE)
 [![Static site](https://img.shields.io/badge/site-static-2A402D.svg)](https://github.com/nadhil13/qris-store)
 [![Frontend demo](https://img.shields.io/badge/status-frontend%20demo-3D583F.svg)](https://github.com/nadhil13/qris-store)
+[![CI](https://github.com/nadhil13/qris-store/actions/workflows/ci.yml/badge.svg)](https://github.com/nadhil13/qris-store/actions/workflows/ci.yml)
 
 Atelier Nusantara adalah storefront commerce statis dengan rasa editorial untuk kurasi makanan, minuman, kriya, fashion, gadget, dan produk digital. Proyek ini dibuat untuk pengalaman belanja yang tenang, jelas, dan tetap praktis di layar desktop maupun ponsel.
 
@@ -102,6 +103,22 @@ manifest.json              Konfigurasi PWA
 DESIGN.md                  Arah visual dan motion
 qris/                      Aset QRIS lokal
 ```
+
+## Dokumentasi
+
+- [Architecture](ARCHITECTURE.md)
+- [Deployment](DEPLOYMENT.md)
+- [Demo runbook](DEMO.md)
+- [Data model](DATA-MODEL.md)
+- [Accessibility](ACCESSIBILITY.md)
+- [Performance](PERFORMANCE.md)
+- [Privacy](PRIVACY.md)
+- [Terms of use](TERMS.md)
+- [Support](SUPPORT.md)
+- [Backend migration](MIGRATION.md)
+- [Future API direction](API.md)
+- [Security roadmap](SECURITY-ROADMAP.md)
+- [Third-party notices](THIRD-PARTY-NOTICES.md)
 
 ## Arah desain
 

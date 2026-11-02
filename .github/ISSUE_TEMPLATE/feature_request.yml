@@ -23,3 +23,10 @@ body:
     attributes:
       label: Batasan dan dampak
       description: Apakah ada dampak pada QRIS, admin, mobile, aksesibilitas, atau data?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Pemeriksaan ruang lingkup
+      options:
+        - label: Saya sudah membaca README dan memahami bahwa project ini masih frontend-only.
+          required: true

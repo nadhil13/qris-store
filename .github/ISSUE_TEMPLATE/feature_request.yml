@@ -1,0 +1,25 @@
+name: Feature request
+description: Usulkan perubahan yang memiliki manfaat dan ruang lingkup jelas.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Masalah pengguna
+      description: Siapa yang mengalami masalah dan apa yang ingin mereka lakukan?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Usulan
+      description: Jelaskan perilaku yang diinginkan tanpa mengunci implementasi terlalu cepat.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Batasan dan dampak
+      description: Apakah ada dampak pada QRIS, admin, mobile, aksesibilitas, atau data?

@@ -1,5 +1,9 @@
 # Atelier Nusantara
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-C25E3B.svg)](LICENSE)
+[![Static site](https://img.shields.io/badge/site-static-2A402D.svg)](https://github.com/nadhil13/qris-store)
+[![Frontend demo](https://img.shields.io/badge/status-frontend%20demo-3D583F.svg)](https://github.com/nadhil13/qris-store)
+
 Atelier Nusantara adalah storefront commerce statis dengan rasa editorial untuk kurasi makanan, minuman, kriya, fashion, gadget, dan produk digital. Proyek ini dibuat untuk pengalaman belanja yang tenang, jelas, dan tetap praktis di layar desktop maupun ponsel.
 
 ![Atelier Nusantara storefront](page-shot.png)
@@ -65,6 +69,26 @@ Realtime yang tersedia adalah realtime antar-tab pada browser dan perangkat yang
 
 Untuk produksi, gunakan backend dan database dengan autentikasi, validasi server, webhook pembayaran, serta kontrol akses admin.
 
+## Disclaimer demo dan QRIS
+
+Repository ini adalah implementasi frontend untuk demonstrasi alur storefront. Data pesanan, katalog, kredensial admin, dan konfigurasi QRIS contoh tidak boleh dianggap sebagai sistem produksi.
+
+Konversi payload QRIS di browser tidak sama dengan konfirmasi pembayaran. Status pesanan pada demo berasal dari alur aplikasi dan tidak membuktikan settlement dari bank atau penyedia pembayaran. Sebelum digunakan secara komersial, mintalah persetujuan merchant, uji provider secara resmi, dan pindahkan validasi pembayaran ke server.
+
+## Roadmap
+
+- [x] Storefront multi-kategori dan checkout browser.
+- [x] Workspace admin full-viewport.
+- [x] Sinkronisasi antar-tab pada satu perangkat.
+- [x] Parser dan generator payload QRIS EMVCo.
+- [ ] Autentikasi admin berbasis server.
+- [ ] Database katalog dan pesanan lintas perangkat.
+- [ ] Webhook settlement pembayaran.
+- [ ] Upload aset QRIS dengan validasi server.
+- [ ] Test suite otomatis dan deployment pipeline.
+
+Roadmap tidak menjanjikan tanggal rilis. Prioritas dapat berubah mengikuti kebutuhan implementasi.
+
 ## Struktur proyek
 
 ```text
@@ -85,7 +109,15 @@ Atelier Nusantara memakai pendekatan **Editorial Commerce**: warna parchment, ma
 
 ## Lisensi
 
-Proyek ini dirilis di bawah [MIT License](LICENSE).
+Kode milik proyek ini dirilis di bawah [MIT License](LICENSE). Library pihak ketiga mengikuti lisensinya masing-masing. Lihat [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Panduan proyek
+
+- Baca [CONTRIBUTING.md](CONTRIBUTING.md) sebelum membuka pull request.
+- Baca [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) untuk standar interaksi.
+- Gunakan [SECURITY.md](SECURITY.md) untuk melaporkan celah keamanan secara privat.
+- Lihat [CHANGELOG.md](CHANGELOG.md) untuk perubahan yang sudah dicatat.
+- Gunakan [template pull request](.github/PULL_REQUEST_TEMPLATE.md) dan template issue agar laporan dapat direproduksi.
 
 ## Kontak dan kontribusi
 

@@ -1,0 +1,42 @@
+name: Bug report
+description: Laporkan perilaku yang tidak sesuai dan dapat direproduksi.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Ringkasan
+      description: Apa yang terjadi dan apa hasil yang diharapkan?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Langkah reproduksi
+      description: Tulis langkah paling singkat untuk melihat masalah.
+      placeholder: |
+        1. Jalankan server lokal
+        2. Buka halaman
+        3. Klik atau scroll ...
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser dan versi
+    validations:
+      required: true
+  - type: input
+    id: viewport
+    attributes:
+      label: Viewport
+      description: Contoh 390x844 atau desktop 1280x800.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Bukti
+      description: Sertakan screenshot atau console error. Jangan sertakan secret atau data pelanggan.

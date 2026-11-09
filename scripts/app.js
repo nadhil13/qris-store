@@ -56,6 +56,7 @@ import {
   resetProducts,
   getProduct,
   getOrders,
+  getOrder,
   saveOrder,
   updateOrder,
   sweepExpiredOrders,
@@ -661,6 +662,7 @@ export function openCheckoutModal() {
   saveOrder(newOrder, { type: 'created' });
   rememberMyOrder(newOrder.id);
   state.activeCheckoutOrderId = newOrder.id;
+  state.activeOrder = newOrder;
 
   // Open modal immediately so buyer always sees the payment modal without delay
   const modal = document.getElementById('payment-modal-backdrop');
@@ -728,12 +730,12 @@ function renderCheckoutView(order) {
   if (vaEl) vaEl.textContent = generatedVa;
   if (btnCopyVa) btnCopyVa.dataset.copy = generatedVa;
 
-  switchQRISDisplayMode(state.currentQRISDisplayMode || 'dynamic');
+  switchQRISDisplayMode(state.currentQRISDisplayMode || 'dynamic', order);
 }
 
-export function switchQRISDisplayMode(mode = 'dynamic') {
+export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
   state.currentQRISDisplayMode = mode;
-  const order = getOrder(state.activeCheckoutOrderId);
+  const order = explicitOrder || (state.activeCheckoutOrderId ? getOrder(state.activeCheckoutOrderId) : null) || state.activeOrder;
   const settings = getSettings();
   const rawStatic = settings.qris.payload || DEMO_STATIC_QRIS;
 
@@ -2129,7 +2131,7 @@ function initApp() {
     });
   }
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => {
       initGSAPAnimations();
     });

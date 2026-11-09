@@ -18,16 +18,16 @@
   /* Ink & Typography */
   --ink-primary: #1d1713;
   --ink-secondary: #4d4138;
-  --ink-tertiary: #7d685a;
+  --ink-tertiary: #6E5B4F;
   --ink-inverted: #fffaf4;
 
   /* Artisanal Accents */
   --accent-matcha: #2d4838;
   --accent-matcha-soft: #e8f0e6;
   --accent-matcha-hover: #1d3127;
-  --accent-terracotta: #b85d39;
+  --accent-terracotta: #A34825;
   --accent-terracotta-soft: #f8ecdf;
-  --accent-terracotta-hover: #9c492d;
+  --accent-terracotta-hover: #8A3718;
   --accent-ochre: #c99b52;
   --accent-qris: #c92a2a;
   --accent-gold: #d8b06a;
@@ -86,10 +86,7 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at top left, rgba(184, 93, 57, 0.12), transparent 18%),
-    radial-gradient(circle at 85% 12%, rgba(216, 176, 106, 0.12), transparent 22%),
-    linear-gradient(180deg, #f8f2ea 0%, var(--bg-canvas) 28%, #f0e8de 100%);
+  background: var(--bg-canvas);
   color: var(--ink-primary);
   line-height: 1.6;
   min-height: 100vh;
@@ -324,6 +321,28 @@ a {
   100% {
     box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
   }
+}
+
+.admin-login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background-color: rgba(46, 69, 50, 0.08);
+  color: var(--brand-forest);
+  border: 1.5px solid var(--brand-forest);
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+}
+
+.admin-login-btn:hover {
+  background-color: var(--brand-forest);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(46, 69, 50, 0.25);
 }
 
 .audio-toggle {
@@ -2481,11 +2500,6 @@ a {
   justify-content: space-around;
 }
 
-#mob-nav-admin,
-#mob-nav-qris {
-  display: none !important;
-}
-
 .mobile-nav-item {
   flex: 1;
   height: 100%;
@@ -2618,7 +2632,29 @@ a {
     display: none;
   }
 
-  .audio-toggle {
+  .admin-login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background-color: rgba(46, 69, 50, 0.08);
+  color: var(--brand-forest);
+  border: 1.5px solid var(--brand-forest);
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+}
+
+.admin-login-btn:hover {
+  background-color: var(--brand-forest);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(46, 69, 50, 0.25);
+}
+
+.audio-toggle {
     width: 36px;
     height: 36px;
   }
@@ -3705,11 +3741,45 @@ a {
 
 /* Full-viewport admin workspace: the operator needs room for real queues and tables. */
 #admin-dashboard-modal-backdrop {
+  z-index: 150;
   padding: 0;
   background: var(--bg-canvas);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   align-items: stretch;
+}
+
+#admin-login-modal-backdrop {
+  z-index: 160;
+}
+
+.qris-upload-dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 22px 16px;
+  text-align: center;
+  background: var(--bg-canvas-subtle);
+  cursor: pointer;
+  transition: all var(--trans-fast);
+  margin-bottom: 14px;
+}
+
+.qris-upload-dropzone:hover,
+.qris-upload-dropzone.drag-active {
+  border-color: var(--brand-forest);
+  background: rgba(46, 69, 50, 0.05);
+  transform: translateY(-1px);
+}
+
+.upload-icon-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(46, 69, 50, 0.1);
+  color: var(--brand-forest);
+  display: inline-grid;
+  place-items: center;
+  margin: 0 auto;
 }
 
 .admin-workspace-shell {
@@ -4487,4 +4557,138 @@ body::after,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ==========================================================================
+   ENHANCED COMPONENTS & ACCESSIBLE AFFORDANCES
+   ========================================================================== */
+
+.card-title-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  display: block;
+}
+
+.card-title-btn:hover .card-title,
+.card-title-btn:focus-visible .card-title {
+  color: var(--accent-terracotta);
+}
+
+.curated-preview-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.curated-preview-card .mini-label {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-terracotta);
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.curated-preview-card h3 {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+}
+
+.cart-variant-tag {
+  display: inline-block;
+  background: var(--bg-canvas-subtle);
+  color: var(--ink-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+
+.cart-item-unavailable {
+  opacity: 0.6;
+}
+
+.status-badge-step.pending {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.status-badge-step.done {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+.status-badge-step.muted {
+  background: #F3F4F6;
+  color: #6B7280;
+}
+
+.status-badge-step.active {
+  background: #E0E7FF;
+  color: #3730A3;
+}
+
+.timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 0;
+  position: relative;
+}
+
+.timeline-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 36px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-hairline);
+}
+
+.timeline-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  z-index: 2;
+  background: var(--bg-canvas-subtle);
+  color: var(--ink-secondary);
+}
+
+.timeline-step.step-done .timeline-marker {
+  background: var(--status-success);
+  color: #FFFFFF;
+}
+
+.timeline-step.step-active .timeline-marker {
+  background: var(--accent-terracotta);
+  color: #FFFFFF;
+  box-shadow: 0 0 0 4px rgba(163, 72, 37, 0.2);
+}
+
+.timeline-body strong {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--ink-primary);
 }

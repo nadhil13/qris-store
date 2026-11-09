@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atelier-nusantara-cache-v8';
+const CACHE_NAME = 'atelier-nusantara-cache-v10';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -19,10 +19,11 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+      return cache.addAll(ASSETS_TO_CACHE).catch(() => {});
+    })
   );
 });
 
@@ -43,26 +44,33 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // 1. NEVER cache API requests or external data APIs
+  if (url.pathname.startsWith('/api/') || url.hostname.includes('api.restful-api.dev')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // 2. Network-First strategy for HTML navigation, scripts, and stylesheets so deployments on Vercel reflect instantly
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const toCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, toCache);
-          });
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
         }
         return networkResponse;
-      }).catch(() => null);
-
-      if (cachedResponse) return cachedResponse;
-      return fetchPromise.then((res) => {
-        if (res) return res;
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-        return null;
-      });
-    })
+      })
+      .catch(() => {
+        // Network failed (offline) -> fall back to cache
+        return caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') {
+            return caches.match('./index.html');
+          }
+          return null;
+        });
+      })
   );
 });

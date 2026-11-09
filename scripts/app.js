@@ -62,6 +62,8 @@ import {
   getSettings,
   saveSettings,
   replaceQRIS,
+  syncSettingsWithCloud,
+  pushSettingsToCloud,
   moveStockForOrder,
   getCart,
   saveCart,
@@ -637,8 +639,14 @@ export function openCheckoutModal() {
     return;
   }
 
-  updateCustomerInfo();
+  // Ensure any other modal or drawer is properly closed
+  const adminDash = document.getElementById('admin-dashboard-modal-backdrop');
+  if (adminDash) adminDash.classList.remove('open');
+  const adminLogin = document.getElementById('admin-login-modal-backdrop');
+  if (adminLogin) adminLogin.classList.remove('open');
   closeCartDrawer();
+
+  updateCustomerInfo();
   sfx.playClick();
 
   const newOrder = createOrder({
@@ -653,25 +661,34 @@ export function openCheckoutModal() {
   rememberMyOrder(newOrder.id);
   state.activeCheckoutOrderId = newOrder.id;
 
-  renderCheckoutView(newOrder);
-
-  if (state.activeOrderStopWatch) state.activeOrderStopWatch();
-  state.activeOrderStopWatch = watchOrder(newOrder.id, {
-    onTick: (msRemaining, currentOrder) => {
-      const clockEl = document.getElementById('payment-countdown-clock');
-      if (clockEl) clockEl.textContent = formatCountdown(msRemaining);
-    },
-    onUpdate: (updatedOrder, previousOrder) => {
-      if (updatedOrder.status === STATUS.PAID) {
-        handlePaymentCompleted(updatedOrder);
-      } else if (updatedOrder.status === STATUS.EXPIRED) {
-        handlePaymentExpired(updatedOrder);
-      }
-    }
-  });
-
+  // Open modal immediately so buyer always sees the payment modal without delay
   const modal = document.getElementById('payment-modal-backdrop');
   if (modal) modal.classList.add('open');
+
+  try {
+    renderCheckoutView(newOrder);
+  } catch (err) {
+    console.error('Checkout view render error:', err);
+  }
+
+  if (state.activeOrderStopWatch) state.activeOrderStopWatch();
+  try {
+    state.activeOrderStopWatch = watchOrder(newOrder.id, {
+      onTick: (msRemaining, currentOrder) => {
+        const clockEl = document.getElementById('payment-countdown-clock');
+        if (clockEl) clockEl.textContent = formatCountdown(msRemaining);
+      },
+      onUpdate: (updatedOrder, previousOrder) => {
+        if (updatedOrder.status === STATUS.PAID) {
+          handlePaymentCompleted(updatedOrder);
+        } else if (updatedOrder.status === STATUS.EXPIRED) {
+          handlePaymentExpired(updatedOrder);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Watch order warning:', err);
+  }
 }
 
 function renderCheckoutView(order) {
@@ -753,7 +770,12 @@ export function switchQRISDisplayMode(mode = 'dynamic') {
   state.activeCheckoutPayload = payload;
 
   if (qrContainer) {
-    qrContainer.innerHTML = renderQRCodeSVG(payload, { label: 'Kode QRIS Pembayaran' });
+    try {
+      qrContainer.innerHTML = renderQRCodeSVG(payload, { label: 'Kode QRIS Pembayaran' });
+    } catch (err) {
+      console.warn('QR SVG render error:', err);
+      qrContainer.innerHTML = `<div class="qr-fallback" style="padding:15px; font-size:0.8rem; text-align:center;">Scan QRIS atau salin string di bawah ini.<br><small style="word-break:break-all; opacity:0.8;">${escapeHTML(payload)}</small></div>`;
+    }
   }
 }
 
@@ -2067,15 +2089,46 @@ function initApp() {
   initEventBindings();
   initRealtimeSync();
 
+  // Cloud QRIS and settings sync for all visitors across devices
+  syncSettingsWithCloud().then((updated) => {
+    if (updated && state.activeCheckoutOrderId) {
+      const order = getOrder(state.activeCheckoutOrderId);
+      if (order) renderCheckoutView(order);
+    }
+  }).catch(() => {});
+
+  // Polling every 12s so admin QRIS changes update all visitor screens in real time
+  if (typeof window !== 'undefined') {
+    setInterval(() => {
+      syncSettingsWithCloud().then((updated) => {
+        if (updated && state.activeCheckoutOrderId) {
+          const order = getOrder(state.activeCheckoutOrderId);
+          if (order) renderCheckoutView(order);
+        }
+      }).catch(() => {});
+    }, 12000);
+
+    window.addEventListener('focus', () => {
+      syncSettingsWithCloud().then((updated) => {
+        if (updated && state.activeCheckoutOrderId) {
+          const order = getOrder(state.activeCheckoutOrderId);
+          if (order) renderCheckoutView(order);
+        }
+      }).catch(() => {});
+    });
+  }
+
   if (typeof window !== 'undefined') {
     requestAnimationFrame(() => {
       initGSAPAnimations();
     });
   }
 
-  // Register service worker if available
+  // Register service worker if available with instant update check
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then((registration) => {
+      registration.update().catch(() => {});
+    }).catch(() => {});
   }
 }
 

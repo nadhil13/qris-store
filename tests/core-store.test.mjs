@@ -3,7 +3,7 @@ import { PRODUCTS, getCategoryLabel } from '../scripts/core/catalog.js';
 import { addLine, setLineQty, setLineNote, removeLine, resolveLines, computeTotals, lineKey } from '../scripts/core/cart.js';
 import { createOrder, markPaid, advanceOrder, cancelOrder, isExpired, STATUS, trackerSteps } from '../scripts/core/orders.js';
 import { convertStaticToDynamicQRIS, parseEMVCoQRIS, calculateCRC16, describeQRIS, validateQRIS } from '../scripts/qris.js';
-import { getProducts, getOrders, saveOrder, replaceQRIS, DEMO_STATIC_QRIS } from '../scripts/core/store.js';
+import { getProducts, getOrders, saveOrder, replaceQRIS, syncSettingsWithCloud, pushSettingsToCloud, DEMO_STATIC_QRIS } from '../scripts/core/store.js';
 import { confirmPayment, cancelOrderById } from '../scripts/core/payments.js';
 
 // 1. Catalog integrity
@@ -103,6 +103,8 @@ const repResult = replaceQRIS(newStatic, { merchantName: 'Toko Baru' });
 assert.equal(repResult.payload, newStatic);
 
 // 8. Payments lifecycle & expiry rejection
+assert.equal(typeof syncSettingsWithCloud, 'function');
+assert.equal(typeof pushSettingsToCloud, 'function');
 saveOrder(order);
 const confirmRes = confirmPayment(order.id, { by: 'admin' });
 assert.equal(confirmRes.ok, true);

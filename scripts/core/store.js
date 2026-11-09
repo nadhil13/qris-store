@@ -263,7 +263,102 @@ export function replaceQRIS(payload, info = {}) {
       : s.qris.history;
     return { ...s, qris: { payload, updatedAt: Date.now(), history, merchantName: info.merchantName || '' } };
   }, { type: 'qris' });
+  pushSettingsToCloud(next);
   return next.qris;
+}
+
+const CLOUD_SYNC_ENDPOINT = '/api/settings';
+const DIRECT_CLOUD_BACKUP = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1beb3e79f6bc2';
+
+export async function syncSettingsWithCloud() {
+  if (typeof window === 'undefined') return null;
+  let remote = null;
+  try {
+    const res = await fetch(CLOUD_SYNC_ENDPOINT, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.settings && data.settings.qris) {
+        remote = data.settings;
+      }
+    }
+  } catch {
+    // If /api/settings is not reached, fall through to direct cloud
+  }
+
+  if (!remote) {
+    try {
+      const res = await fetch(DIRECT_CLOUD_BACKUP, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.data && json.data.payload) {
+          remote = {
+            qris: {
+              payload: json.data.payload,
+              merchantName: json.data.merchantName || 'Atelier Nusantara',
+              updatedAt: json.data.updatedAt || 0
+            },
+            store: json.data.store || { name: json.data.merchantName || 'Atelier Nusantara' }
+          };
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+  }
+
+  if (remote && remote.qris && remote.qris.payload) {
+    const current = getSettings();
+    const remoteTime = Number(remote.qris.updatedAt || 0);
+    const localTime = Number(current.qris.updatedAt || 0);
+    const isLocalDefault = current.qris.payload === DEFAULT_SETTINGS.qris.payload;
+
+    if (remoteTime > localTime || isLocalDefault || remote.qris.payload !== current.qris.payload) {
+      const updated = saveSettings((s) => ({
+        ...s,
+        qris: {
+          ...s.qris,
+          payload: remote.qris.payload,
+          merchantName: remote.qris.merchantName || s.qris.merchantName,
+          updatedAt: remoteTime || Date.now()
+        },
+        store: {
+          ...s.store,
+          ...(remote.store || {})
+        }
+      }), { type: 'cloud-sync' });
+      return updated;
+    }
+  }
+  return null;
+}
+
+export async function pushSettingsToCloud(settings) {
+  if (typeof window === 'undefined') return;
+  const payloadToPush = {
+    payload: settings.qris?.payload || '',
+    merchantName: settings.qris?.merchantName || settings.store?.name || '',
+    updatedAt: settings.qris?.updatedAt || Date.now(),
+    store: settings.store
+  };
+
+  try {
+    fetch(CLOUD_SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payloadToPush)
+    }).catch(() => {});
+  } catch {}
+
+  try {
+    fetch(DIRECT_CLOUD_BACKUP, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'qris_store_settings',
+        data: payloadToPush
+      })
+    }).catch(() => {});
+  } catch {}
 }
 
 // Applies stock movement for an order (-1 when paid, +1 to restock on cancel).

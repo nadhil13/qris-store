@@ -1726,6 +1726,14 @@ a {
   transition: opacity var(--trans-normal);
 }
 
+#payment-modal-backdrop {
+  z-index: 180 !important;
+}
+
+#receipt-modal-backdrop {
+  z-index: 190 !important;
+}
+
 .modal-backdrop.open {
   opacity: 1;
   pointer-events: auto;

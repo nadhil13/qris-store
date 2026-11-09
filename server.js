@@ -2,6 +2,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import settingsHandler from './api/settings.js';
+import ordersHandler from './api/orders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,10 +28,53 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf'
 };
 
-const server = http.createServer((req, res) => {
+function parseBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        resolve(body);
+      }
+    });
+  });
+}
+
+function adaptServerless(req, res, body) {
+  req.body = body;
+  res.status = (code) => {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (data) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify(data));
+    return res;
+  };
+  return { req, res };
+}
+
+const server = http.createServer(async (req, res) => {
   try {
     const parsed = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     let pathname = decodeURIComponent(parsed.pathname);
+
+    // API Routes
+    if (pathname === '/api/settings' || pathname === '/api/settings/') {
+      const body = await parseBody(req);
+      adaptServerless(req, res, body);
+      await settingsHandler(req, res);
+      return;
+    }
+    if (pathname === '/api/orders' || pathname === '/api/orders/') {
+      const body = await parseBody(req);
+      adaptServerless(req, res, body);
+      await ordersHandler(req, res);
+      return;
+    }
+
     if (pathname === '/' || pathname === '') {
       pathname = '/index.html';
     }

@@ -1,5 +1,6 @@
 // QRIS (EMVCo MPM) helpers: TLV parsing, CRC16/CCITT-FALSE, validation and
 // static-to-dynamic conversion. Rendering uses the vendored qrcode-generator.
+import qrcodeEngine from './vendor/qrcode.esm.js';
 
 export const DEMO_STATIC_QRIS = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
 
@@ -150,6 +151,7 @@ export function generateDynamicQRISPayload({ merchantName, merchantCity, amount,
 }
 
 function getQRGenerator() {
+  if (typeof qrcodeEngine === 'function') return qrcodeEngine;
   if (typeof window !== 'undefined' && window.qrcode) return window.qrcode;
   if (typeof globalThis !== 'undefined' && globalThis.qrcode) return globalThis.qrcode;
   return null;
@@ -179,10 +181,10 @@ export function qrMatrix(text) {
   return null;
 }
 
-export function renderQRCodeSVG(text, { label = 'Kode QRIS', margin = 2, size = 180 } = {}) {
+export function renderQRCodeSVG(text, { label = 'Kode QRIS', margin = 2, size = 236 } = {}) {
   const matrix = qrMatrix(text);
   if (!matrix) {
-    return `<div class="qr-fallback" role="img" aria-label="${label}">Modul QR belum termuat. Muat ulang halaman.</div>`;
+    return `<div class="qr-fallback" role="img" aria-label="${label}" style="padding:16px; font-size:0.8rem; text-align:center; color:#374151;">Modul QR belum termuat. Silakan muat ulang halaman.</div>`;
   }
   const count = matrix.length + margin * 2;
   let path = '';
@@ -191,7 +193,40 @@ export function renderQRCodeSVG(text, { label = 'Kode QRIS', margin = 2, size = 
       if (dark) path += `M${c + margin} ${r + margin}h1v1h-1z`;
     });
   });
-  return `<svg class="qr-svg" width="${size}" height="${size}" viewBox="0 0 ${count} ${count}" style="width:${size}px; height:${size}px; max-width:100%; display:block;" role="img" aria-label="${label}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${count}" height="${count}" fill="#fff"/><path d="${path}" fill="#111"/></svg>`;
+  return `<svg class="qr-svg" width="${size}" height="${size}" viewBox="0 0 ${count} ${count}" style="width:100%; height:100%; max-width:${size}px; max-height:${size}px; aspect-ratio:1/1; display:block; margin:0 auto;" role="img" aria-label="${label}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><rect width="${count}" height="${count}" fill="#FFFFFF"/><path d="${path}" fill="#000000"/></svg>`;
+}
+
+export function renderQRCodeCanvas(canvasEl, text, { size = 236, margin = 2 } = {}) {
+  const gen = getQRGenerator();
+  if (!gen || !canvasEl) return false;
+  for (const level of ['M', 'L']) {
+    try {
+      const qr = gen(0, level);
+      qr.addData(text);
+      qr.make();
+      const count = qr.getModuleCount();
+      const totalCount = count + margin * 2;
+      canvasEl.width = size;
+      canvasEl.height = size;
+      const ctx = canvasEl.getContext('2d');
+      if (!ctx) return false;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = '#000000';
+      const cell = size / totalCount;
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (qr.isDark(r, c)) {
+            ctx.fillRect(Math.round((c + margin) * cell), Math.round((r + margin) * cell), Math.ceil(cell), Math.ceil(cell));
+          }
+        }
+      }
+      return true;
+    } catch {
+      // retry
+    }
+  }
+  return false;
 }
 
 export async function scanQRISFromImageFile(file) {

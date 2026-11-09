@@ -46,6 +46,7 @@ import {
   describeQRIS,
   convertStaticToDynamicQRIS,
   renderQRCodeSVG,
+  renderQRCodeCanvas,
   scanQRISFromImageFile,
   DEMO_STATIC_QRIS
 } from './qris.js';
@@ -771,10 +772,20 @@ export function switchQRISDisplayMode(mode = 'dynamic') {
 
   if (qrContainer) {
     try {
-      qrContainer.innerHTML = renderQRCodeSVG(payload, { label: 'Kode QRIS Pembayaran' });
+      const svg = renderQRCodeSVG(payload, { label: 'Kode QRIS Pembayaran', size: 236 });
+      if (svg && svg.includes('<svg')) {
+        qrContainer.innerHTML = svg;
+      } else {
+        throw new Error('SVG output invalid');
+      }
     } catch (err) {
-      console.warn('QR SVG render error:', err);
-      qrContainer.innerHTML = `<div class="qr-fallback" style="padding:15px; font-size:0.8rem; text-align:center;">Scan QRIS atau salin string di bawah ini.<br><small style="word-break:break-all; opacity:0.8;">${escapeHTML(payload)}</small></div>`;
+      console.warn('QR SVG render error, falling back to canvas:', err);
+      qrContainer.innerHTML = '<canvas class="qr-canvas" style="display:block; width:100%; height:100%; aspect-ratio:1/1;"></canvas>';
+      const canvasEl = qrContainer.querySelector('canvas');
+      const rendered = renderQRCodeCanvas(canvasEl, payload, { size: 236 });
+      if (!rendered) {
+        qrContainer.innerHTML = `<div class="qr-fallback" style="padding:15px; font-size:0.8rem; text-align:center; color:#374151;">Scan QRIS atau salin string di bawah ini.<br><small style="word-break:break-all; font-family:monospace; display:block; margin-top:6px;">${escapeHTML(payload)}</small></div>`;
+      }
     }
   }
 }

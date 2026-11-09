@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atelier-nusantara-cache-v10';
+const CACHE_NAME = 'atelier-nusantara-cache-v11';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const ASSETS_TO_CACHE = [
   './scripts/vendor/gsap.min.js',
   './scripts/vendor/ScrollTrigger.min.js',
   './scripts/vendor/qrcode.min.js',
+  './scripts/vendor/qrcode.esm.js',
   './scripts/vendor/jsqr.js',
   './manifest.json'
 ];

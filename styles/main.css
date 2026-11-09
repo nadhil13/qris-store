@@ -1860,23 +1860,32 @@ a {
 }
 
 .qris-qr-box {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px;
+  width: 260px;
+  height: 260px;
+  min-width: 240px;
+  min-height: 240px;
+  max-width: 100%;
+  padding: 12px;
   background: #FFFFFF;
   border: 1px solid #E5E7EB;
   border-radius: var(--radius-md);
-  margin-bottom: 16px;
+  margin: 12px auto 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
 }
 
-.qris-qr-box svg {
+.qris-qr-box svg,
+.qris-qr-box canvas {
   display: block;
-  width: 250px;
-  height: 250px;
-  max-width: 100%;
+  width: 100%;
+  height: 100%;
+  max-width: 236px;
+  max-height: 236px;
   aspect-ratio: 1 / 1;
+  margin: 0 auto;
 }
 
 .qris-amount-display {

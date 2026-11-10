@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
+const appSource = fs.readFileSync(new URL('../scripts/app.js', import.meta.url), 'utf8');
+const htmlSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
 const app = fs.readFileSync(new URL('../scripts/app.js', import.meta.url), 'utf8');
 const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
@@ -13,6 +16,10 @@ assert.match(app, /openProductEditForm/);
 assert.match(html, /admin-storefront-whatsapp/);
 assert.match(html, /admin-product-submit-label/);
 assert.match(html, /checkoutViaWhatsApp/);
+
+assert.match(appSource, /syncOrdersWithCloud\(\)/, 'app must pull cloud orders');
+assert.match(appSource, /adminCancelOrder\('\$\{o\.id\}'\)/, 'admin table must expose cancellation');
+assert.doesNotMatch(htmlSource, /id="merchant-config-modal-backdrop"/, 'legacy QRIS modal must be removed');
 
 const productShape = {
   id: 'test-product',

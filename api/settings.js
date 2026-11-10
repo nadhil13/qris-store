@@ -5,10 +5,11 @@ const CLOUD_STORAGE_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f70
 
 const DEFAULT_QRIS = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
 
+// Version 0 so a cold-start default never overrides a visitor's saved QRIS.
 let inMemorySettings = {
   payload: DEFAULT_QRIS,
   merchantName: 'Atelier Nusantara',
-  updatedAt: Date.now()
+  updatedAt: 0
 };
 
 async function getKVClient() {
@@ -68,10 +69,18 @@ async function readFromCloud() {
 }
 
 async function writeToCloud(settings) {
+  // The admin's browser stamps the version; keeping it lets every client
+  // compare against the same clock. Reject writes older than what is stored.
+  const incomingVersion = Number(settings.updatedAt || settings.qris?.updatedAt || 0) || Date.now();
+  const existing = await readFromCloud();
+  if (existing && Number(existing.updatedAt || 0) > incomingVersion) {
+    return { ...existing, stale: true };
+  }
+
   const payloadToSave = {
     payload: settings.payload || settings.qris?.payload || DEFAULT_QRIS,
     merchantName: settings.merchantName || settings.store?.name || 'Atelier Nusantara',
-    updatedAt: Date.now(),
+    updatedAt: incomingVersion,
     store: settings.store || { name: 'Atelier Nusantara' }
   };
 
@@ -126,16 +135,18 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const data = await readFromCloud();
+      const version = Number(data.updatedAt || 0);
       res.status(200).json({
         ok: true,
         source: 'cloud',
         settings: {
+          updatedAt: version,
           qris: {
             payload: data.payload || DEFAULT_QRIS,
             merchantName: data.merchantName || 'Atelier Nusantara',
-            updatedAt: data.updatedAt || Date.now()
+            updatedAt: version
           },
-          store: data.store || { name: data.merchantName || 'Atelier Nusantara' }
+          store: data.store || null
         }
       });
     } catch (err) {
@@ -153,8 +164,10 @@ export default async function handler(req, res) {
       const saved = await writeToCloud(body || {});
       res.status(200).json({
         ok: true,
-        message: 'Settings saved globally for all visitors.',
+        stale: Boolean(saved.stale),
+        message: saved.stale ? 'A newer version is already stored.' : 'Settings saved globally for all visitors.',
         settings: {
+          updatedAt: saved.updatedAt,
           qris: {
             payload: saved.payload,
             merchantName: saved.merchantName,

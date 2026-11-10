@@ -61,6 +61,44 @@ function subTag(value, tag) {
   return found ? found.value : '';
 }
 
+// Maps the merchant-account GUI (tags 26-45) to a name buyers recognise.
+const ACQUIRER_NAMES = [
+  ['GO-JEK', 'GoPay'],
+  ['GOPAY', 'GoPay'],
+  ['DANA', 'DANA'],
+  ['SHOPEE', 'ShopeePay'],
+  ['AIRPAY', 'ShopeePay'],
+  ['OVO', 'OVO'],
+  ['LINKAJA', 'LinkAja'],
+  ['TELKOM', 'LinkAja'],
+  ['BCA', 'BCA'],
+  ['BANKMANDIRI', 'Mandiri'],
+  ['MANDIRI', 'Mandiri'],
+  ['BRI', 'BRI'],
+  ['BNI', 'BNI'],
+  ['BSI', 'BSI'],
+  ['SYARIAH', 'BSI'],
+  ['CIMB', 'CIMB Niaga'],
+  ['PERMATA', 'Permata'],
+  ['DANAMON', 'Danamon'],
+  ['BTN', 'BTN'],
+  ['JAGO', 'Bank Jago'],
+  ['SEABANK', 'SeaBank'],
+  ['XENDIT', 'Xendit'],
+  ['MIDTRANS', 'Midtrans'],
+  ['DOKU', 'DOKU'],
+  ['NOBU', 'Nobu']
+];
+
+export function acquirerLabel(gui) {
+  const upper = String(gui || '').toUpperCase();
+  if (!upper) return '';
+  const hit = ACQUIRER_NAMES.find(([needle]) => upper.split(/[.\-_]/).includes(needle) || upper.includes(`.${needle}.`));
+  if (hit) return hit[1];
+  const parts = upper.split('.').filter((p) => p && !['ID', 'CO', 'COM', 'WWW', 'OR'].includes(p));
+  return parts[0] ? parts[0].charAt(0) + parts[0].slice(1).toLowerCase() : '';
+}
+
 export function describeQRIS(qrisString) {
   const tags = parseEMVCoQRIS(qrisString);
   let acquirer = '';

@@ -1,8 +1,3 @@
-/* ==========================================================================
-   ATELIER RASA: DESIGN SYSTEM & STYLESHEET
-   Direction: Editorial Gourmet & Japanese-Nordic Artisanal Warmth
-   ========================================================================== */
-
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
@@ -25,6 +20,8 @@
   --accent-matcha: #2d4838;
   --accent-matcha-soft: #e8f0e6;
   --accent-matcha-hover: #1d3127;
+  /* Alias used by admin markup and inline styles. */
+  --brand-forest: var(--accent-matcha);
   --accent-terracotta: #A34825;
   --accent-terracotta-soft: #f8ecdf;
   --accent-terracotta-hover: #8A3718;
@@ -94,25 +91,6 @@ body {
   position: relative;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: radial-gradient(rgba(29, 23, 19, 0.032) 1px, transparent 0);
-  background-size: 24px 24px;
-  pointer-events: none;
-  z-index: -1;
-}
-
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255,255,255,0.22), transparent 20%, transparent 80%, rgba(29,23,19,0.04));
-  pointer-events: none;
-  z-index: -1;
-}
-
 .reveal-section,
 .reveal-up {
   will-change: opacity, transform;
@@ -180,17 +158,14 @@ a {
   padding-right: clamp(16px, 4vw, 32px);
 }
 
-/* ==========================================================================
-   NAVIGATION BAR
-   ========================================================================== */
 .site-header {
   position: sticky;
   top: 0;
   z-index: 90;
-  background: rgba(248, 245, 240, 0.88);
-  backdrop-filter: blur(16px);
+  background: rgba(245, 239, 231, 0.94);
   -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border-hairline);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(29, 23, 19, 0.1);
   height: var(--header-height);
   transition: transform var(--trans-normal), background var(--trans-normal);
 }
@@ -393,60 +368,18 @@ a {
   text-align: center;
 }
 
-/* ==========================================================================
-   SCROLL-CRAFT HERO SECTION
-   ========================================================================== */
 .hero-section {
-  padding-top: clamp(40px, 6vw, 72px);
-  padding-bottom: clamp(48px, 8vw, 90px);
+  padding-top: clamp(56px, 8vw, 112px);
+  padding-bottom: clamp(64px, 10vw, 132px);
   position: relative;
   overflow: hidden;
   border-bottom: 1px solid rgba(28, 22, 19, 0.06);
 }
 
-.hero-section::before {
-  content: '';
-  position: absolute;
-  width: min(68vw, 820px);
-  height: min(68vw, 820px);
-  right: -220px;
-  top: -220px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(184, 93, 57, 0.26), rgba(184, 93, 57, 0) 62%);
-  filter: blur(26px);
-  pointer-events: none;
-  animation: slow-breathe 12s ease-in-out infinite alternate;
-}
-
-.hero-section::after {
-  content: '';
-  position: absolute;
-  width: min(52vw, 680px);
-  height: min(52vw, 680px);
-  left: -210px;
-  bottom: -180px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(45, 72, 56, 0.15), rgba(45, 72, 56, 0) 68%);
-  filter: blur(20px);
-  pointer-events: none;
-  animation: slow-breathe 14s ease-in-out infinite alternate-reverse;
-}
-
-@keyframes slow-breathe {
-  0% {
-    transform: scale(0.96) translate3d(0, 0, 0);
-    opacity: 0.82;
-  }
-  100% {
-    transform: scale(1.08) translate3d(0, 10px, 0);
-    opacity: 1;
-  }
-}
-
 .hero-grid {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: clamp(32px, 5vw, 64px);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.78fr);
+  gap: clamp(48px, 9vw, 136px);
   align-items: center;
   position: relative;
   z-index: 1;
@@ -455,7 +388,8 @@ a {
 .hero-editorial {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  max-width: 680px;
 }
 
 .hero-kicker {
@@ -464,7 +398,7 @@ a {
   gap: 8px;
   font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent-terracotta);
 }
@@ -481,10 +415,10 @@ a {
   font-size: clamp(2.7rem, 5vw, 4.8rem);
   font-weight: 700;
   line-height: 0.98;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.035em;
   color: var(--ink-primary);
   text-wrap: balance;
-  text-shadow: 0 10px 30px rgba(28, 22, 19, 0.05);
+  text-shadow: none;
 }
 
 .hero-headline em {
@@ -496,8 +430,8 @@ a {
 .hero-description {
   font-size: clamp(1rem, 1.2vw, 1.14rem);
   color: var(--ink-secondary);
-  line-height: 1.7;
-  max-width: 560px;
+  line-height: 1.75;
+  max-width: 52ch;
 }
 
 .hero-actions {
@@ -513,19 +447,19 @@ a {
   align-items: center;
   gap: 10px;
   padding: 14px 28px;
-  background: linear-gradient(135deg, var(--accent-matcha) 0%, #1d3321 100%);
+  background: var(--accent-matcha);
   color: var(--ink-inverted);
-  border-radius: var(--radius-full);
+  border-radius: 10px;
   font-size: 0.95rem;
   font-weight: 600;
   transition: transform var(--trans-normal), box-shadow var(--trans-normal), filter var(--trans-fast);
-  box-shadow: 0 18px 34px rgba(34, 54, 39, 0.24);
+  box-shadow: 0 8px 18px rgba(45, 72, 56, 0.16);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, var(--accent-matcha-hover) 0%, #172d1b 100%);
+  background: var(--accent-matcha-hover);
   transform: translateY(-2px) scale(1.01);
-  box-shadow: 0 22px 42px rgba(34, 54, 39, 0.28);
+  box-shadow: 0 10px 22px rgba(45, 72, 56, 0.2);
   filter: saturate(1.08);
 }
 
@@ -534,14 +468,14 @@ a {
   align-items: center;
   gap: 8px;
   padding: 14px 26px;
-  background: rgba(255,255,255,0.45);
+  background: transparent;
   color: var(--ink-primary);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-full);
+  border-radius: 10px;
   font-size: 0.95rem;
   font-weight: 600;
   transition: all var(--trans-fast);
-  backdrop-filter: blur(8px);
+  backdrop-filter: none;
 }
 
 .btn-secondary:hover {
@@ -580,7 +514,7 @@ a {
   align-items: center;
   gap: 8px;
   font-size: 0.78rem;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent-terracotta);
   font-weight: 700;
@@ -598,7 +532,8 @@ a {
 }
 
 .luxury-story {
-  padding: 64px 0 52px;
+  padding: clamp(84px, 11vw, 144px) 0;
+  background: var(--bg-canvas);
   border-top: 1px solid var(--border-hairline);
 }
 
@@ -610,14 +545,15 @@ a {
 }
 
 .story-copy {
-  max-width: 620px;
+  max-width: 58ch;
 }
 
 .story-copy h2 {
   font-family: var(--font-serif);
   font-size: clamp(2.2rem, 4vw, 3.7rem);
   line-height: 0.98;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.035em;
+  text-shadow: none;
   margin: 12px 0 18px;
   color: var(--ink-primary);
   text-wrap: balance;
@@ -633,16 +569,17 @@ a {
   margin-top: 28px;
   display: grid;
   grid-template-columns: repeat(3, minmax(110px, 1fr));
-  gap: 18px;
+  gap: 12px;
 }
 
 .story-metrics div {
-  padding: 18px 16px;
-  border: 1px solid rgba(28, 22, 19, 0.08);
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 10px 24px rgba(28, 22, 19, 0.03);
+  padding: 16px 0;
+  border: 0;
+  border-top: 1px solid rgba(29, 23, 19, 0.16);
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
 .story-metrics strong {
@@ -668,9 +605,9 @@ a {
   position: absolute;
   background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(249,246,240,0.96));
   border: 1px solid rgba(29, 23, 19, 0.08);
-  border-radius: 24px;
-  box-shadow: 0 24px 60px rgba(29, 23, 19, 0.12);
-  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  box-shadow: 0 16px 34px rgba(29, 23, 19, 0.1);
+  backdrop-filter: none;
 }
 
 .card-main {
@@ -753,6 +690,7 @@ a {
 
 .luxury-ritual {
   padding: 12px 0 52px;
+  background: #fbf8f3;
 }
 
 .ritual-shell {
@@ -829,8 +767,8 @@ a {
   min-height: 120px;
   background: rgba(255, 255, 255, 0.28);
   border: 1px solid rgba(29, 23, 19, 0.08);
-  border-radius: 20px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 10px 22px rgba(29, 23, 19, 0.04);
+  border-radius: 10px;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -868,6 +806,7 @@ a {
 
 .final-cta {
   padding: 12px 0 52px;
+  background: var(--accent-matcha);
 }
 
 .cta-shell {
@@ -944,9 +883,9 @@ a {
 
 .showcase-card {
   background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(249,247,243,0.96));
-  border-radius: 28px;
+  border-radius: 14px;
   border: 1px solid rgba(29, 23, 19, 0.08);
-  box-shadow: 0 28px 70px rgba(29, 23, 19, 0.12), 0 12px 28px rgba(184, 93, 57, 0.06);
+  box-shadow: 0 18px 38px rgba(29, 23, 19, 0.12);
   padding: 24px;
   position: relative;
   overflow: hidden;
@@ -1000,7 +939,7 @@ a {
 .showcase-img-wrap {
   width: 100%;
   height: 320px;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   overflow: hidden;
   background-color: var(--bg-canvas-subtle);
   position: relative;
@@ -1070,18 +1009,19 @@ a {
   background-color: var(--accent-matcha-hover);
 }
 
-/* ==========================================================================
-   STICKY CATALOG TOOLBAR
-   ========================================================================== */
 .catalog-section {
   padding-bottom: 100px;
+  background: #fbf8f3;
+  border-top: 1px solid rgba(29, 23, 19, 0.08);
+  border-bottom: 1px solid rgba(29, 23, 19, 0.08);
 }
 
 .toolbar-wrapper {
   position: sticky;
   top: var(--header-height);
   z-index: 80;
-  background: rgba(248, 245, 240, 0.94);
+  background: rgba(251, 248, 243, 0.96);
+  box-shadow: 0 8px 20px rgba(29, 23, 19, 0.05);
   backdrop-filter: blur(14px);
   padding: 16px 0;
   border-bottom: 1px solid var(--border-hairline);
@@ -1107,7 +1047,8 @@ a {
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-terracotta) transparent;
   padding-bottom: 4px;
 }
 
@@ -1117,11 +1058,11 @@ a {
 
 .tab-btn {
   padding: 8px 18px;
-  border-radius: var(--radius-full);
+  border-radius: 8px;
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--ink-secondary);
-  background: var(--bg-card);
+  background: transparent;
   border: 1px solid var(--border-hairline);
   white-space: nowrap;
   transition: all var(--trans-fast);
@@ -1136,8 +1077,9 @@ a {
 }
 
 .tab-btn.active {
-  background: var(--ink-primary);
-  color: var(--ink-inverted);
+  background: var(--accent-matcha);
+  color: #fff;
+  box-shadow: none;
   border-color: var(--ink-primary);
 }
 
@@ -1165,6 +1107,9 @@ a {
 .search-box {
   position: relative;
   flex-grow: 1;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: none;
 }
 
 .search-icon {
@@ -1205,9 +1150,10 @@ a {
 
 .sort-select {
   padding: 10px 16px;
-  border-radius: var(--radius-full);
+  border-radius: 9px;
   border: 1px solid var(--border-hairline);
-  background: var(--bg-card);
+  background: #fff;
+  box-shadow: none;
   color: var(--ink-secondary);
   font-size: 0.85rem;
   font-weight: 500;
@@ -1220,9 +1166,6 @@ a {
   border-color: var(--ink-primary);
 }
 
-/* ==========================================================================
-   PRODUCT GRID
-   ========================================================================== */
 .catalog-header {
   display: flex;
   align-items: baseline;
@@ -1248,24 +1191,26 @@ a {
 }
 
 .product-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-hairline);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 23, 19, 0.1);
+  box-shadow: 0 6px 18px rgba(29, 23, 19, 0.045);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: transform var(--trans-normal), box-shadow var(--trans-normal), border-color var(--trans-fast);
+  transition: transform 280ms var(--ease-spring), box-shadow 280ms var(--ease-spring), border-color 280ms ease;
   position: relative;
 }
 
 .product-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 18px 36px rgba(28, 22, 19, 0.08);
-  border-color: rgba(28,22,19,0.18);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(29, 23, 19, 0.09);
+  border-color: rgba(29, 23, 19, 0.18);
 }
 
 .card-media {
   position: relative;
+  border-radius: 10px;
   width: 100%;
   height: 220px;
   background-color: var(--bg-canvas-subtle);
@@ -1341,7 +1286,7 @@ a {
 }
 
 .card-body {
-  padding: 20px;
+  padding: 18px 18px 20px;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
@@ -1402,7 +1347,7 @@ a {
   padding: 8px 16px;
   background-color: var(--bg-canvas-subtle);
   color: var(--ink-primary);
-  border-radius: var(--radius-full);
+  border-radius: 8px;
   font-size: 0.84rem;
   font-weight: 600;
   transition: all var(--trans-fast);
@@ -1464,9 +1409,6 @@ a {
   font-size: 0.9rem;
 }
 
-/* ==========================================================================
-   CART SLIDE-OVER DRAWER
-   ========================================================================== */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -1708,9 +1650,6 @@ a {
   transform: translateY(-2px);
 }
 
-/* ==========================================================================
-   DYNAMIC PAYMENT GATEWAY & QRIS MODAL
-   ========================================================================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1837,7 +1776,8 @@ a {
 .gopay-logo-pill {
   font-size: 0.78rem;
   font-weight: 700;
-  background: #00AED6;
+  /* Neutral: the acquirer varies with whichever QRIS the admin uploads. */
+  background: var(--ink-primary);
   color: #FFFFFF;
   padding: 3px 8px;
   border-radius: var(--radius-full);
@@ -2013,9 +1953,6 @@ a {
   font-weight: 600;
 }
 
-/* ==========================================================================
-   ORDER SUCCESS RECEIPT MODAL
-   ========================================================================== */
 .receipt-card {
   background: #FFFFFF;
   width: 100%;
@@ -2087,9 +2024,6 @@ a {
   font-size: 0.92rem;
 }
 
-/* ==========================================================================
-   TOAST NOTIFICATION
-   ========================================================================== */
 .toast-toaster {
   position: fixed;
   bottom: 24px;
@@ -2105,24 +2039,21 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 120;
+  /* Above every modal (payment 180, receipt 190, admin 150-160). */
+  z-index: 300;
   opacity: 0;
   pointer-events: none;
   transition: all var(--trans-normal);
   box-shadow: var(--shadow-float);
 }
 
-.toast-toaster.show {
+.toast-toaster.show,
+.toast-toaster.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
 
-/* (Responsive design consolidated at end of stylesheet) */
-
-/* ==========================================================================
-   ENHANCEMENTS: QUICK VIEW & PRODUCT VARIANT SELECTOR
-   ========================================================================== */
 .quick-view-modal {
   background: var(--bg-card);
   width: 100%;
@@ -2279,9 +2210,6 @@ a {
   transform: translateY(-1px);
 }
 
-/* ==========================================================================
-   LIVE ORDER TRACKER FLOATING DOCK & TIMELINE
-   ========================================================================== */
 .order-tracker-dock {
   position: fixed;
   bottom: 24px;
@@ -2408,9 +2336,6 @@ a {
   border-top: 1px solid var(--border-hairline);
 }
 
-/* ==========================================================================
-   MERCHANT QRIS CONFIGURATION MODAL
-   ========================================================================== */
 .merchant-config-modal {
   background: #FFFFFF;
   width: 100%;
@@ -2476,22 +2401,6 @@ a {
   cursor: pointer;
 }
 
-/* Accessible Reduced Motion (R-39, Scroll-Craft) */
-@media (prefers-reduced-motion: reduce) {
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ==========================================================================
-   MOBILE-FIRST COMPONENT SPECIFICATIONS (antislop-layoutmobile, R-03, R-35)
-   ========================================================================== */
 
 /* Grabber handle for mobile bottom sheets */
 .bottom-sheet-grabber {
@@ -2574,9 +2483,6 @@ a {
   box-shadow: 0 2px 4px rgba(184, 80, 50, 0.3);
 }
 
-/* ==========================================================================
-   TABLET RESPONSIVE BREAKPOINT (<= 1024px)
-   ========================================================================== */
 @media (max-width: 1024px) {
   .container {
     padding-left: 20px;
@@ -2585,10 +2491,6 @@ a {
 
   .nav-links {
     gap: 16px;
-  }
-
-  .hero-grid {
-    gap: 36px;
   }
 
   .product-grid {
@@ -2602,9 +2504,6 @@ a {
   }
 }
 
-/* ==========================================================================
-   MOBILE PHABLET & SMARTPHONE BREAKPOINT (<= 768px)
-   ========================================================================== */
 @media (max-width: 768px) {
   :root {
     --header-height: 56px;
@@ -2617,7 +2516,6 @@ a {
   /* Compact Native Header */
   .site-header {
     height: 56px;
-    background: rgba(248, 245, 240, 0.95);
   }
 
   .nav-inner {
@@ -2649,29 +2547,7 @@ a {
     display: none;
   }
 
-  .admin-login-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  background-color: rgba(46, 69, 50, 0.08);
-  color: var(--brand-forest);
-  border: 1.5px solid var(--brand-forest);
-  border-radius: var(--radius-full);
-  font-size: 0.82rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all var(--trans-fast);
-}
-
-.admin-login-btn:hover {
-  background-color: var(--brand-forest);
-  color: #FFFFFF;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(46, 69, 50, 0.25);
-}
-
-.audio-toggle {
+  .audio-toggle {
     width: 36px;
     height: 36px;
   }
@@ -2689,13 +2565,13 @@ a {
 
   /* Hero Section Mobile Reflow */
   .hero-section {
-    padding-top: 24px;
-    padding-bottom: 36px;
+    padding-top: 40px;
+    padding-bottom: 64px;
   }
 
   .hero-grid {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 44px;
   }
 
   .hero-content {
@@ -2749,7 +2625,8 @@ a {
   }
 
   .showcase-card {
-    max-width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
     padding: 16px;
   }
 
@@ -2780,15 +2657,21 @@ a {
 
   .toolbar-inner {
     gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 
   .toolbar-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
+    gap: 12px;
   }
 
   .category-tabs {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
     padding-bottom: 6px;
     gap: 6px;
     -webkit-overflow-scrolling: touch;
@@ -2801,6 +2684,7 @@ a {
   }
 
   .toolbar-controls {
+    width: 100%;
     max-width: 100%;
     flex-direction: row;
     gap: 8px;
@@ -2841,10 +2725,6 @@ a {
   .badge-pill {
     padding: 2px 6px;
     font-size: 0.65rem;
-  }
-
-  .card-body {
-    padding: 12px;
   }
 
   .card-title {
@@ -2940,9 +2820,6 @@ a {
   }
 }
 
-/* ==========================================================================
-   SMARTPHONE BREAKPOINT & MOBILE BOTTOM SHEETS (<= 640px)
-   ========================================================================== */
 @media (max-width: 640px) {
   .product-grid {
     grid-template-columns: 1fr;
@@ -3064,9 +2941,6 @@ a {
   }
 }
 
-/* ==========================================================================
-   CUSTOMER INFORMATION & SHIPPING METHOD SELECTOR (CART DRAWER)
-   ========================================================================== */
 .cart-customer-section {
   background: var(--bg-canvas-subtle);
   border: 1px solid var(--border-hairline);
@@ -3157,9 +3031,6 @@ a {
   color: var(--ink-tertiary);
 }
 
-/* ==========================================================================
-   WHATSAPP INTEGRATION & ACTION BUTTONS
-   ========================================================================== */
 .btn-whatsapp-order {
   display: flex;
   align-items: center;
@@ -3214,9 +3085,6 @@ a {
   transform: translateY(-1px);
 }
 
-/* ==========================================================================
-   STORE ADMIN DASHBOARD MODAL
-   ========================================================================== */
 .admin-auth-modal {
   background: #FFFFFF;
   border-radius: var(--radius-lg);
@@ -3273,10 +3141,10 @@ a {
 }
 
 .admin-dashboard-modal {
-  background: #FFFFFF;
+  background: var(--bg-canvas);
   border-radius: var(--radius-lg);
-  max-width: 900px;
-  width: 94%;
+  max-width: 1180px;
+  width: min(96vw, 1180px);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -3287,24 +3155,26 @@ a {
 }
 
 .admin-body {
-  padding: 20px;
+  padding: 24px 26px 30px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+  background: var(--bg-canvas);
 }
 
 .admin-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .metric-card {
-  background: var(--bg-canvas-subtle);
+  background: transparent;
   border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
-  padding: 14px;
+  border-radius: 6px;
+  padding: 13px 14px;
+  min-height: 104px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3319,7 +3189,7 @@ a {
 }
 
 .metric-value {
-  font-size: 1.35rem;
+  font-size: 1.18rem;
   font-weight: 800;
   color: var(--brand-forest);
   font-family: var(--font-mono);
@@ -3332,7 +3202,7 @@ a {
 
 .admin-table-container {
   border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-md);
+  border-radius: 8px;
   overflow-x: auto;
   background: #FFFFFF;
 }
@@ -3346,7 +3216,10 @@ a {
 
 .admin-orders-table th {
   background: var(--bg-canvas-subtle);
-  padding: 10px 12px;
+  padding: 12px 14px;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   font-weight: 700;
   color: var(--ink-secondary);
   border-bottom: 1px solid var(--border-hairline);
@@ -3354,7 +3227,7 @@ a {
 }
 
 .admin-orders-table td {
-  padding: 10px 12px;
+  padding: 14px;
   border-bottom: 1px solid var(--border-hairline);
   vertical-align: middle;
 }
@@ -3407,9 +3280,7 @@ a {
   border-color: var(--ink-secondary);
 }
 
-/* ==========================================================================
-   OFFICIAL THERMAL POS 58mm / 80mm RECEIPT PRINT STYLESHEET (@media print)
-   ========================================================================== */
+/* Isolate the receipt for 80mm thermal paper. */
 @media print {
   @page {
     size: 80mm auto;
@@ -3521,7 +3392,7 @@ a {
 /* Mobile responsive rules for Admin Modal */
 @media (max-width: 768px) {
   .admin-metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-dashboard-modal {
@@ -3529,13 +3400,6 @@ a {
     max-height: 92dvh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
-}
-
-/* Admin workspace refinement: hierarchy follows the operator's next action. */
-.admin-dashboard-modal {
-  max-width: 1180px;
-  width: min(96vw, 1180px);
-  background: var(--bg-canvas);
 }
 
 .admin-dashboard-modal .modal-header {
@@ -3556,40 +3420,6 @@ a {
 .tracker-dock-indicator {
   animation: none;
   box-shadow: none;
-}
-
-.admin-body {
-  padding: 24px 26px 30px;
-  gap: 24px;
-  background: var(--bg-canvas);
-}
-
-.admin-tabs-nav {
-  padding: 0 26px;
-  gap: 22px;
-  background: var(--bg-canvas);
-  border-bottom: 1px solid var(--border-hairline);
-}
-
-.admin-nav-tab {
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  padding: 13px 0 12px;
-  background: transparent;
-  color: var(--ink-tertiary);
-}
-
-.admin-nav-tab:hover,
-.admin-nav-tab:focus-visible {
-  color: var(--brand-forest);
-  background: transparent;
-}
-
-.admin-nav-tab.active {
-  color: var(--brand-forest);
-  border-bottom-color: var(--accent-terracotta);
-  background: transparent;
 }
 
 .admin-ops-summary {
@@ -3656,42 +3486,8 @@ a {
   font-size: 1.25rem;
 }
 
-.admin-metrics-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.metric-card {
-  min-height: 104px;
-  border-radius: 6px;
-  background: transparent;
-  padding: 13px 14px;
-}
-
-.metric-value {
-  font-size: 1.18rem;
-}
-
 .admin-view-tools {
   background: #fffdf9 !important;
-}
-
-.admin-table-container {
-  border-radius: 8px;
-  border-color: var(--border-hairline);
-}
-
-.admin-orders-table th {
-  padding: 12px 14px;
-  background: var(--bg-canvas-subtle);
-  color: var(--ink-secondary);
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.admin-orders-table td {
-  padding: 14px;
 }
 
 .admin-orders-table tbody tr {
@@ -3714,19 +3510,10 @@ a {
 }
 
 @media (max-width: 768px) {
-  .admin-dashboard-modal {
-    width: 100%;
-  }
-
   .admin-dashboard-modal .modal-header,
   .admin-body {
     padding-left: 16px !important;
     padding-right: 16px !important;
-  }
-
-  .admin-tabs-nav {
-    padding: 0 16px;
-    overflow-x: auto;
   }
 
   .admin-ops-summary {
@@ -3745,9 +3532,6 @@ a {
     min-width: 0;
   }
 
-  .admin-metrics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3904,10 +3688,6 @@ a {
   flex: 1;
   display: flex;
   flex-direction: column;
-}
-
-.admin-workspace-main > .admin-tabs-nav {
-  display: none;
 }
 
 .admin-workspace-main > .admin-body {
@@ -4113,9 +3893,6 @@ a {
   }
 }
 
-/* ==========================================================================
-   FEATURE 1: PHONE QRIS GALLERY DOWNLOAD & WALLET DEEP-LINKS
-   ========================================================================== */
 .qris-phone-helper-card {
   background: var(--bg-canvas-subtle);
   border: 1px dashed var(--brand-forest);
@@ -4208,35 +3985,6 @@ a {
   background: rgba(46, 69, 50, 0.05);
 }
 
-/* ==========================================================================
-   FEATURE 2: STORE ADMIN PRODUCT CATALOG MANAGEMENT (CRUD)
-   ========================================================================== */
-.admin-tabs-nav {
-  display: flex;
-  border-bottom: 1px solid var(--border-hairline);
-  background: var(--bg-canvas-subtle);
-  padding: 0 20px;
-  gap: 8px;
-}
-
-.admin-nav-tab {
-  padding: 12px 18px;
-  border: none;
-  background: transparent;
-  font-weight: 600;
-  font-size: 0.88rem;
-  color: var(--ink-secondary);
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all var(--trans-fast);
-}
-
-.admin-nav-tab.active {
-  font-weight: 700;
-  color: var(--brand-forest);
-  border-bottom-color: var(--brand-forest);
-}
-
 .admin-product-form-box {
   background: var(--bg-canvas-subtle);
   border: 1px solid var(--brand-forest);
@@ -4324,196 +4072,12 @@ a {
   border-color: #E5E7EB !important;
 }
 
-/* Editorial Commerce refinement */
-body {
-  background: var(--bg-canvas);
-}
-
-body::before,
-body::after,
-.hero-section::before,
-.hero-section::after {
-  display: none;
-}
-
-.site-header {
-  background: rgba(245, 239, 231, 0.94);
-  border-bottom-color: rgba(29, 23, 19, 0.1);
-  backdrop-filter: blur(12px);
-}
-
-.hero-section {
-  padding-top: clamp(56px, 8vw, 112px);
-  padding-bottom: clamp(64px, 10vw, 132px);
-}
-
-.hero-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.78fr);
-  gap: clamp(48px, 9vw, 136px);
-}
-
-.hero-editorial {
-  max-width: 680px;
-  gap: 24px;
-}
-
-.hero-kicker,
-.section-kicker {
-  letter-spacing: 0.1em;
-}
-
-.hero-headline,
-.story-copy h2 {
-  letter-spacing: -0.035em;
-  text-shadow: none;
-}
-
-.hero-description {
-  max-width: 52ch;
-  line-height: 1.75;
-}
-
-.btn-primary {
-  background: var(--accent-matcha);
-  border-radius: 10px;
-  box-shadow: 0 8px 18px rgba(45, 72, 56, 0.16);
-}
-
-.btn-primary:hover {
-  background: var(--accent-matcha-hover);
-  box-shadow: 0 10px 22px rgba(45, 72, 56, 0.2);
-}
-
-.btn-secondary {
-  background: transparent;
-  border-radius: 10px;
-  backdrop-filter: none;
-}
-
-.showcase-card {
-  border-radius: 14px;
-  box-shadow: 0 18px 38px rgba(29, 23, 19, 0.12);
-}
-
-.showcase-img-wrap {
-  border-radius: 10px;
-}
-
-.catalog-section {
-  background: #fbf8f3;
-  border-top: 1px solid rgba(29, 23, 19, 0.08);
-  border-bottom: 1px solid rgba(29, 23, 19, 0.08);
-}
-
-.toolbar-wrapper {
-  background: rgba(251, 248, 243, 0.96);
-  box-shadow: 0 8px 20px rgba(29, 23, 19, 0.05);
-}
-
-.category-tabs {
-  scrollbar-width: thin;
-  scrollbar-color: var(--accent-terracotta) transparent;
-}
-
-.tab-btn {
-  border-radius: 8px;
-  background: transparent;
-}
-
-.tab-btn.active {
-  background: var(--accent-matcha);
-  color: #fff;
-  box-shadow: none;
-}
-
-.search-box,
-.sort-select {
-  border-radius: 9px;
-  background: #fff;
-  box-shadow: none;
-}
-
-.product-card {
-  border-radius: 12px;
-  background: #fff;
-  border-color: rgba(29, 23, 19, 0.1);
-  box-shadow: 0 6px 18px rgba(29, 23, 19, 0.045);
-  transition: transform 280ms var(--ease-spring), box-shadow 280ms var(--ease-spring), border-color 280ms ease;
-}
-
-.product-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(29, 23, 19, 0.18);
-  box-shadow: 0 14px 28px rgba(29, 23, 19, 0.09);
-}
-
-.card-media {
-  border-radius: 10px;
-}
-
-.card-body {
-  padding: 18px 18px 20px;
-}
-
-.btn-add,
 .btn-quick-view,
 .btn-add-cart {
   border-radius: 8px;
 }
 
-.luxury-story {
-  padding: clamp(84px, 11vw, 144px) 0;
-  background: var(--bg-canvas);
-}
-
-.story-copy {
-  max-width: 58ch;
-}
-
-.story-metrics {
-  gap: 12px;
-}
-
-.story-metrics div {
-  border: 0;
-  border-top: 1px solid rgba(29, 23, 19, 0.16);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  padding: 16px 0;
-}
-
-.floating-card {
-  border-radius: 14px;
-  box-shadow: 0 16px 34px rgba(29, 23, 19, 0.1);
-  backdrop-filter: none;
-}
-
-.final-cta {
-  background: var(--accent-matcha);
-}
-
-.luxury-ritual {
-  background: #fbf8f3;
-}
-
-.ritual-badge {
-  border-radius: 10px;
-  box-shadow: none;
-}
-
 @media (max-width: 768px) {
-  .hero-section {
-    padding-top: 40px;
-    padding-bottom: 64px;
-  }
-
-  .hero-grid {
-    grid-template-columns: 1fr;
-    gap: 44px;
-  }
-
   .hero-headline {
     font-size: clamp(2.6rem, 12vw, 4rem);
   }
@@ -4529,31 +4093,6 @@ body::after,
   .tracker-dock-text,
   .tracker-dock-status {
     white-space: nowrap;
-  }
-
-  .showcase-card {
-    max-width: 520px;
-    margin: 0 auto;
-  }
-
-  .toolbar-inner {
-    padding-top: 12px;
-    padding-bottom: 12px;
-  }
-
-  .toolbar-row {
-    gap: 12px;
-  }
-
-  .category-tabs {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-  }
-
-  .toolbar-controls {
-    width: 100%;
   }
 
   .luxury-story {
@@ -4576,9 +4115,6 @@ body::after,
   }
 }
 
-/* ==========================================================================
-   ENHANCED COMPONENTS & ACCESSIBLE AFFORDANCES
-   ========================================================================== */
 
 .card-title-btn {
   background: none;

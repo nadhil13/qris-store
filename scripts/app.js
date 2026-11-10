@@ -48,6 +48,8 @@ import {
   renderQRCodeSVG,
   renderQRCodeCanvas,
   scanQRISFromImageFile,
+  qrMatrix,
+  acquirerLabel,
   DEMO_STATIC_QRIS
 } from './qris.js';
 import {
@@ -58,13 +60,14 @@ import {
   getOrders,
   getOrder,
   saveOrder,
-  updateOrder,
   sweepExpiredOrders,
   clearOrders,
   getSettings,
   saveSettings,
   replaceQRIS,
+  saveSharedSettings,
   syncSettingsWithCloud,
+  syncOrdersWithCloud,
   pushSettingsToCloud,
   moveStockForOrder,
   getCart,
@@ -95,6 +98,21 @@ export const STORAGE_KEY_ADMIN_SESSION = 'an.admin.session.v3';
 export const ADMIN_USERNAME = 'admin';
 export const ADMIN_PASSWORD = 'admin123';
 export const VALID_ADMIN_PASSWORDS = ['admin123', 'atelier2026', 'admin'];
+
+function updateStorefrontStatus() {
+  const { store } = getSettings();
+  const label = document.getElementById('store-status-label');
+  if (label) label.textContent = `${store.isOpen === false ? 'Tutup' : 'Buka'} (${store.hours || 'Jam operasional belum diatur'})`;
+  const dot = document.getElementById('store-status-dot');
+  if (dot) dot.hidden = store.isOpen === false;
+}
+
+function canCheckout() {
+  const { store } = getSettings();
+  if (store.isOpen !== false) return true;
+  showToast(`Toko sedang tutup. Jam operasional: ${store.hours || 'belum diatur'}.`);
+  return false;
+}
 
 class SoundFX {
   constructor() {
@@ -211,7 +229,6 @@ export const state = {
   currentQRISDisplayMode: 'dynamic',
   adminAuthenticated: false,
   activeAdminSection: 'overview',
-  activeAdminTab: 'orders',
   editingProductId: null,
   orderFilter: 'all',
   lastHighlightedInvoice: null
@@ -222,10 +239,10 @@ export function showToast(message, { duration = 3200 } = {}) {
   const text = document.getElementById('toast-text');
   if (!toast || !text) return;
   text.textContent = message;
-  toast.classList.add('visible');
+  toast.classList.add('show');
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => {
-    toast.classList.remove('visible');
+    toast.classList.remove('show');
   }, duration);
 }
 
@@ -324,7 +341,7 @@ export function renderCatalog() {
                 </button>
               ` : totalInCart > 0 && item.variants && item.variants.length > 1 ? `
                 <button type="button" class="btn-add in-cart" onclick="window.openQuickView('${item.id}')" aria-label="Sudah ada ${totalInCart} di keranjang. Buka varian lain">
-                  <span>✓ ${totalInCart} di Keranjang</span>
+                  <span>${totalInCart} di Keranjang</span>
                 </button>
               ` : totalInCart > 0 && (!item.variants || item.variants.length <= 1) ? `
                 <div class="qty-stepper">
@@ -528,11 +545,17 @@ export function applyVoucher() {
   updateCartUI();
 }
 
+const DIGITAL_SHIPPING = { id: 'digital', name: 'Dikirim digital via WhatsApp', price: 0, eta: 'Setelah pembayaran' };
+
 export function getCalculatedCart() {
   const products = getProducts();
   const lines = resolveLines(state.cart, products);
   const settings = getSettings();
-  const activeShipping = settings.shipping.find((s) => s.id === state.activeShippingId) || settings.shipping[0];
+  const digitalOnly = isDigitalOnly(lines.filter((l) => l.available));
+  const chosen = settings.shipping.find((s) => s.id === state.activeShippingId) || settings.shipping[0];
+  if (!digitalOnly && chosen && chosen.id !== state.activeShippingId) state.activeShippingId = chosen.id;
+  // Orders record the digital option so tracker labels read "dikirim ke WhatsApp".
+  const activeShipping = digitalOnly ? DIGITAL_SHIPPING : chosen;
   const voucher = state.activeVoucherCode ? { code: state.activeVoucherCode, percent: state.voucherDiscountPercent } : null;
   const totals = computeTotals({
     lines,
@@ -543,6 +566,37 @@ export function getCalculatedCart() {
   return { lines, totals, settings, activeShipping, voucher };
 }
 
+function renderShippingOptions(settings, totals) {
+  const grid = document.getElementById('shipping-methods-grid');
+  const note = document.getElementById('shipping-digital-note');
+  const title = document.getElementById('shipping-section-title');
+  const addressEl = document.getElementById('customer-address');
+  const digital = totals.digitalOnly;
+
+  if (note) note.hidden = !digital;
+  if (grid) grid.hidden = digital;
+  if (title) title.textContent = digital ? 'Pengiriman' : 'Metode Pengiriman';
+  if (addressEl) {
+    const pickup = state.activeShippingId === 'pickup';
+    addressEl.hidden = digital;
+    addressEl.placeholder = pickup ? 'Catatan untuk toko (opsional)' : 'Alamat pengantaran lengkap';
+    addressEl.setAttribute('aria-label', addressEl.placeholder);
+  }
+  if (!grid || digital) return;
+
+  const signature = JSON.stringify(settings.shipping) + state.activeShippingId;
+  if (grid.dataset.signature === signature) return;
+  grid.dataset.signature = signature;
+  grid.innerHTML = settings.shipping.map((s) => `
+    <button type="button" class="shipping-method-card ${s.id === state.activeShippingId ? 'active' : ''}" id="ship-${escapeHTML(s.id)}"
+      aria-pressed="${s.id === state.activeShippingId}" onclick="window.selectShippingMethod('${escapeHTML(s.id)}')">
+      <span class="shipping-name">${escapeHTML(s.name)}</span>
+      <span class="shipping-price">${Number(s.price) > 0 ? formatIDR(s.price) : 'Gratis'}</span>
+      <span class="shipping-eta">${escapeHTML(s.eta || '')}</span>
+    </button>
+  `).join('');
+}
+
 export function updateCartUI() {
   const countBadge = document.getElementById('cart-badge');
   const mobBadge = document.getElementById('mob-cart-badge');
@@ -551,7 +605,10 @@ export function updateCartUI() {
   const subtotalEl = document.getElementById('summary-subtotal');
   const discountRow = document.getElementById('summary-discount-row');
   const discountEl = document.getElementById('summary-discount');
+  const discountLabel = document.getElementById('summary-discount-label');
   const shippingEl = document.getElementById('summary-shipping');
+  const packagingRow = document.getElementById('summary-packaging-row');
+  const packagingEl = document.getElementById('summary-packaging');
   const totalEl = document.getElementById('summary-total');
   const btnCheckout = document.getElementById('btn-checkout');
 
@@ -562,26 +619,29 @@ export function updateCartUI() {
   if (drawerCount) drawerCount.textContent = `(${totals.itemCount} pesanan)`;
 
   if (subtotalEl) subtotalEl.textContent = formatIDR(totals.subtotal);
-  if (shippingEl) shippingEl.textContent = formatIDR(totals.shippingCost);
+  if (shippingEl) shippingEl.textContent = totals.digitalOnly ? 'Gratis (digital)' : formatIDR(totals.shippingCost);
+  if (packagingRow) packagingRow.style.display = totals.packaging > 0 ? 'flex' : 'none';
+  if (packagingEl) packagingEl.textContent = formatIDR(totals.packaging);
   if (totalEl) totalEl.textContent = formatIDR(totals.total);
 
   if (discountRow && discountEl) {
     if (totals.discount > 0) {
       discountRow.style.display = 'flex';
       discountEl.textContent = `- ${formatIDR(totals.discount)}`;
+      if (discountLabel && voucher) discountLabel.textContent = `Diskon ${voucher.code} (${voucher.percent}%)`;
     } else {
       discountRow.style.display = 'none';
     }
   }
 
-  document.querySelectorAll('.shipping-method-card').forEach((card) => {
-    card.classList.toggle('active', card.id === `ship-${state.activeShippingId}`);
-  });
+  renderShippingOptions(settings, totals);
 
   if (btnCheckout) {
-    btnCheckout.disabled = totals.itemCount === 0;
-    btnCheckout.style.opacity = totals.itemCount === 0 ? '0.6' : '1';
+    btnCheckout.disabled = totals.itemCount === 0 || settings.store.isOpen === false;
+    btnCheckout.style.opacity = btnCheckout.disabled ? '0.6' : '1';
   }
+  const whatsappCheckout = document.getElementById('btn-checkout-whatsapp');
+  if (whatsappCheckout) whatsappCheckout.disabled = totals.itemCount === 0 || settings.store.isOpen === false;
 
   if (!drawerItems) return;
 
@@ -607,7 +667,7 @@ export function updateCartUI() {
           <span class="cart-item-price">${formatIDR(item.unitPrice)}</span>
         </div>
         <button type="button" class="cart-item-note" onclick="window.promptNote('${item.key}')" aria-label="Tambah catatan khusus">
-          ${item.note ? `✎ ${escapeHTML(item.note)}` : '+ Catatan khusus'}
+          ${item.note ? `Catatan: ${escapeHTML(item.note)}` : '+ Catatan khusus'}
         </button>
       </div>
       <div class="qty-stepper">
@@ -635,6 +695,7 @@ export function closeCartDrawer() {
 }
 
 export function openCheckoutModal() {
+  if (!canCheckout()) return;
   const { lines, totals, settings, activeShipping } = getCalculatedCart();
   if (totals.itemCount === 0) {
     showToast('Keranjang Anda masih kosong.');
@@ -708,24 +769,15 @@ function renderCheckoutView(order) {
   const banner = document.getElementById('payment-expired-banner');
   const polling = document.querySelector('.polling-indicator');
   const clockEl = document.getElementById('payment-countdown-clock');
-  const btnPay = document.getElementById('btn-simulate-pay');
 
   if (banner) banner.style.display = 'none';
   if (polling) polling.style.display = 'flex';
   if (clockEl) clockEl.textContent = '10:00';
-  if (btnPay) {
-    btnPay.disabled = false;
-    btnPay.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>Konfirmasi Pembayaran Selesai (Dapatkan Struk & Lacak)</span>
-    `;
-  }
 
   if (amountEl) amountEl.textContent = formatIDR(order.totals.total);
   if (invoiceEl) invoiceEl.textContent = order.invoice;
   if (merchantEl) merchantEl.textContent = desc.merchantName || settings.store.name;
-  if (nmidEl) nmidEl.textContent = `NMID: ${desc.nmid || 'ID1026533086801'} · ${desc.city || 'JAKARTA'}`;
-
+  if (nmidEl) nmidEl.textContent = [desc.nmid ? `NMID: ${desc.nmid}` : '', desc.city].filter(Boolean).join(' · ');
   const generatedVa = '88019' + order.invoice.replace(/[^0-9]/g, '').padEnd(8, '7').slice(-8);
   if (vaEl) vaEl.textContent = generatedVa;
   if (btnCopyVa) btnCopyVa.dataset.copy = generatedVa;
@@ -738,6 +790,13 @@ export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
   const order = explicitOrder || (state.activeCheckoutOrderId ? getOrder(state.activeCheckoutOrderId) : null) || state.activeOrder;
   const settings = getSettings();
   const rawStatic = settings.qris.payload || DEMO_STATIC_QRIS;
+
+  const pill = document.getElementById('qris-acquirer-pill');
+  if (pill) {
+    const acquirer = acquirerLabel(describeQRIS(rawStatic).acquirer);
+    const modeLabel = mode === 'static' ? 'QRIS Statis' : 'QRIS Dinamis';
+    pill.textContent = acquirer ? `${acquirer} · ${modeLabel}` : modeLabel;
+  }
 
   const btnDynamic = document.getElementById('btn-qris-mode-dynamic');
   const btnStatic = document.getElementById('btn-qris-mode-static');
@@ -848,31 +907,30 @@ export function downloadQRISImage() {
 
   ctx.fillStyle = '#6E5B4F';
   ctx.font = '600 15px "JetBrains Mono", monospace';
-  ctx.fillText(`NMID: ${desc.nmid || 'ID1026533086801'} · ${desc.city || 'JAKARTA'}`, 400, 195);
+  ctx.fillText([desc.nmid ? `NMID: ${desc.nmid}` : '', desc.city].filter(Boolean).join(' · '), 400, 195);
 
   const qrX = 150;
   const qrY = 225;
   const qrSize = 500;
 
-  if (typeof window !== 'undefined' && window.qrcode) {
-    try {
-      const qr = window.qrcode(0, 'M');
-      qr.addData(payload);
-      qr.make();
-      const count = qr.getModuleCount();
-      const modSize = qrSize / count;
-
-      ctx.fillStyle = '#000000';
-      for (let r = 0; r < count; r++) {
-        for (let c = 0; c < count; c++) {
-          if (qr.isDark(r, c)) {
-            ctx.fillRect(qrX + c * modSize, qrY + r * modSize, modSize + 0.3, modSize + 0.3);
-          }
-        }
+  // Same generator as the on-screen QR, including the low-ECC retry for long payloads.
+  const matrix = qrMatrix(payload);
+  if (!matrix) {
+    showToast('Gagal membuat gambar QR. Salin string QRIS sebagai gantinya.');
+    return;
+  }
+  const count = matrix.length;
+  const modSize = qrSize / count;
+  ctx.fillStyle = '#000000';
+  for (let r = 0; r < count; r++) {
+    for (let c = 0; c < count; c++) {
+      if (matrix[r][c]) {
+        ctx.fillRect(qrX + c * modSize, qrY + r * modSize, modSize + 0.3, modSize + 0.3);
       }
-    } catch {}
+    }
   }
 
+  const isStatic = state.currentQRISDisplayMode === 'static';
   const boxY = 790;
   ctx.fillStyle = '#F9FAFB';
   ctx.fillRect(100, boxY, 600, 130);
@@ -882,7 +940,7 @@ export function downloadQRISImage() {
 
   ctx.fillStyle = '#4B5563';
   ctx.font = '700 13px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText('TOTAL TAGIHAN TERKUNCI (SCAN DARI GALERI):', 400, boxY + 36);
+  ctx.fillText(isStatic ? 'KETIK NOMINAL INI DI APLIKASI SAAT MEMBAYAR:' : 'NOMINAL SUDAH TERISI OTOMATIS SAAT DIPINDAI:', 400, boxY + 36);
 
   ctx.fillStyle = '#C8102E';
   ctx.font = '800 36px "Plus Jakarta Sans", sans-serif';
@@ -901,23 +959,14 @@ export function downloadQRISImage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `QRIS_${order.invoice}.png`;
+    a.download = `QRIS_${order.invoice}${isStatic ? '_statis' : ''}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     sfx.playSuccess();
-    showToast('📥 Gambar QRIS berhasil disimpan ke Galeri HP!');
+    showToast('Gambar QRIS tersimpan. Buka aplikasi bank, pilih scan dari galeri.');
   }, 'image/png');
-}
-
-export function simulatePaymentSuccess() {
-  if (!state.activeCheckoutOrderId) return;
-  const res = confirmPayment(state.activeCheckoutOrderId, { by: 'simulasi_pelanggan' });
-  if (!res.ok) {
-    showToast(`Pembayaran tidak dapat diproses: ${statusLabel(res.reason)}`);
-    return;
-  }
 }
 
 function handlePaymentCompleted(order) {
@@ -940,7 +989,7 @@ function handlePaymentCompleted(order) {
   renderReceiptModal(order);
   const receiptModal = document.getElementById('receipt-modal-backdrop');
   if (receiptModal) receiptModal.classList.add('open');
-  showToast('✓ Pembayaran berhasil diverifikasi!');
+  showToast('Pembayaran dikonfirmasi oleh toko.');
 }
 
 function handlePaymentExpired(order) {
@@ -951,11 +1000,6 @@ function handlePaymentExpired(order) {
   const polling = document.querySelector('.polling-indicator');
   if (polling) polling.style.display = 'none';
   showToast('Batas waktu pembayaran 10 menit telah habis. Silakan buat pesanan ulang.');
-  const btnPay = document.getElementById('btn-simulate-pay');
-  if (btnPay) {
-    btnPay.disabled = true;
-    btnPay.textContent = 'Pesanan Hangus (Waktu Habis)';
-  }
 }
 
 export function restartExpiredOrder() {
@@ -971,23 +1015,51 @@ export function closeCheckoutModal() {
     state.activeOrderStopWatch();
     state.activeOrderStopWatch = null;
   }
-  const btnPay = document.getElementById('btn-simulate-pay');
-  if (btnPay) {
-    btnPay.disabled = false;
-    btnPay.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>Konfirmasi Pembayaran Selesai (Dapatkan Struk & Lacak)</span>
-    `;
-  }
 }
 
-function renderReceiptModal(order) {
+function paymentMethodLabel(order, desc) {
+  const method = order?.payment?.method;
+  if (method === 'va') return 'Virtual Account';
+  if (method === 'whatsapp') return 'Konfirmasi via WhatsApp';
+  const acquirer = acquirerLabel(desc?.acquirer);
+  return acquirer ? `QRIS (${acquirer})` : 'QRIS';
+}
+
+function formatPhoneDisplay(raw) {
+  const digits = normalizePhone(raw);
+  if (!digits) return '';
+  const local = digits.startsWith('62') ? `0${digits.slice(2)}` : digits;
+  return local.replace(/(\d{4})(\d{4})(\d+)/, '$1-$2-$3');
+}
+
+export function renderReceiptModal(order) {
+  const settings = getSettings();
+  const receiptPayload = order?.payment?.payload || settings.qris.payload || DEMO_STATIC_QRIS;
+  const desc = describeQRIS(receiptPayload);
   const receiptInvoice = document.getElementById('receipt-invoice');
   const receiptTime = document.getElementById('receipt-time');
   const receiptTotal = document.getElementById('receipt-total');
   const receiptItemsList = document.getElementById('receipt-items-list');
   const receiptCustomerName = document.getElementById('receipt-customer-name');
   const receiptShippingName = document.getElementById('receipt-shipping-name');
+  const receiptMethod = document.getElementById('receipt-method');
+  const printStore = document.getElementById('receipt-print-store');
+  const printAddress = document.getElementById('receipt-print-address');
+  const printContact = document.getElementById('receipt-print-contact');
+  const printFooter = document.getElementById('receipt-print-footer');
+
+  const methodLabel = paymentMethodLabel(order, desc);
+  if (receiptMethod) receiptMethod.textContent = methodLabel;
+  if (printStore) printStore.textContent = (settings.store.name || 'Atelier Nusantara').toUpperCase();
+  if (printAddress) {
+    printAddress.textContent = settings.store.address || '';
+    printAddress.hidden = !settings.store.address;
+  }
+  if (printContact) {
+    const phone = formatPhoneDisplay(settings.store.whatsapp);
+    printContact.textContent = [desc.nmid ? `NMID: ${desc.nmid}` : '', phone ? `WA: ${phone}` : ''].filter(Boolean).join(' · ');
+  }
+  if (printFooter) printFooter.textContent = `STRUK PEMBAYARAN ${methodLabel.toUpperCase()}`;
 
   if (receiptInvoice) receiptInvoice.textContent = order.invoice;
   if (receiptTime) receiptTime.textContent = formatDateTime(order.payment?.paidAt || order.updatedAt);
@@ -1011,7 +1083,12 @@ export function closeReceiptModal() {
   showToast('Pesanan aktif. Anda dapat memantau prosesnya di dock bawah.');
 }
 
+// WhatsApp orders are settled in the chat, so the admin gets a day to confirm
+// instead of the 10-minute QRIS window.
+const WHATSAPP_ORDER_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 export function checkoutViaWhatsApp() {
+  if (!canCheckout()) return;
   const { lines, totals, settings, activeShipping } = getCalculatedCart();
   if (totals.itemCount === 0) {
     showToast('Keranjang Anda masih kosong.');
@@ -1019,41 +1096,58 @@ export function checkoutViaWhatsApp() {
   }
   updateCustomerInfo();
 
-  const newOrder = createOrder({
+  const created = createOrder({
     lines,
     totals,
     customer: state.customer,
     shipping: activeShipping,
     voucherCode: state.activeVoucherCode
   });
+  const newOrder = {
+    ...created,
+    expiresAt: created.createdAt + WHATSAPP_ORDER_WINDOW_MS,
+    payment: { ...created.payment, method: 'whatsapp' }
+  };
 
   saveOrder(newOrder, { type: 'created' });
   rememberMyOrder(newOrder.id);
 
-  let msg = `*PESANAN BARU: ATELIER NUSANTARA*\n`;
+  let msg = `*PESANAN BARU: ${(settings.store.name || 'Atelier Nusantara').toUpperCase()}*\n`;
   msg += `----------------------------------------\n`;
   msg += `No. Invoice: ${newOrder.invoice}\n`;
   msg += `Waktu: ${formatDateTime(newOrder.createdAt)}\n\n`;
   msg += `*Data Pemesan:*\n`;
-  msg += `• Nama: ${newOrder.customer.name || 'Pelanggan Butik'}\n`;
+  msg += `• Nama: ${newOrder.customer.name || '-'}\n`;
   msg += `• WhatsApp: ${newOrder.customer.phone || '-'}\n`;
-  msg += `• Pengiriman: ${newOrder.shipping?.name || 'Ambil di Toko'}\n`;
-  msg += `• Alamat/Lokasi: ${newOrder.customer.address || 'Ambil di Tempat'}\n\n`;
-  msg += `*Rincian Pesanan:*\n`;
+  msg += `• Pengiriman: ${newOrder.shipping?.name || 'Ambil di toko'}\n`;
+  if (newOrder.shipping?.id !== 'digital') msg += `• Alamat/Catatan: ${newOrder.customer.address || '-'}\n`;
+  msg += `\n*Rincian Pesanan:*\n`;
   newOrder.items.forEach((i) => {
     msg += `• ${i.name} (x${i.qty}) ${i.variant ? `[${i.variant}]` : ''} ${i.note ? `catatan: ${i.note}` : ''}: ${formatIDR(i.unitPrice * i.qty)}\n`;
   });
   msg += `\nSubtotal: ${formatIDR(newOrder.totals.subtotal)}\n`;
   if (newOrder.totals.discount > 0) msg += `Diskon (${newOrder.voucherCode}): -${formatIDR(newOrder.totals.discount)}\n`;
-  msg += `Ongkos Kirim: ${formatIDR(newOrder.totals.shippingCost)}\n`;
-  msg += `*TOTAL PEMBAYARAN: ${formatIDR(newOrder.totals.total)}*\n`;
-  msg += `Metode Pembayaran: QRIS Dinamis\n`;
+  if (newOrder.totals.shippingCost > 0) msg += `Ongkos Kirim: ${formatIDR(newOrder.totals.shippingCost)}\n`;
+  if (newOrder.totals.packaging > 0) msg += `Kemasan: ${formatIDR(newOrder.totals.packaging)}\n`;
+  msg += `*TOTAL: ${formatIDR(newOrder.totals.total)}*\n`;
+  msg += `Pembayaran: dikonfirmasi lewat chat ini\n`;
   msg += `----------------------------------------\n`;
   msg += `Mohon konfirmasi ketersediaan pesanan ini. Terima kasih!`;
 
   const waNum = normalizePhone(settings.store.whatsapp) || '6281234567890';
   window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
-  showToast('Menghubungkan ke WhatsApp Toko...');
+
+  // The order now lives in the tracker; an empty cart also stops a second
+  // tap from creating a duplicate.
+  state.cart = [];
+  state.activeVoucherCode = '';
+  state.voucherDiscountPercent = 0;
+  saveCart(state.cart);
+  updateCartUI();
+  renderCatalog();
+  closeCartDrawer();
+  updateOrderTrackerDockUI();
+  showToast(`Pesanan ${newOrder.invoice} dikirim ke WhatsApp toko. Pantau statusnya di pelacak pesanan.`, { duration: 5000 });
 }
 
 export function sendOrderToWhatsApp() {
@@ -1136,7 +1230,7 @@ export function openOrderTrackerModal() {
 
       return `
         <div class="timeline-step ${stateClass}">
-          <div class="timeline-marker">${idx < currentIndex ? '✓' : idx + 1}</div>
+          <div class="timeline-marker">${idx + 1}</div>
           <div class="timeline-body">
             <strong>${escapeHTML(st.label)}</strong>
             <small style="color:var(--ink-secondary);">${idx <= currentIndex ? 'Sedang berlangsung / selesai' : 'Menunggu antrean'}</small>
@@ -1154,23 +1248,6 @@ export function closeOrderTrackerModal() {
   if (modal) modal.classList.remove('open');
 }
 
-export function advanceOrderStatus() {
-  const myIds = getMyOrderIds();
-  const orders = getOrders();
-  const active = myIds.map((id) => orders.find((o) => o.id === id)).filter((o) => o && isOpenStatus(o.status))[0];
-  if (!active) return;
-  sfx.playClick();
-  const updated = advanceOrder(active, { by: 'simulasi_pelanggan' });
-  if (updated) {
-    saveOrder(updated, { type: 'status' });
-    openOrderTrackerModal();
-    updateOrderTrackerDockUI();
-    showToast(`Status diperbarui: ${statusLabel(updated.status, updated)}`);
-  } else {
-    showToast('Pesanan sudah mencapai status selesai.');
-  }
-}
-
 export function clearActiveOrder() {
   const myIds = getMyOrderIds();
   if (myIds.length) {
@@ -1183,33 +1260,7 @@ export function clearActiveOrder() {
 
 export function openMerchantConfigModal() {
   sfx.playClick();
-  const modal = document.getElementById('merchant-config-modal-backdrop');
-  const textarea = document.getElementById('merchant-raw-qris-input');
-  const settings = getSettings();
-  if (textarea) textarea.value = settings.qris.payload || DEMO_STATIC_QRIS;
-  if (modal) modal.classList.add('open');
-}
-
-export function closeMerchantConfigModal() {
-  const modal = document.getElementById('merchant-config-modal-backdrop');
-  if (modal) modal.classList.remove('open');
-}
-
-export function saveMerchantQRISConfig() {
-  const textarea = document.getElementById('merchant-raw-qris-input');
-  if (!textarea) return;
-  const input = textarea.value.trim();
-  const val = validateQRIS(input);
-
-  if (!val.ok) {
-    alert(`QRIS tidak valid:\n${val.errors.join('\n')}`);
-    return;
-  }
-
-  replaceQRIS(val.payload, val.info || {});
-  sfx.playSuccess();
-  closeMerchantConfigModal();
-  showToast('✓ Konfigurasi QRIS toko berhasil disimpan & diperbarui di storefront!');
+  switchAdminSection('payments');
 }
 
 export function openAdminLoginModal() {
@@ -1249,7 +1300,7 @@ export function submitAdminLogin(event) {
     closeAdminLoginModal();
     openAdminDashboardModal();
     sfx.playSuccess();
-    showToast('✓ Akses admin aktif. Dashboard toko terbuka.');
+    showToast('Akses admin aktif. Dashboard toko terbuka.');
     return;
   }
 
@@ -1301,19 +1352,6 @@ export function switchAdminSection(sectionName) {
   refreshAdminDashboard();
 }
 
-export function switchAdminTab(tabName) {
-  state.activeAdminTab = tabName;
-  const btnOrders = document.getElementById('btn-admin-tab-orders');
-  const btnProducts = document.getElementById('btn-admin-tab-products');
-  const viewOrders = document.getElementById('admin-view-orders');
-  const viewProducts = document.getElementById('admin-view-products');
-
-  if (btnOrders) btnOrders.classList.toggle('active', tabName === 'orders');
-  if (btnProducts) btnProducts.classList.toggle('active', tabName === 'products');
-  if (viewOrders) viewOrders.style.display = tabName === 'orders' ? 'block' : 'none';
-  if (viewProducts) viewProducts.style.display = tabName === 'products' ? 'block' : 'none';
-}
-
 export function refreshAdminDashboard() {
   const orders = getOrders();
   const products = getProducts();
@@ -1332,10 +1370,10 @@ export function refreshAdminDashboard() {
   const countEl = document.getElementById('admin-orders-count');
   const needsActionEl = document.getElementById('admin-needs-action');
   const activeOrdersEl = document.getElementById('admin-active-orders');
-  const productBadge = document.getElementById('admin-product-count-badge');
   const overviewOrders = document.getElementById('admin-overview-orders');
   const overviewProducts = document.getElementById('admin-overview-products');
-  const phoneInput = document.getElementById('admin-merchant-phone');
+  const hoursInput = document.getElementById('admin-storefront-hours');
+  const openInput = document.getElementById('admin-storefront-is-open');
   const storefrontWa = document.getElementById('admin-storefront-whatsapp');
   const syncStatus = document.getElementById('admin-live-sync');
 
@@ -1346,10 +1384,10 @@ export function refreshAdminDashboard() {
   if (countEl) countEl.textContent = `${totalOrders} pesanan tercatat`;
   if (needsActionEl) needsActionEl.textContent = needsAction;
   if (activeOrdersEl) activeOrdersEl.textContent = activeOrders;
-  if (productBadge) productBadge.textContent = products.length;
   if (overviewOrders) overviewOrders.textContent = `${totalOrders} pesanan (${activeOrders} aktif)`;
   if (overviewProducts) overviewProducts.textContent = `${products.length} produk di katalog`;
-  if (phoneInput && document.activeElement !== phoneInput) phoneInput.value = settings.store.whatsapp || '';
+  if (hoursInput && document.activeElement !== hoursInput) hoursInput.value = settings.store.hours || '';
+  if (openInput && document.activeElement !== openInput) openInput.checked = settings.store.isOpen !== false;
   if (storefrontWa && document.activeElement !== storefrontWa) storefrontWa.value = settings.store.whatsapp || '';
   if (syncStatus) syncStatus.textContent = formatTime(Date.now());
 
@@ -1371,6 +1409,7 @@ function renderAdminOrderTable() {
     return;
   }
 
+  const desc = describeQRIS(getSettings().qris.payload || DEMO_STATIC_QRIS);
   tbody.innerHTML = orders.map((o) => {
     const itemsSummary = o.items.map((i) => `${escapeHTML(i.name)} (x${i.qty})`).join(', ');
     const isAwaiting = o.status === STATUS.AWAITING;
@@ -1378,11 +1417,14 @@ function renderAdminOrderTable() {
 
     let actionBtn = '';
     if (isAwaiting) {
-      actionBtn = `<button type="button" class="btn-admin-action" style="background:var(--brand-forest); color:#fff;" onclick="window.adminConfirmPayment('${o.id}')">✓ Konfirmasi Lunas</button>`;
+      actionBtn = `<button type="button" class="btn-admin-action" style="background:var(--brand-forest); color:#fff;" onclick="window.adminConfirmPayment('${o.id}')">Konfirmasi Lunas</button>`;
     } else if (!isComplete) {
-      actionBtn = `<button type="button" class="btn-admin-action" onclick="window.adminAdvanceOrderStatus('${o.invoice}')">Majukan ➡️</button>`;
+      actionBtn = `<button type="button" class="btn-admin-action" onclick="window.adminAdvanceOrderStatus('${o.invoice}')">Majukan status</button>`;
     } else {
       actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Selesai</span>`;
+    }
+    if (!isComplete) {
+      actionBtn += ` <button type="button" class="btn-admin-action" onclick="window.adminCancelOrder('${o.id}')">Batalkan</button>`;
     }
 
     return `
@@ -1391,7 +1433,7 @@ function renderAdminOrderTable() {
         <td style="white-space: nowrap; font-size: 0.74rem;">${formatDateTime(o.createdAt)}</td>
         <td><strong>${escapeHTML(o.customer.name || 'Pelanggan')}</strong><br><span style="font-size:0.7rem; color:var(--ink-secondary);">${escapeHTML(o.customer.phone || '-')}</span></td>
         <td style="max-width: 220px; font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(itemsSummary)}">${escapeHTML(itemsSummary)}</td>
-        <td style="font-size: 0.74rem;">QRIS Dinamis</td>
+        <td style="font-size: 0.74rem;">${escapeHTML(paymentMethodLabel(o, desc))}</td>
         <td style="font-weight: 700; font-family: var(--font-mono); color: var(--brand-forest);">${formatIDR(o.totals.total)}</td>
         <td><span class="status-badge-step ${statusTone(o.status)}">${statusLabel(o.status, o)}</span></td>
         <td>${actionBtn}</td>
@@ -1405,7 +1447,7 @@ export function adminConfirmPayment(orderId) {
   const res = confirmPayment(orderId, { by: 'admin_dashboard' });
   if (res.ok) {
     refreshAdminDashboard();
-    showToast(`✓ Pesanan ${res.order.invoice} dikonfirmasi LUNAS.`);
+    showToast(`Pesanan ${res.order.invoice} dikonfirmasi lunas.`);
   } else {
     showToast(`Gagal: ${res.reason}`);
   }
@@ -1424,11 +1466,14 @@ export function adminAdvanceOrderStatus(invoice) {
 }
 
 export function adminCancelOrder(orderId) {
+  if (!confirm('Batalkan pesanan ini?')) return;
   sfx.playClick();
   const res = cancelOrderById(orderId, { by: 'admin_dashboard', note: 'Dibatalkan oleh admin' });
   if (res.ok) {
     refreshAdminDashboard();
     showToast(`Pesanan ${res.order.invoice} dibatalkan.`);
+  } else {
+    showToast(`Gagal membatalkan pesanan: ${res.reason}`);
   }
 }
 
@@ -1624,14 +1669,14 @@ function renderAdminPaymentsSection() {
           NMID: <strong>${escapeHTML(desc.nmid || 'ID1026533086801')}</strong><br>
           Kota: <strong>${escapeHTML(desc.city || 'JAKARTA BARAT')}</strong><br>
           Acquirer: <strong>${escapeHTML(desc.acquirer || 'QRIS NASIONAL')}</strong><br>
-          Status Checksum: <span style="color:${val.ok ? 'var(--status-success)' : 'var(--status-danger)'}; font-weight:700;">${val.ok ? '✓ Valid (CRC OK)' : '⚠ Rusak'}</span>
+          Status Checksum: <span style="color:${val.ok ? 'var(--status-success)' : 'var(--status-danger)'}; font-weight:700;">${val.ok ? 'Valid (CRC OK)' : 'Rusak'}</span>
         </div>
         <div style="background:#ffffff; padding:12px; border-radius:8px; display:inline-block; border:1px solid var(--border-hairline); box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
           ${renderQRCodeSVG(activePayload, { label: 'Preview QRIS Toko', size: 180 })}
           <span style="display:block; font-size:0.72rem; color:var(--ink-secondary); margin-top:8px;">Kode QRIS Toko Siap Digunakan</span>
         </div>
         <div style="margin-top:12px; font-size:0.76rem; color:var(--brand-forest); background:rgba(46,69,50,0.08); padding:8px 12px; border-radius:6px; line-height:1.4;">
-          ⚡ <strong>Auto-Convert Dinamis Aktif:</strong> Saat pembeli checkout, tagihan mereka langsung terkunci otomatis di scanner m-Banking tanpa perlu ketik nominal manual.
+          <strong>QRIS dinamis aktif:</strong> Nominal tagihan disertakan dalam kode QRIS saat checkout.
         </div>
       </section>
 
@@ -1654,7 +1699,7 @@ function renderAdminPaymentsSection() {
           </div>
           <strong style="display:block; font-size:0.88rem; margin-top:8px; color:var(--ink-primary);">Klik atau Seret Foto QRIS ke Sini</strong>
           <p style="font-size:0.75rem; color:var(--ink-secondary); margin:4px 0 10px;">Format: PNG, JPG, JPEG, atau WebP</p>
-          <button type="button" class="btn-primary" style="padding:6px 14px; font-size:0.78rem; pointer-events:none;">📁 Pilih File Gambar</button>
+          <button type="button" class="btn-primary" style="padding:6px 14px; font-size:0.78rem; pointer-events:none;">Pilih File Gambar</button>
           <input type="file" id="admin-qris-file-input" accept="image/*" style="display:none;" onchange="window.handleQRISImageUpload(event)" />
         </div>
         <div id="admin-qris-scan-status" style="display:none; padding:8px 12px; border-radius:6px; font-size:0.8rem; margin-bottom:12px;"></div>
@@ -1725,7 +1770,7 @@ export async function processQRISFile(file) {
     statusEl.style.background = '#EFF6FF';
     statusEl.style.color = '#1D4ED8';
     statusEl.style.border = '1px solid #BFDBFE';
-    statusEl.innerHTML = `⏳ Sedang memindai gambar <strong>${escapeHTML(file.name)}</strong>...`;
+    statusEl.innerHTML = `Sedang memindai gambar <strong>${escapeHTML(file.name)}</strong>...`;
   }
   sfx.playClick();
 
@@ -1736,7 +1781,7 @@ export async function processQRISFile(file) {
         statusEl.style.background = '#FEE2E2';
         statusEl.style.color = '#B91C1C';
         statusEl.style.border = '1px solid #FCA5A5';
-        statusEl.innerHTML = `❌ Kode QR tidak terdeteksi dari foto ini. Pastikan foto QRIS jelas, tidak buram, dan tidak terpotong.`;
+        statusEl.innerHTML = `Kode QR tidak terdeteksi dari foto ini. Pastikan foto QRIS jelas, tidak buram, dan tidak terpotong.`;
       }
       showToast('Gambar QRIS tidak dapat dideteksi.');
       return;
@@ -1748,7 +1793,7 @@ export async function processQRISFile(file) {
         statusEl.style.background = '#FEE2E2';
         statusEl.style.color = '#B91C1C';
         statusEl.style.border = '1px solid #FCA5A5';
-        statusEl.innerHTML = `❌ Kode QR terdeteksi namun struktur QRIS tidak valid: ${val.errors.join(', ')}`;
+        statusEl.innerHTML = `Kode QR terdeteksi namun struktur QRIS tidak valid: ${val.errors.join(', ')}`;
       }
       showToast('QRIS tidak valid: ' + val.errors[0]);
       return;
@@ -1758,14 +1803,14 @@ export async function processQRISFile(file) {
     replaceQRIS(val.payload, val.info || {});
     sfx.playSuccess();
     refreshAdminDashboard();
-    showToast(`✓ Berhasil! QRIS ${val.info.merchantName || 'Toko'} aktif seketika di etalase!`);
+    showToast(`QRIS ${val.info.merchantName || 'Toko'} berhasil diperbarui.`);
   } catch (err) {
     console.error('QR decode error:', err);
     if (statusEl) {
       statusEl.style.background = '#FEE2E2';
       statusEl.style.color = '#B91C1C';
       statusEl.style.border = '1px solid #FCA5A5';
-      statusEl.innerHTML = `❌ Gagal memproses gambar: ${escapeHTML(err.message)}`;
+      statusEl.innerHTML = `Gagal memproses gambar: ${escapeHTML(err.message)}`;
     }
     showToast('Gagal memproses gambar: ' + err.message);
   }
@@ -1783,7 +1828,7 @@ export function adminApplyCustomQRIS() {
   replaceQRIS(val.payload, val.info || {});
   sfx.playSuccess();
   refreshAdminDashboard();
-  showToast('✓ QRIS baru berhasil diterapkan ke seluruh storefront!');
+  showToast('QRIS baru berhasil diterapkan ke toko.');
 }
 
 export function adminRestoreQRIS(payload) {
@@ -1792,7 +1837,7 @@ export function adminRestoreQRIS(payload) {
   replaceQRIS(val.payload, val.info || {});
   sfx.playSuccess();
   refreshAdminDashboard();
-  showToast('✓ QRIS riwayat berhasil dipulihkan.');
+  showToast('QRIS riwayat berhasil dipulihkan.');
 }
 
 export function adminResetQRISDefault() {
@@ -1802,21 +1847,22 @@ export function adminResetQRISDefault() {
   showToast('QRIS di-reset ke default demo.');
 }
 
-export function saveAdminMerchantPhone() {
-  const input = document.getElementById('admin-merchant-phone');
-  if (!input) return;
-  const num = input.value.trim();
-  saveSettings((s) => ({ ...s, store: { ...s.store, whatsapp: num } }));
-  showToast('Nomor WhatsApp toko berhasil disimpan.');
-}
-
 export function saveAdminStorefrontSetting(key) {
   if (key === 'merchantWhatsApp') {
     const input = document.getElementById('admin-storefront-whatsapp');
     if (!input) return;
     const num = input.value.trim();
-    saveSettings((s) => ({ ...s, store: { ...s.store, whatsapp: num } }));
+    saveSharedSettings((s) => ({ ...s, store: { ...s.store, whatsapp: num } }));
     showToast('Nomor WhatsApp storefront berhasil diperbarui.');
+  } else if (key === 'availability') {
+    const hours = document.getElementById('admin-storefront-hours')?.value.trim();
+    const isOpen = document.getElementById('admin-storefront-is-open')?.checked;
+    if (!hours) {
+      showToast('Jam operasional wajib diisi.');
+      return;
+    }
+    saveSharedSettings((s) => ({ ...s, store: { ...s.store, hours, isOpen } }));
+    showToast('Ketersediaan toko berhasil disimpan.');
   }
 }
 
@@ -1865,7 +1911,7 @@ export function requestNotificationPermission() {
   Notification.requestPermission().then((perm) => {
     if (perm === 'granted') {
       sfx.playCashChime();
-      showToast('✓ Notifikasi aktif! Anda akan menerima peringatan saat pesanan dibayar.');
+      showToast('Notifikasi aktif. Anda akan menerima peringatan saat pesanan dibayar.');
       triggerPaymentAlert({ invoice: 'NOTIF-TEST', totals: { total: 50000 }, customer: { name: 'Tes Notifikasi' } });
     } else {
       showToast('Izin notifikasi tidak diberikan.');
@@ -1878,7 +1924,7 @@ export function testNotificationSound() {
   if (navigator.vibrate) {
     try { navigator.vibrate([200, 100, 200, 100, 400]); } catch {}
   }
-  showToast('🔊 Memutar nada kasir Ka-ching!');
+  showToast('Memutar bunyi kasir.');
 }
 
 export function triggerPaymentAlert(order) {
@@ -1887,7 +1933,7 @@ export function triggerPaymentAlert(order) {
     try { navigator.vibrate([200, 100, 200, 100, 400]); } catch {}
   }
 
-  const title = `💰 Pembayaran Diterima!`;
+  const title = `Pembayaran diterima`;
   const body = `Invoice: ${order.invoice} (${formatIDR(order.totals.total)}) dari ${order.customer.name || 'Pelanggan'}`;
 
   if ('Notification' in window && Notification.permission === 'granted') {
@@ -1975,6 +2021,7 @@ function initEventBindings() {
       document.querySelectorAll('.payment-tabs .pay-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
       const target = tab.dataset.target;
+      state.activePayTab = target;
       const viewQris = document.getElementById('view-qris');
       const viewVa = document.getElementById('view-va');
       if (viewQris) viewQris.style.display = target === 'view-qris' ? 'block' : 'none';
@@ -1989,7 +2036,7 @@ function initEventBindings() {
       const vaNumber = document.getElementById('va-code-number')?.textContent.trim() || btnCopyVa.dataset.copy;
       if (vaNumber && navigator.clipboard) {
         navigator.clipboard.writeText(vaNumber).then(() => {
-          showToast(`✓ Nomor Virtual Account disalin: ${vaNumber}`);
+          showToast(`Nomor Virtual Account disalin: ${vaNumber}`);
         });
       }
     });
@@ -2003,7 +2050,6 @@ function initEventBindings() {
       closeReceiptModal();
       closeQuickView();
       closeOrderTrackerModal();
-      closeMerchantConfigModal();
       closeAdminLoginModal();
       closeAdminDashboardModal();
     }
@@ -2046,6 +2092,8 @@ function initRealtimeSync() {
       updateOrderTrackerDockUI();
       if (state.adminAuthenticated) refreshAdminDashboard();
     } else if (change.domain === 'settings') {
+      updateStorefrontStatus();
+      updateCartUI();
       if (change.type === 'qris' && state.activeCheckoutOrderId) {
         const order = getOrder(state.activeCheckoutOrderId);
         if (order) renderCheckoutView(order);
@@ -2096,6 +2144,7 @@ export function initGSAPAnimations() {
 }
 
 function initApp() {
+  updateStorefrontStatus();
   renderCatalog();
   updateCartUI();
   updateOrderTrackerDockUI();
@@ -2110,6 +2159,8 @@ function initApp() {
     }
   }).catch(() => {});
 
+  syncOrdersWithCloud().catch(() => {});
+
   // Polling every 12s so admin QRIS changes update all visitor screens in real time
   if (typeof window !== 'undefined') {
     setInterval(() => {
@@ -2119,6 +2170,7 @@ function initApp() {
           if (order) renderCheckoutView(order);
         }
       }).catch(() => {});
+      syncOrdersWithCloud().catch(() => {});
     }, 12000);
 
     window.addEventListener('focus', () => {
@@ -2128,6 +2180,7 @@ function initApp() {
           if (order) renderCheckoutView(order);
         }
       }).catch(() => {});
+      syncOrdersWithCloud().catch(() => {});
     });
   }
 
@@ -2154,7 +2207,6 @@ if (typeof window !== 'undefined') {
   window.openCheckoutModal = openCheckoutModal;
   window.closeCheckoutModal = closeCheckoutModal;
   window.applyVoucher = applyVoucher;
-  window.simulatePaymentSuccess = simulatePaymentSuccess;
   window.closeReceiptModal = closeReceiptModal;
   window.openQuickView = openQuickView;
   window.closeQuickView = closeQuickView;
@@ -2162,11 +2214,8 @@ if (typeof window !== 'undefined') {
   window.addQuickViewToCart = addQuickViewToCart;
   window.openOrderTrackerModal = openOrderTrackerModal;
   window.closeOrderTrackerModal = closeOrderTrackerModal;
-  window.advanceOrderStatus = advanceOrderStatus;
   window.clearActiveOrder = clearActiveOrder;
   window.openMerchantConfigModal = openMerchantConfigModal;
-  window.closeMerchantConfigModal = closeMerchantConfigModal;
-  window.saveMerchantQRISConfig = saveMerchantQRISConfig;
   window.switchQRISDisplayMode = switchQRISDisplayMode;
   window.copyQRISPayload = copyQRISPayload;
   window.downloadQRISImage = downloadQRISImage;
@@ -2181,7 +2230,6 @@ if (typeof window !== 'undefined') {
   window.openAdminDashboardModal = openAdminDashboardModal;
   window.closeAdminDashboardModal = closeAdminDashboardModal;
   window.switchAdminSection = switchAdminSection;
-  window.switchAdminTab = switchAdminTab;
   window.toggleAddProductForm = toggleAddProductForm;
   window.openProductEditForm = openProductEditForm;
   window.submitNewProduct = submitNewProduct;
@@ -2191,7 +2239,6 @@ if (typeof window !== 'undefined') {
   window.adminAdvanceOrderStatus = adminAdvanceOrderStatus;
   window.adminConfirmPayment = adminConfirmPayment;
   window.adminCancelOrder = adminCancelOrder;
-  window.saveAdminMerchantPhone = saveAdminMerchantPhone;
   window.saveAdminStorefrontSetting = saveAdminStorefrontSetting;
   window.exportOrdersCSV = exportOrdersCSV;
   window.requestNotificationPermission = requestNotificationPermission;

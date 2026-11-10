@@ -3,7 +3,8 @@
 //
 // Realtime: every write is announced on a BroadcastChannel (fallback: the
 // storage event). Other tabs of the same browser re-read and re-render.
-// This is same-device sync only; cross-device needs a backend.
+// Cross-device: settings go to /api/settings and orders to /api/orders; each
+// record carries an updatedAt version and the newer copy wins on merge.
 
 import { PRODUCTS } from './catalog.js';
 import { applyExpiry } from './orders.js';
@@ -180,6 +181,7 @@ export function saveOrder(order, detail = {}) {
   else list.unshift(order);
   write(KEYS.orders, list);
   announce('orders', { id: order.id, status: order.status, ...detail });
+  if (!detail.fromCloud) pushOrderToCloud(order);
   return order;
 }
 
@@ -203,9 +205,103 @@ export function sweepExpiredOrders(now = Date.now()) {
   });
   if (expired.length) {
     write(KEYS.orders, next);
-    expired.forEach((o) => announce('orders', { id: o.id, status: o.status, type: 'expired' }));
+    expired.forEach((o) => {
+      announce('orders', { id: o.id, status: o.status, type: 'expired' });
+      pushOrderToCloud(o);
+    });
   }
   return expired;
+}
+
+const ORDERS_ENDPOINT = '/api/orders';
+
+function canReachNetwork() {
+  return typeof window !== 'undefined' && typeof fetch === 'function';
+}
+
+// Product photos uploaded by the admin are data URLs; they stay local.
+function orderForCloud(order) {
+  return {
+    ...order,
+    items: (order.items || []).map((i) => (
+      typeof i.image === 'string' && i.image.startsWith('data:') ? { ...i, image: '' } : i
+    ))
+  };
+}
+
+export function pushOrderToCloud(order) {
+  if (!canReachNetwork() || !order || !order.id) return;
+  try {
+    fetch(ORDERS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: orderForCloud(order) }),
+      keepalive: true
+    }).catch(() => {});
+  } catch {}
+}
+
+function isValidOrder(o) {
+  return o && typeof o.id === 'string' && typeof o.status === 'string' && Array.isArray(o.items) && o.totals;
+}
+
+// Merges orders received from the server into local storage. The copy with
+// the higher updatedAt wins. Returns what changed so the UI can react, plus
+// local orders the server has not seen yet (or holds an older copy of).
+export function mergeRemoteOrders(remoteList) {
+  const local = getOrders();
+  const byId = new Map(local.map((o) => [o.id, o]));
+  const added = [];
+  const changed = [];
+  const remoteIds = new Set();
+
+  (Array.isArray(remoteList) ? remoteList : []).filter(isValidOrder).forEach((remote) => {
+    remoteIds.add(remote.id);
+    const mine = byId.get(remote.id);
+    if (!mine) {
+      byId.set(remote.id, remote);
+      added.push(remote);
+    } else if (Number(remote.updatedAt || 0) > Number(mine.updatedAt || 0)) {
+      const items = remote.items.map((item, i) => ({ ...item, image: item.image || mine.items?.[i]?.image || '' }));
+      byId.set(remote.id, { ...remote, items });
+      changed.push(remote);
+    }
+  });
+
+  const remoteById = new Map((Array.isArray(remoteList) ? remoteList : []).filter(isValidOrder).map((o) => [o.id, o]));
+  const staleOnServer = local.filter((o) => {
+    const remote = remoteById.get(o.id);
+    return !remote || Number(o.updatedAt || 0) > Number(remote.updatedAt || 0);
+  });
+
+  if (added.length || changed.length) {
+    const merged = [...byId.values()].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    write(KEYS.orders, merged);
+    announce('orders', { type: 'cloud-sync', added: added.map((o) => o.id), changed: changed.map((o) => o.id) });
+  }
+  return { added, changed, staleOnServer, remoteCount: remoteIds.size };
+}
+
+// Pulls the shared order list. `online` is false when the endpoint could not
+// be reached, so the admin screen can say the data is local only.
+export async function syncOrdersWithCloud() {
+  if (!canReachNetwork()) return { online: false, added: [], changed: [] };
+  let remote = null;
+  try {
+    const res = await fetch(ORDERS_ENDPOINT, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.orders)) remote = data.orders;
+    }
+  } catch {
+    // offline or endpoint missing
+  }
+  if (!remote) return { online: false, added: [], changed: [] };
+  const result = mergeRemoteOrders(remote);
+  // Re-upload anything created here while the server was unreachable.
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  result.staleOnServer.filter((o) => Number(o.createdAt || 0) > dayAgo).slice(0, 20).forEach(pushOrderToCloud);
+  return { online: true, ...result };
 }
 
 export function clearOrders() {
@@ -256,25 +352,69 @@ export function saveSettings(patchOrFn, detail = {}) {
 // Swaps the active static QRIS. The previous one is kept in history so the
 // admin can roll back. Open checkouts re-render from the new payload.
 export function replaceQRIS(payload, info = {}) {
-  const next = saveSettings((s) => {
+  const next = saveSharedSettings((s) => {
     const previous = s.qris.payload;
     const history = previous && previous !== payload
       ? [{ payload: previous, replacedAt: Date.now() }, ...s.qris.history.filter((h) => h.payload !== payload && h.payload !== previous)].slice(0, 5)
       : s.qris.history;
     return { ...s, qris: { payload, updatedAt: Date.now(), history, merchantName: info.merchantName || '' } };
   }, { type: 'qris' });
-  pushSettingsToCloud(next);
   return next.qris;
+}
+
+// Version of the settings every visitor shares (QRIS + store contact).
+// Older saved data only has qris.updatedAt, so fall back to it.
+export function sharedVersion(settings) {
+  return Number(settings?.sharedUpdatedAt || settings?.qris?.updatedAt || 0);
+}
+
+// Saves settings that every visitor must see and publishes them. Each save
+// gets a fresh version so a later poll cannot roll it back.
+export function saveSharedSettings(patchOrFn, detail = {}) {
+  const now = Date.now();
+  const next = saveSettings((s) => {
+    const patched = typeof patchOrFn === 'function' ? patchOrFn(s) : { ...s, ...patchOrFn, store: { ...s.store, ...(patchOrFn?.store || {}) } };
+    return { ...patched, sharedUpdatedAt: Math.max(now, sharedVersion(s) + 1) };
+  }, detail);
+  pushSettingsToCloud(next);
+  return next;
 }
 
 const CLOUD_SYNC_ENDPOINT = '/api/settings';
 const DIRECT_CLOUD_BACKUP = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1beb3e79f6bc2';
 
+// Adopts remote settings only when they are strictly newer than ours.
+// Returns the saved settings when something visible changed, else null.
+export function applyRemoteSettings(remote) {
+  if (!remote || !remote.qris || !remote.qris.payload) return null;
+  const current = getSettings();
+  const remoteTime = Number(remote.updatedAt || remote.qris.updatedAt || 0);
+  if (!(remoteTime > sharedVersion(current))) return null;
+
+  const remoteStore = remote.store && typeof remote.store === 'object' ? remote.store : {};
+  const nextStore = { ...current.store, ...remoteStore };
+  const contentChanged = remote.qris.payload !== current.qris.payload
+    || JSON.stringify(nextStore) !== JSON.stringify(current.store);
+
+  const updated = saveSettings((s) => ({
+    ...s,
+    sharedUpdatedAt: remoteTime,
+    qris: {
+      ...s.qris,
+      payload: remote.qris.payload,
+      merchantName: remote.qris.merchantName || s.qris.merchantName,
+      updatedAt: remoteTime
+    },
+    store: nextStore
+  }), { type: contentChanged ? 'cloud-sync' : 'cloud-version' });
+  return contentChanged ? updated : null;
+}
+
 export async function syncSettingsWithCloud() {
   if (typeof window === 'undefined') return null;
   let remote = null;
   try {
-    const res = await fetch(CLOUD_SYNC_ENDPOINT, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(CLOUD_SYNC_ENDPOINT, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const data = await res.json();
       if (data && data.settings && data.settings.qris) {
@@ -292,12 +432,13 @@ export async function syncSettingsWithCloud() {
         const json = await res.json();
         if (json && json.data && json.data.payload) {
           remote = {
+            updatedAt: json.data.updatedAt || 0,
             qris: {
               payload: json.data.payload,
               merchantName: json.data.merchantName || 'Atelier Nusantara',
               updatedAt: json.data.updatedAt || 0
             },
-            store: json.data.store || { name: json.data.merchantName || 'Atelier Nusantara' }
+            store: json.data.store || null
           };
         }
       }
@@ -306,30 +447,7 @@ export async function syncSettingsWithCloud() {
     }
   }
 
-  if (remote && remote.qris && remote.qris.payload) {
-    const current = getSettings();
-    const remoteTime = Number(remote.qris.updatedAt || 0);
-    const localTime = Number(current.qris.updatedAt || 0);
-    const isLocalDefault = current.qris.payload === DEFAULT_SETTINGS.qris.payload;
-
-    if (remoteTime > localTime || isLocalDefault || remote.qris.payload !== current.qris.payload) {
-      const updated = saveSettings((s) => ({
-        ...s,
-        qris: {
-          ...s.qris,
-          payload: remote.qris.payload,
-          merchantName: remote.qris.merchantName || s.qris.merchantName,
-          updatedAt: remoteTime || Date.now()
-        },
-        store: {
-          ...s.store,
-          ...(remote.store || {})
-        }
-      }), { type: 'cloud-sync' });
-      return updated;
-    }
-  }
-  return null;
+  return applyRemoteSettings(remote);
 }
 
 export async function pushSettingsToCloud(settings) {
@@ -337,7 +455,7 @@ export async function pushSettingsToCloud(settings) {
   const payloadToPush = {
     payload: settings.qris?.payload || '',
     merchantName: settings.qris?.merchantName || settings.store?.name || '',
-    updatedAt: settings.qris?.updatedAt || Date.now(),
+    updatedAt: sharedVersion(settings) || Date.now(),
     store: settings.store
   };
 

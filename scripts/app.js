@@ -262,6 +262,7 @@ export const state = {
   activeQuickViewId: null,
   selectedQuickViewVariant: null,
   activeCheckoutOrderId: null,
+  activeReceiptOrderId: null,
   activeOrderStopWatch: null,
   currentQRISDisplayMode: 'dynamic',
   adminAuthenticated: false,
@@ -1075,6 +1076,7 @@ function formatPhoneDisplay(raw) {
 }
 
 export function renderReceiptModal(order) {
+  state.activeReceiptOrderId = order.id || null;
   const settings = getSettings();
   const receiptPayload = order?.payment?.payload || settings.qris.payload || DEMO_STATIC_QRIS;
   const desc = describeQRIS(receiptPayload);
@@ -1209,9 +1211,11 @@ export function sendOrderToWhatsApp() {
 }
 
 export function shareReceiptWhatsApp() {
-  const myIds = getMyOrderIds();
-  const order = myIds.length ? getOrder(myIds[0]) : null;
-  if (!order) return;
+  const order = state.activeReceiptOrderId ? getOrder(state.activeReceiptOrderId) : null;
+  if (!order || !isPaidStatus(order.status)) {
+    showToast('Struk pembayaran tidak tersedia untuk pesanan ini.');
+    return;
+  }
   const settings = getSettings();
   let msg = `*STRUK RESMI PEMBAYARAN: ATELIER NUSANTARA*\n`;
   msg += `No. Invoice: ${order.invoice}\n`;
@@ -1990,7 +1994,7 @@ export function triggerPaymentAlert(order) {
 
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
-      new Notification(title, { body, icon: './manifest.json', tag: order.invoice });
+      new Notification(title, { body, icon: './assets/notification-icon.svg', tag: order.invoice });
     } catch {}
   }
 }

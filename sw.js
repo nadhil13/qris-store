@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atelier-nusantara-cache-v14';
+const CACHE_NAME = 'atelier-nusantara-cache-v15';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -17,6 +17,7 @@ const ASSETS_TO_CACHE = [
   './scripts/vendor/qrcode.min.js',
   './scripts/vendor/qrcode.esm.js',
   './scripts/vendor/jsqr.js',
+  './assets/notification-icon.svg',
   './manifest.json'
 ];
 
@@ -66,12 +67,13 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         // Network failed (offline) -> fall back to cache
-        return caches.match(event.request).then((cached) => {
+        return caches.open(CACHE_NAME).then(async (cache) => {
+          const cached = await cache.match(event.request, { ignoreSearch: true });
           if (cached) return cached;
           if (event.request.mode === 'navigate') {
-            return caches.match('./index.html');
+            return cache.match('./index.html');
           }
-          return null;
+          return Response.error();
         });
       })
   );

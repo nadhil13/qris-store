@@ -206,5 +206,26 @@ assert.match(cartHtml, /data-action="update-qty"/, 'Cart item controls must use 
 assert.match(cartHtml, /Chef&#39;s Cut/, 'Cart item key must escape apostrophe safely');
 assert.doesNotMatch(cartHtml, /onclick=/, 'Cart item controls must not use inline onclick strings');
 
+const { saveOrder, rememberMyOrder } = await import('../scripts/core/store.js');
+const displayedOrder = { ...order, id: 'receipt-paid', status: 'paid' };
+saveOrder(displayedOrder);
+rememberMyOrder(displayedOrder.id);
+const newerOrder = { ...order, id: 'new-unpaid', invoice: 'INV-UNPAID', status: 'awaiting_payment' };
+saveOrder(newerOrder);
+rememberMyOrder(newerOrder.id);
+renderReceiptModal(displayedOrder);
+let sharedUrl = '';
+window.open = (url) => { sharedUrl = url; };
+app.shareReceiptWhatsApp();
+assert.match(decodeURIComponent(sharedUrl), /INV-SNAPSHOT/, 'Share must reference the displayed receipt');
+assert.doesNotMatch(decodeURIComponent(sharedUrl), /INV-UNPAID/);
+sharedUrl = '';
+renderReceiptModal(newerOrder);
+app.shareReceiptWhatsApp();
+assert.equal(sharedUrl, '', 'Unpaid orders must not be shared as payment receipts');
+assert.doesNotMatch(html, /diterima dapur/i, 'Receipt copy must work for every product category');
+assert.doesNotMatch(source, /api\.restful-api\.dev/, 'Settings must never use public backup storage');
+assert.doesNotMatch(readFileSync(new URL('../api/settings.js', import.meta.url), 'utf8'), /api\.restful-api\.dev/);
+
 console.log('PASS checkout-flow.test.mjs! Dynamic & Static checkout rendering verified!');
 process.exit(0);

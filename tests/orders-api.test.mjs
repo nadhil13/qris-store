@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 
-const envNames = ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+const envNames = ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'NODE_ENV', 'VERCEL_ENV', 'INVENTORY_ADMIN_TOKEN'];
 let savedEnv;
 let savedFetch;
 let handler;
@@ -33,14 +33,15 @@ function order(overrides = {}) {
   return { id: 'order-1', status: 'awaiting', items: [], totals: { total: 100 }, createdAt: 10, updatedAt: 10, ...overrides };
 }
 
-async function request(method, incoming) {
+async function request(method, incoming, headers = {}) {
   const response = {
-    setHeader() {},
+    headers: {},
+    setHeader(name, value) { this.headers[name] = value; },
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
     end() {}
   };
-  await handler({ method, body: incoming ? { order: incoming } : undefined }, response);
+  await handler({ method, body: incoming ? { order: incoming } : undefined, headers }, response);
   return response;
 }
 
@@ -158,3 +159,57 @@ test('Redis stale/no-op acknowledgement is a durable success', async () => {
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.storage, 'kv');
 });
+
+for (const productionEnv of ['NODE_ENV', 'VERCEL_ENV']) {
+  test(`${productionEnv}: production requires KV and never exposes or mutates memory`, async () => {
+    await request('POST', order());
+    process.env[productionEnv] = 'production';
+    process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    for (const method of ['GET', 'POST']) {
+      const response = await request(method, order({ id: 'blocked' }), { authorization: 'Bearer admin-secret' });
+      assert.equal(response.statusCode, 503);
+      assert.deepEqual(response.body, { ok: false, code: 'STORAGE_UNAVAILABLE', error: 'Order storage unavailable' });
+    }
+    delete process.env[productionEnv];
+    assert.deepEqual((await request('GET')).body.orders, [order()]);
+  });
+
+  test(`${productionEnv}: production disables all legacy writes before storage access`, async () => {
+    process.env[productionEnv] = 'production';
+    configureKV();
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; throw new Error('Must not access KV'); };
+    for (const headers of [{}, { authorization: 'Bearer admin-secret' }]) {
+      process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+      const response = await request('POST', order(), headers);
+      assert.equal(response.statusCode, 409);
+      assert.deepEqual(response.body, { ok: false, code: 'LEGACY_ORDER_WRITES_DISABLED' });
+    }
+    assert.equal(calls, 0);
+  });
+
+  test(`${productionEnv}: production legacy reads require admin authentication`, async () => {
+    process.env[productionEnv] = 'production';
+    configureKV();
+    let calls = 0;
+    const existing = [order({ customer: { phone: 'private' } })];
+    globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ result: JSON.stringify(existing) }) }; };
+    const unavailable = await request('GET');
+    assert.equal(unavailable.statusCode, 503);
+    assert.deepEqual(unavailable.body, { ok: false, code: 'ADMIN_UNAVAILABLE' });
+    process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    for (const authorization of [undefined, 'admin-secret', 'Basic admin-secret', 'Bearer ', 'Bearer wrong-secret', 'Bearer x', ['Bearer admin-secret']]) {
+      const denied = await request('GET', undefined, { authorization });
+      assert.equal(denied.statusCode, 401);
+      assert.deepEqual(denied.body, { ok: false, code: 'UNAUTHORIZED' });
+    }
+    assert.equal(calls, 0);
+    const allowed = await request('GET', undefined, { authorization: 'Bearer admin-secret' });
+    assert.equal(allowed.statusCode, 200);
+    assert.deepEqual(allowed.body, { ok: true, storage: 'kv', orders: existing });
+    assert.equal(calls, 1);
+    assert.match(allowed.headers['Access-Control-Allow-Headers'], /Authorization/i);
+    const preflight = await request('OPTIONS');
+    assert.equal(preflight.statusCode, 204);
+  });
+}

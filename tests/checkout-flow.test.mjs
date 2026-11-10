@@ -5,7 +5,8 @@ import { getSettings, saveSettings, getOrders, saveProducts } from '../scripts/c
 const requests = [];
 globalThis.fetch = async (url, options) => {
   requests.push({ url, ...options });
-  return { ok: true };
+  const body = options?.body ? JSON.parse(options.body) : {};
+  return { ok: true, json: async () => ({ ok: true, settings: { ...body, qris: { payload: body.payload, updatedAt: body.updatedAt } } }) };
 };
 
 // Set up minimal browser DOM mock
@@ -30,6 +31,7 @@ globalThis.document = {
         getAttribute: () => null,
         focus: () => {},
         matches: (sel) => sel === '[role="dialog"]',
+        contains: () => false,
         querySelector: (sel) => null,
         querySelectorAll: () => [],
         set innerHTML(val) { this._html = val; },
@@ -68,6 +70,8 @@ globalThis.window = {
 globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 
 const app = await import('../scripts/app.js');
+const { setInventoryAdminToken } = await import('../scripts/core/inventory.js');
+setInventoryAdminToken('test-backend-token');
 const { switchQRISDisplayMode, saveAdminStorefrontSetting, renderReceiptModal } = app;
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const source = readFileSync(new URL('../scripts/app.js', import.meta.url), 'utf8');
@@ -79,6 +83,10 @@ assert.equal(app.simulatePaymentSuccess, undefined, 'Buyer payment simulation mu
 assert.equal(window.simulatePaymentSuccess, undefined, 'Buyer payment simulation must not be globally callable');
 assert.doesNotMatch(html, /advanceOrderStatus|simulatePaymentSuccess|admin-tabs-nav|switchAdminTab|admin-merchant-phone/);
 assert.doesNotMatch(source, /switchAdminTab|saveAdminMerchantPhone|simulasi_pelanggan/);
+assert.doesNotMatch(html, /admin123|admin-login-username|Kredensial bawaan/);
+assert.match(html, /INVENTORY_ADMIN_TOKEN/);
+assert.match(source, /data-action="admin-adjust-stock"/);
+assert.match(source, /adminAdjustStock\(trigger.dataset.productId\)/);
 for (const handler of ['exportOrdersCSV', 'requestNotificationPermission', 'testNotificationSound']) {
   assert.equal(html.split(`window.${handler}()`).length - 1, 1, `${handler} must have exactly one control`);
   assert.ok(section('tools').includes(`window.${handler}()`), `${handler} belongs in Tools`);
@@ -100,7 +108,7 @@ for (const submit of [app.openCheckoutModal, app.checkoutViaWhatsApp]) {
 document.getElementById('admin-storefront-hours').value = '10:00 - 18:00';
 document.getElementById('admin-storefront-is-open').checked = true;
 const hoursVersion = getSettings().sharedUpdatedAt || 0;
-saveAdminStorefrontSetting('availability');
+await saveAdminStorefrontSetting('availability');
 assert.equal(getSettings().store.hours, '10:00 - 18:00');
 assert.equal(getSettings().store.isOpen, true);
 assert.ok(getSettings().sharedUpdatedAt > hoursVersion);
@@ -110,7 +118,7 @@ assert.equal(document.getElementById('btn-checkout').disabled, false);
 assert.equal(document.getElementById('btn-checkout-whatsapp').disabled, false);
 const savedHours = getSettings().store.hours;
 document.getElementById('admin-storefront-hours').value = '   ';
-saveAdminStorefrontSetting('availability');
+await saveAdminStorefrontSetting('availability');
 assert.equal(getSettings().store.hours, savedHours, 'Blank hours must not overwrite the saved setting');
 
 // Test 1: Dynamic QRIS mode produces SVG immediately
@@ -145,7 +153,7 @@ assert.match(pill.textContent, /QRIS Dinamis$/, 'Dynamic mode must label the QRI
 
 document.getElementById('admin-storefront-whatsapp').value = '628222222222';
 const merchantVersion = getSettings().sharedUpdatedAt;
-saveAdminStorefrontSetting('merchantWhatsApp');
+await saveAdminStorefrontSetting('merchantWhatsApp');
 assert.equal(getSettings().store.whatsapp, '628222222222');
 assert.ok(getSettings().sharedUpdatedAt > merchantVersion, 'Storefront save must advance shared version');
 assert.equal(JSON.parse(requests.findLast((r) => r.url === '/api/settings').body).store.whatsapp, '628222222222');
@@ -184,7 +192,7 @@ assert.doesNotMatch(html, /Menunggu pembayaran otomatis dari aplikasi e-wallet A
 // Test 4: Final WhatsApp CTA uses dynamic store WhatsApp setting
 assert.match(html, /data-store-whatsapp/, 'Final CTA WhatsApp link must have data-store-whatsapp attribute');
 document.getElementById('admin-storefront-whatsapp').value = '081987654321';
-saveAdminStorefrontSetting('merchantWhatsApp');
+await saveAdminStorefrontSetting('merchantWhatsApp');
 assert.match(document.getElementById('cta-whatsapp-link').href || '', /wa\.me\/6281987654321/, 'CTA WhatsApp link must reflect normalized admin WhatsApp number');
 
 // Test 5: Apostrophes in variant labels and cart keys do not produce broken inline JS handlers
@@ -226,6 +234,124 @@ assert.equal(sharedUrl, '', 'Unpaid orders must not be shared as payment receipt
 assert.doesNotMatch(html, /diterima dapur/i, 'Receipt copy must work for every product category');
 assert.doesNotMatch(source, /api\.restful-api\.dev/, 'Settings must never use public backup storage');
 assert.doesNotMatch(readFileSync(new URL('../api/settings.js', import.meta.url), 'utf8'), /api\.restful-api\.dev/);
+
+// Real HTTP checkout cannot expose payment instructions before reserve succeeds.
+globalThis.localStorage = window.localStorage;
+window.location.protocol = 'https:';
+for (const [id, value] of [['customer-name', 'Buyer'], ['customer-phone', '08123456789'], ['customer-address', 'Test address']]) document.getElementById(id).value = value;
+app.state.cart = [{ productId: app.PRODUCTS[0].id, variant: app.PRODUCTS[0].variants?.[0]?.label || '', qty: 1, note: '' }];
+let respondReserve;
+let reserveCount = 0;
+let reservePayload;
+const cartBeforeReserve = JSON.stringify(app.state.cart);
+globalThis.fetch = async (url, options = {}) => {
+  if (url !== '/api/inventory') return { ok: true, json: async () => ({}) };
+  reserveCount++;
+  reservePayload = JSON.parse(options.body);
+  return new Promise(resolve => { respondReserve = resolve; });
+};
+const activeBeforeReserve = app.state.activeCheckoutOrderId;
+const checkoutPromise = app.openCheckoutModal();
+await app.checkoutViaWhatsApp();
+assert.equal(reserveCount, 1, 'Concurrent checkout must not reserve twice');
+assert.equal(app.state.activeCheckoutOrderId, activeBeforeReserve, 'Payment modal waits for canonical reservation');
+assert.equal(document.getElementById('btn-checkout').disabled, true);
+respondReserve({ ok: false, status: 503, json: async () => ({ ok: false, code: 'STORAGE_UNAVAILABLE' }) });
+await checkoutPromise;
+assert.equal(JSON.stringify(app.state.cart), cartBeforeReserve, 'Failure preserves cart');
+assert.equal(app.state.activeCheckoutOrderId, activeBeforeReserve);
+const originalPayload = reservePayload;
+const retry = app.openCheckoutModal();
+assert.deepEqual(reservePayload, originalPayload, 'Checkout retry keeps original capability and id');
+const now = Date.now();
+const canonical = { id: reservePayload.id, invoice: 'SERVER-INVOICE', createdAt: now, updatedAt: now, expiresAt: now + 600000, status: 'awaiting_payment', items: [], customer: { name: 'Buyer' }, totals: { total: 777, itemCount: 1 }, payment: { method: 'qris' }, timeline: [] };
+respondReserve({ ok: true, json: async () => ({ ok: true, order: canonical }) });
+await retry;
+assert.equal(app.state.activeCheckoutOrderId, canonical.id);
+assert.equal(getOrders().find(o => o.id === canonical.id).totals.total, 777);
+app.state.activeOrderStopWatch?.();
+app.closeCheckoutModal();
+let whatsappMessage = '';
+window.open = url => { whatsappMessage = decodeURIComponent(url); };
+globalThis.fetch = async (url, options = {}) => {
+  assert.equal(url, '/api/inventory');
+  const payload = JSON.parse(options.body);
+  assert.equal(payload.paymentMethod, 'whatsapp');
+  return { ok: true, json: async () => ({ ok: true, order: { ...canonical, id: payload.id, payment: { method: 'whatsapp' } } }) };
+};
+await app.checkoutViaWhatsApp();
+assert.match(whatsappMessage, /reservasi 10 menit/);
+assert.equal(app.state.cart.length, 0);
+
+// Login is authorized by the backend, never by a fixed browser credential.
+const auth = await import('../scripts/core/auth.js');
+app.state.adminAuthenticated = false;
+document.getElementById('admin-login-password').value = 'not-a-demo-password';
+globalThis.fetch = async (url, options) => {
+  assert.equal(url, '/api/inventory?action=list');
+  assert.equal(options.headers.Authorization, 'Bearer not-a-demo-password');
+  return { ok: false, status: 401, json: async () => ({ ok: false, code: 'UNAUTHORIZED' }) };
+};
+await app.submitAdminLogin({ preventDefault() {} });
+assert.equal(app.state.adminAuthenticated, false);
+assert.equal(auth.hasInventoryAdminToken(), false);
+assert.equal(document.getElementById('admin-login-password').value, '');
+assert.match(document.getElementById('admin-login-error').textContent, /UNAUTHORIZED/);
+
+// New product metadata is published first; only adjust initializes inventory.
+auth.setInventoryAdminToken('creation-token');
+const store = await import('../scripts/core/store.js');
+store.setInventoryStock({ revision: 100, products: {} });
+for (const [id, value] of [['new-prod-name', 'Regression product'], ['new-prod-price', '12000'], ['new-prod-category', 'makanan'], ['new-prod-tag', ''], ['new-prod-image', ''], ['new-prod-desc', 'Test product']]) document.getElementById(id).value = value;
+const creationCalls = [];
+let createdId;
+globalThis.fetch = async (url, options = {}) => {
+  creationCalls.push({ url, options });
+  if (url === '/api/settings') {
+    assert.equal(options.headers.Authorization, 'Bearer creation-token');
+    const payload = JSON.parse(options.body);
+    createdId = payload.products[0].id;
+    assert.equal(payload.products[0].isAvailable, false);
+    assert.equal(payload.products[0].stock, 0);
+    return { ok: true, json: async () => ({ ok: true, settings: payload }) };
+  }
+  if (options.method === 'GET') return { ok: true, json: async () => ({ ok: true, stock: { revision: 101, products: {} } }) };
+  assert.equal(url, '/api/inventory');
+  assert.equal(options.headers.Authorization, 'Bearer creation-token');
+  assert.deepEqual(JSON.parse(options.body), { action: 'adjust', productId: createdId, stock: 0, expectedRevision: 101 });
+  assert.equal(Object.hasOwn(store.getInventoryStock().products, createdId), false);
+  return { ok: true, json: async () => ({ ok: true, stock: { revision: 102, products: { [createdId]: 0 } } }) };
+};
+await app.submitNewProduct({ preventDefault() {} });
+assert.deepEqual(creationCalls.map(call => call.url), ['/api/settings', '/api/inventory?action=stock', '/api/inventory']);
+assert.equal(store.getInventoryStock().products[createdId], 0);
+assert.equal(store.getProduct(createdId).isAvailable, false);
+assert.ok(![...storageMap.values()].some(value => value.includes('creation-token')));
+
+// A failed initialization keeps published metadata but cannot make stock ready.
+document.getElementById('new-prod-name').value = 'Uninitialized product';
+let failedProductId;
+globalThis.fetch = async (url, options = {}) => {
+  if (url === '/api/settings') {
+    const payload = JSON.parse(options.body);
+    failedProductId = payload.products[0].id;
+    return { ok: true, json: async () => ({ ok: true, settings: payload }) };
+  }
+  if (options.method === 'GET') return { ok: true, json: async () => ({ ok: true, stock: { revision: 103, products: { [createdId]: 0 } } }) };
+  return { ok: false, status: 503, json: async () => ({ ok: false, code: 'STORAGE_UNAVAILABLE' }) };
+};
+await app.submitNewProduct({ preventDefault() {} });
+assert.equal(Object.hasOwn(store.getInventoryStock().products, failedProductId), false);
+assert.equal(store.getProduct(failedProductId).isAvailable, false);
+assert.match(document.getElementById('toast-text').textContent, /stok belum diinisialisasi/);
+let catalogWriteCount = 0;
+globalThis.fetch = async (url, options = {}) => {
+  if (url === '/api/settings') catalogWriteCount++;
+  return { ok: true, json: async () => ({ ok: true, stock: { revision: 103, products: { [createdId]: 0 } } }) };
+};
+await app.toggleProductAvailability(failedProductId);
+assert.equal(catalogWriteCount, 0);
+assert.equal(store.getProduct(failedProductId).isAvailable, false);
 
 console.log('PASS checkout-flow.test.mjs! Dynamic & Static checkout rendering verified!');
 process.exit(0);

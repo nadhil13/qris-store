@@ -1,5 +1,4 @@
-// Serverless endpoint for global settings and catalog persistence across visitors.
-// Uses Vercel KV / Upstash Redis when configured, with explicit process-memory fallback for local runs.
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 const SETTINGS_KEY = 'atelier_settings';
 const DEFAULT_QRIS = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
@@ -306,10 +305,19 @@ function formatSettingsResponse(data) {
   };
 }
 
+function authorizeAdmin(req) {
+  const secret = process.env.INVENTORY_ADMIN_TOKEN;
+  if (!secret) return 503;
+  const header = req.headers?.authorization;
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) return 401;
+  const digest = (value) => createHash('sha256').update(value).digest();
+  return timingSafeEqual(digest(header.slice(7)), digest(secret)) ? 0 : 401;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   if (req.method === 'OPTIONS') {
@@ -319,6 +327,21 @@ export default async function handler(req, res) {
 
   const kv = getKVClient();
   const storage = kv ? 'kv' : 'memory';
+  const production = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+
+  if (production && (req.method === 'GET' || req.method === 'POST')) {
+    if (!kv) {
+      res.status(503).json({ ok: false, code: 'STORAGE_UNAVAILABLE', error: 'Settings storage unavailable' });
+      return;
+    }
+    if (req.method === 'POST') {
+      const status = authorizeAdmin(req);
+      if (status) {
+        res.status(status).json({ ok: false, code: status === 401 ? 'UNAUTHORIZED' : 'ADMIN_UNAVAILABLE' });
+        return;
+      }
+    }
+  }
 
   if (req.method === 'GET') {
     try {

@@ -65,8 +65,8 @@ import {
 } from './qris.js';
 import {
   getProducts,
-  saveProducts,
-  resetProducts,
+  publishProducts,
+  getInventoryStock,
   getProduct,
   getOrders,
   getOrder,
@@ -95,9 +95,12 @@ import {
 import {
   confirmPayment,
   cancelOrderById,
+  advancePaymentOrder,
   buildPaymentPayload,
   watchOrder
 } from './core/payments.js';
+
+import { reserveInventory, syncInventory, listInventoryOrders, setInventoryAdminToken, hasInventoryAdminToken, refreshInventoryStock, adjustInventoryStock } from './core/inventory.js';
 
 // Realtime synchronization across browser tabs powered by BroadcastChannel
 export const REALTIME_CHANNEL_TYPE = typeof BroadcastChannel !== 'undefined' ? 'BroadcastChannel' : 'StorageEvent';
@@ -136,11 +139,14 @@ function requireWhatsApp() {
 }
 
 function canCheckout() {
+  const products = getProducts();
   const invalidLine = state.cart.find((line) => {
-    const product = PRODUCTS.find((p) => p.id === line.productId);
+    const product = products.find((p) => p.id === line.productId);
     return !isPurchasable(product) || productQty(state.cart, line.productId) > maxQty(product);
   });
-  if (invalidLine) {
+  // A retry may see stock already held by its own unresolved reservation.
+  // HTTP checkout always lets the server validate the immutable request.
+  if (invalidLine && window.location.protocol === 'file:') {
     showToast('Stok berubah. Sesuaikan atau hapus item keranjang sebelum melanjutkan.');
     updateCartUI();
     return false;
@@ -676,11 +682,11 @@ export function updateCartUI() {
   renderShippingOptions(settings, totals);
 
   if (btnCheckout) {
-    btnCheckout.disabled = totals.itemCount === 0 || settings.store.isOpen === false;
+    btnCheckout.disabled = checkoutPending || totals.itemCount === 0 || settings.store.isOpen === false;
     btnCheckout.style.opacity = btnCheckout.disabled ? '0.6' : '1';
   }
   const whatsappCheckout = document.getElementById('btn-checkout-whatsapp');
-  if (whatsappCheckout) whatsappCheckout.disabled = totals.itemCount === 0 || settings.store.isOpen === false;
+  if (whatsappCheckout) whatsappCheckout.disabled = checkoutPending || totals.itemCount === 0 || settings.store.isOpen === false;
 
   if (!drawerItems) return;
 
@@ -733,15 +739,42 @@ export function closeCartDrawer() {
   if (backdrop) backdrop.classList.remove('open');
 }
 
-export function openCheckoutModal() {
-  if (!canCheckout()) return;
+let checkoutPending = false;
+function setCheckoutPending(value) {
+  checkoutPending = value;
+  updateCartUI();
+  for (const id of ['btn-checkout', 'btn-checkout-whatsapp']) {
+    const button = document.getElementById(id);
+    if (button) { button.disabled ||= value; button.setAttribute('aria-busy', String(value)); }
+  }
+}
+async function reserveCheckout(method, activeShipping) {
+  return reserveInventory({
+    items: state.cart.map(line => ({ productId: line.productId, variant: line.variant || '', qty: line.qty, note: line.note || '' })),
+    customer: { ...state.customer }, shippingId: activeShipping?.id || 'digital',
+    voucherCode: state.activeVoucherCode || '', paymentMethod: method
+  });
+}
+
+export async function openCheckoutModal() {
+  if (checkoutPending || !canCheckout()) return;
   const { lines, totals, settings, activeShipping } = getCalculatedCart();
   if (totals.itemCount === 0) {
     showToast('Keranjang Anda masih kosong.');
     return;
   }
 
-  // Ensure any other modal or drawer is properly closed
+  updateCustomerInfo();
+  let newOrder;
+  setCheckoutPending(true);
+  try { newOrder = await reserveCheckout('qris', activeShipping); }
+  catch (error) { showToast(error.message || 'Reservasi gagal. Keranjang tetap tersimpan.'); return; }
+  finally { setCheckoutPending(false); }
+  if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder) <= 0) {
+    showToast(`Reservasi berstatus ${statusLabel(newOrder.status, newOrder)}. Tidak ada tagihan baru dibuat.`);
+    return;
+  }
+
   const adminDash = document.getElementById('admin-dashboard-modal-backdrop');
   overlays().close(adminDash);
   const adminLogin = document.getElementById('admin-login-modal-backdrop');
@@ -751,15 +784,6 @@ export function openCheckoutModal() {
   updateCustomerInfo();
   sfx.playClick();
 
-  const newOrder = createOrder({
-    lines,
-    totals,
-    customer: state.customer,
-    shipping: activeShipping,
-    voucherCode: state.activeVoucherCode
-  });
-
-  saveOrder(newOrder, { type: 'created' });
   rememberMyOrder(newOrder.id);
   state.activeCheckoutOrderId = newOrder.id;
   state.activeOrder = newOrder;
@@ -1127,12 +1151,8 @@ export function closeReceiptModal() {
   showToast('Pesanan aktif. Anda dapat memantau prosesnya di dock bawah.');
 }
 
-// WhatsApp orders are settled in the chat, so the admin gets a day to confirm
-// instead of the 10-minute QRIS window.
-const WHATSAPP_ORDER_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-export function checkoutViaWhatsApp() {
-  if (!canCheckout() || !requireWhatsApp()) return;
+export async function checkoutViaWhatsApp() {
+  if (checkoutPending || !canCheckout() || !requireWhatsApp()) return;
   const { lines, totals, settings, activeShipping } = getCalculatedCart();
   if (totals.itemCount === 0) {
     showToast('Keranjang Anda masih kosong.');
@@ -1140,20 +1160,15 @@ export function checkoutViaWhatsApp() {
   }
   updateCustomerInfo();
 
-  const created = createOrder({
-    lines,
-    totals,
-    customer: state.customer,
-    shipping: activeShipping,
-    voucherCode: state.activeVoucherCode
-  });
-  const newOrder = {
-    ...created,
-    expiresAt: created.createdAt + WHATSAPP_ORDER_WINDOW_MS,
-    payment: { ...created.payment, method: 'whatsapp' }
-  };
-
-  saveOrder(newOrder, { type: 'created' });
+  let newOrder;
+  setCheckoutPending(true);
+  try { newOrder = await reserveCheckout('whatsapp', activeShipping); }
+  catch (error) { showToast(error.message || 'Reservasi gagal. Keranjang tetap tersimpan.'); return; }
+  finally { setCheckoutPending(false); }
+  if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder) <= 0) {
+    showToast('Reservasi tidak lagi menunggu pembayaran. Periksa pelacak pesanan.');
+    return;
+  }
   rememberMyOrder(newOrder.id);
 
   let msg = `*PESANAN BARU: ${(settings.store.name || 'Atelier Nusantara').toUpperCase()}*\n`;
@@ -1174,7 +1189,7 @@ export function checkoutViaWhatsApp() {
   if (newOrder.totals.shippingCost > 0) msg += `Ongkos Kirim: ${formatIDR(newOrder.totals.shippingCost)}\n`;
   if (newOrder.totals.packaging > 0) msg += `Kemasan: ${formatIDR(newOrder.totals.packaging)}\n`;
   msg += `*TOTAL: ${formatIDR(newOrder.totals.total)}*\n`;
-  msg += `Pembayaran: dikonfirmasi lewat chat ini\n`;
+  msg += `Pembayaran: dikonfirmasi lewat chat ini sebelum ${formatTime(newOrder.expiresAt)} (reservasi 10 menit)\n`;
   msg += `----------------------------------------\n`;
   msg += `Mohon konfirmasi ketersediaan pesanan ini. Terima kasih!`;
 
@@ -1313,14 +1328,20 @@ export function openMerchantConfigModal() {
 
 export function openAdminLoginModal() {
   const modal = document.getElementById('admin-login-modal-backdrop');
-  const username = document.getElementById('admin-login-username');
   const password = document.getElementById('admin-login-password');
   const errorEl = document.getElementById('admin-login-error');
-  if (username) username.value = 'admin';
+  const passwordLabel = document.querySelector('label[for="admin-login-password"]');
+  if (passwordLabel) passwordLabel.textContent = 'Token admin backend';
+  const credentialHint = password?.parentElement?.querySelector('p');
+  if (credentialHint) credentialHint.textContent = 'Token diverifikasi oleh server dan disimpan hanya selama halaman ini terbuka.';
   if (password) {
     password.value = '';
+    password.type = 'password';
+    password.placeholder = 'Token admin backend';
+    password.setAttribute('autocomplete', 'off');
+    password.setAttribute('aria-label', 'Token admin backend');
   }
-  if (errorEl) errorEl.style.display = 'none';
+  if (errorEl) { errorEl.textContent = 'Masukkan token admin backend, bukan password demo.'; errorEl.style.display = 'block'; }
   overlays().open(modal, closeAdminLoginModal, { initialFocus: password });
 }
 
@@ -1329,46 +1350,42 @@ export function closeAdminLoginModal() {
   overlays().close(modal);
 }
 
-export function submitAdminLogin(event) {
+export async function submitAdminLogin(event) {
   if (event && event.preventDefault) event.preventDefault();
-  const usernameEl = document.getElementById('admin-login-username');
   const passwordEl = document.getElementById('admin-login-password');
   const errorEl = document.getElementById('admin-login-error');
-  const username = (usernameEl && usernameEl.value || '').trim();
   const password = (passwordEl && passwordEl.value || '').trim();
 
-  const isUserValid = username.toLowerCase() === 'admin';
-  const isPassValid = VALID_ADMIN_PASSWORDS.includes(password);
-
-  if (isUserValid && isPassValid) {
+  if (passwordEl) passwordEl.value = '';
+  setInventoryAdminToken(password);
+  try {
+    await listInventoryOrders();
     if (errorEl) errorEl.style.display = 'none';
     state.adminAuthenticated = true;
-    localStorage.setItem(STORAGE_KEY_ADMIN_SESSION, 'true');
     closeAdminLoginModal();
     openAdminDashboardModal();
     sfx.playSuccess();
     showToast('Akses admin aktif. Dashboard toko terbuka.');
     return;
+  } catch (error) {
+    state.adminAuthenticated = false;
+    setInventoryAdminToken('');
+    if (errorEl) { errorEl.textContent = error.message; errorEl.style.display = 'block'; }
+    showToast('Akses backend belum terverifikasi. Periksa token dan koneksi.');
   }
-
-  if (errorEl) {
-    errorEl.textContent = 'Password salah. Gunakan username "admin" dan password "admin123" (atau "atelier2026").';
-    errorEl.style.display = 'block';
-  }
-  sfx.playClick();
-  showToast('Username atau password admin salah.');
 }
 
 export function logoutAdminSession() {
   state.adminAuthenticated = false;
-  localStorage.removeItem(STORAGE_KEY_ADMIN_SESSION);
+  setInventoryAdminToken('');
+  try { localStorage.removeItem(STORAGE_KEY_ADMIN_SESSION); } catch {}
   closeAdminDashboardModal();
   openAdminLoginModal();
   showToast('Sesi admin ditutup.');
 }
 
 export function openAdminDashboardModal() {
-  if (!state.adminAuthenticated && !localStorage.getItem(STORAGE_KEY_ADMIN_SESSION)) {
+  if (!state.adminAuthenticated || !hasInventoryAdminToken()) {
     openAdminLoginModal();
     return;
   }
@@ -1493,9 +1510,8 @@ function renderAdminOrderTable() {
   }).join('');
 }
 
-export function adminConfirmPayment(orderId) {
-  sfx.playCashChime();
-  const res = confirmPayment(orderId, { by: 'admin_dashboard' });
+export async function adminConfirmPayment(orderId) {
+  const res = await confirmPayment(orderId, { by: 'admin_dashboard' });
   if (res.ok) {
     refreshAdminDashboard();
     showToast(`Pesanan ${res.order.invoice} dikonfirmasi lunas.`);
@@ -1504,13 +1520,14 @@ export function adminConfirmPayment(orderId) {
   }
 }
 
-export function adminAdvanceOrderStatus(invoice) {
+export async function adminAdvanceOrderStatus(invoice) {
   const order = getOrders().find((o) => o.invoice === invoice);
   if (!order) return;
   sfx.playClick();
-  const updated = advanceOrder(order, { by: 'admin_dashboard' });
+  const result = await advancePaymentOrder(order.id);
+  if (!result.ok) { showToast(`Gagal: ${result.reason}`); return; }
+  const updated = result.order;
   if (updated) {
-    saveOrder(updated, { type: 'status' });
     refreshAdminDashboard();
     showToast(`Status pesanan ${invoice} dimajukan ke: ${statusLabel(updated.status, updated)}`);
   }
@@ -1519,7 +1536,7 @@ export function adminAdvanceOrderStatus(invoice) {
 export async function adminCancelOrder(orderId) {
   if (!await showDialog('Batalkan pesanan ini?', { kind: 'confirm' })) return;
   sfx.playClick();
-  const res = cancelOrderById(orderId, { by: 'admin_dashboard', note: 'Dibatalkan oleh admin' });
+  const res = await cancelOrderById(orderId, { by: 'admin_dashboard', note: 'Dibatalkan oleh admin' });
   if (res.ok) {
     refreshAdminDashboard();
     showToast(`Pesanan ${res.order.invoice} dibatalkan.`);
@@ -1528,10 +1545,34 @@ export async function adminCancelOrder(orderId) {
   }
 }
 
+let adjustingStock = false;
+export async function adminAdjustStock(productId) {
+  if (adjustingStock) return;
+  adjustingStock = true;
+  try {
+    await refreshInventoryStock();
+    const snapshot = getInventoryStock();
+    const initialized = Object.hasOwn(snapshot.products, productId);
+    const value = await showDialog(`Stok tersedia untuk ${getProduct(productId)?.name || productId}. Pesanan aktif sudah mengurangi stok ini. Isi 0–1000000000 atau "tanpa batas".${initialized ? '' : ' Produk ini belum diinisialisasi.'}`, { kind: 'prompt', value: initialized ? (snapshot.products[productId] === null ? 'tanpa batas' : String(snapshot.products[productId])) : '0' });
+    if (value === null || value === undefined) return;
+    const text = String(value).trim();
+    if (text !== 'tanpa batas' && !/^\d+$/.test(text)) throw Error('Isi bilangan bulat atau "tanpa batas".');
+    const stock = text === 'tanpa batas' ? null : Number(text);
+    await adjustInventoryStock(productId, stock, snapshot.revision);
+    showToast('Stok tersimpan di server.');
+  } catch (error) {
+    showToast(error.message === 'REVISION_CONFLICT' ? 'Stok berubah saat diedit. Buka Atur stok lagi dan periksa nilai terbaru; perubahan belum diterapkan.' : `Stok belum tersimpan: ${error.message}`);
+  } finally { adjustingStock = false; refreshAdminDashboard(); }
+}
+
 function renderAdminProductsTable() {
   const tbody = document.getElementById('admin-products-tbody');
   if (!tbody) return;
   const products = getProducts();
+  const snapshot = getInventoryStock();
+  const stockLabel = p => !snapshot ? 'Stok server belum dimuat'
+    : !Object.hasOwn(snapshot.products, p.id) ? 'Stok belum diinisialisasi'
+      : p.stock === null ? 'Stok: Tanpa Batas' : `Stok: ${p.stock}`;
 
   tbody.innerHTML = products.map((p) => `
     <tr>
@@ -1540,7 +1581,7 @@ function renderAdminProductsTable() {
           <img src="${escapeHTML(p.image)}" width="36" height="36" style="border-radius:4px; object-fit:cover;" alt="" />
           <div>
             <strong>${escapeHTML(p.name)}</strong>
-            <span style="display:block; font-size:0.72rem; color:var(--ink-secondary);">${p.stock !== null ? `Stok: ${p.stock}` : 'Stok: Tanpa Batas'}</span>
+            <span style="display:block; font-size:0.72rem; color:var(--ink-secondary);">${stockLabel(p)}</span>
           </div>
         </div>
       </td>
@@ -1553,6 +1594,7 @@ function renderAdminProductsTable() {
       </td>
       <td>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn-secondary" data-action="admin-adjust-stock" data-product-id="${escapeHTML(p.id)}">Atur stok</button>
           <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" data-action="admin-edit-product" data-product-id="${escapeHTML(p.id)}">Edit</button>
           <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" data-action="admin-toggle-product" data-product-id="${escapeHTML(p.id)}">
             ${p.isAvailable !== false ? 'Set Habis' : 'Set Ready'}
@@ -1602,7 +1644,7 @@ export function openProductEditForm(productId) {
   if (label) label.textContent = 'Simpan Perubahan Produk';
 }
 
-export function submitNewProduct(e) {
+export async function submitNewProduct(e) {
   if (e && e.preventDefault) e.preventDefault();
   sfx.playClick();
 
@@ -1630,12 +1672,13 @@ export function submitNewProduct(e) {
     image = defaults[category] || defaults.makanan;
   }
 
+  try {
   const list = getProducts();
   if (state.editingProductId) {
     const target = list.find((p) => p.id === state.editingProductId);
     if (target) {
       Object.assign(target, { name, category, price, tags: tag ? [tag] : target.tags, desc, image });
-      saveProducts(list, { type: 'edit', id: target.id });
+      await publishProducts(list, { type: 'edit', id: target.id });
       showToast(`Produk "${name}" berhasil diperbarui.`);
     }
   } else {
@@ -1648,26 +1691,39 @@ export function submitNewProduct(e) {
       desc,
       story: desc,
       image,
-      isAvailable: true,
+      isAvailable: false,
+      stock: 0,
       variants: [{ label: 'Standar Pilihan', delta: 0 }]
     };
     list.unshift(newProd);
-    saveProducts(list, { type: 'create', id: newProd.id });
-    showToast(`Produk "${name}" berhasil ditambahkan ke katalog.`);
+    await publishProducts(list, { type: 'create', id: newProd.id });
+    try {
+      await refreshInventoryStock();
+      await adjustInventoryStock(newProd.id, 0, getInventoryStock().revision);
+      showToast(`Produk "${name}" tersimpan dengan stok 0. Atur stok lalu Set Ready.`);
+    } catch (error) {
+      showToast(`Produk tersimpan tetapi stok belum diinisialisasi: ${error.message}. Gunakan Atur stok sebelum Set Ready.`);
+    }
   }
 
   toggleAddProductForm(false);
   refreshAdminDashboard();
   renderCatalog();
+  } catch (error) { showToast(error.message); }
 }
 
-export function toggleProductAvailability(productId) {
+export async function toggleProductAvailability(productId) {
   sfx.playClick();
   const list = getProducts();
   const p = list.find((item) => item.id === productId);
   if (!p) return;
+  if (p.isAvailable === false) {
+    try { await refreshInventoryStock(); } catch (error) { showToast(error.message); return; }
+    if (!Object.hasOwn(getInventoryStock()?.products || {}, p.id)) { showToast('Inisialisasi stok melalui Atur stok terlebih dahulu.'); return; }
+  }
   p.isAvailable = p.isAvailable === false ? true : false;
-  saveProducts(list, { type: 'availability', id: p.id });
+  try { await publishProducts(list, { type: 'availability', id: p.id }); }
+  catch (error) { showToast(error.message); return; }
   refreshAdminDashboard();
   renderCatalog();
   showToast(`Status "${p.name}": ${p.isAvailable ? 'Tersedia' : 'Habis'}`);
@@ -1679,7 +1735,8 @@ export async function deleteProduct(productId) {
   if (!await showDialog(`Hapus produk "${p.name}" dari katalog toko?`, { kind: 'confirm' })) return;
   sfx.playClick();
   const list = getProducts().filter((item) => item.id !== productId);
-  saveProducts(list, { type: 'delete', id: productId });
+  try { await publishProducts(list, { type: 'delete', id: productId }); }
+  catch (error) { showToast(error.message); return; }
   refreshAdminDashboard();
   renderCatalog();
   showToast(`Produk "${p.name}" dihapus.`);
@@ -1688,7 +1745,8 @@ export async function deleteProduct(productId) {
 export async function resetProductsToDefault() {
   if (!await showDialog('Kembalikan seluruh katalog ke daftar produk awal bawaan?', { kind: 'confirm' })) return;
   sfx.playClick();
-  resetProducts();
+  try { await publishProducts(PRODUCTS.map(p => ({ ...p })), { type: 'reset' }); }
+  catch (error) { showToast(error.message); return; }
   refreshAdminDashboard();
   renderCatalog();
   showToast('Katalog produk di-reset ke default.');
@@ -1851,7 +1909,7 @@ export async function processQRISFile(file) {
     }
 
     // Success: replace QRIS in store and broadcast to all open storefronts
-    replaceQRIS(val.payload, val.info || {});
+    await replaceQRIS(val.payload, val.info || {});
     sfx.playSuccess();
     refreshAdminDashboard();
     showToast(`QRIS ${val.info.merchantName || 'Toko'} berhasil diperbarui.`);
@@ -1876,29 +1934,33 @@ export async function adminApplyCustomQRIS() {
     await showDialog(`String QRIS tidak valid:\n${val.errors.join('\n')}`);
     return;
   }
-  replaceQRIS(val.payload, val.info || {});
+  try { await replaceQRIS(val.payload, val.info || {}); }
+  catch (error) { showToast(error.message); return; }
   sfx.playSuccess();
   refreshAdminDashboard();
   showToast('QRIS baru berhasil diterapkan ke toko.');
 }
 
-export function adminRestoreQRIS(payload) {
+export async function adminRestoreQRIS(payload) {
   const val = validateQRIS(payload);
   if (!val.ok) return;
-  replaceQRIS(val.payload, val.info || {});
+  try { await replaceQRIS(val.payload, val.info || {}); }
+  catch (error) { showToast(error.message); return; }
   sfx.playSuccess();
   refreshAdminDashboard();
   showToast('QRIS riwayat berhasil dipulihkan.');
 }
 
-export function adminResetQRISDefault() {
-  replaceQRIS(DEMO_STATIC_QRIS, { merchantName: 'Atelier Nusantara' });
+export async function adminResetQRISDefault() {
+  try { await replaceQRIS(DEMO_STATIC_QRIS, { merchantName: 'Atelier Nusantara' }); }
+  catch (error) { showToast(error.message); return; }
   sfx.playSuccess();
   refreshAdminDashboard();
   showToast('QRIS di-reset ke default demo.');
 }
 
-export function saveAdminStorefrontSetting(key) {
+export async function saveAdminStorefrontSetting(key) {
+  try {
   if (key === 'merchantWhatsApp') {
     const input = document.getElementById('admin-storefront-whatsapp');
     const whatsapp = configuredWhatsApp(input?.value.trim() || '');
@@ -1906,7 +1968,7 @@ export function saveAdminStorefrontSetting(key) {
       showToast('Isi nomor WhatsApp Indonesia yang valid, diawali 08 atau 62.');
       return;
     }
-    saveSharedSettings((s) => ({ ...s, store: { ...s.store, whatsapp } }));
+    await saveSharedSettings((s) => ({ ...s, store: { ...s.store, whatsapp } }));
     updateStorefrontStatus();
     showToast('Nomor WhatsApp storefront berhasil diperbarui.');
   } else if (key === 'availability') {
@@ -1916,10 +1978,11 @@ export function saveAdminStorefrontSetting(key) {
       showToast('Jam operasional wajib diisi.');
       return;
     }
-    saveSharedSettings((s) => ({ ...s, store: { ...s.store, hours, isOpen } }));
+    await saveSharedSettings((s) => ({ ...s, store: { ...s.store, hours, isOpen } }));
     updateStorefrontStatus();
     showToast('Ketersediaan toko berhasil disimpan.');
   }
+  } catch (error) { showToast(error.message); }
 }
 
 export function exportOrdersCSV() {
@@ -2107,6 +2170,8 @@ function initEventBindings() {
       adminAdvanceOrderStatus(trigger.dataset.invoice);
     } else if (action === 'admin-cancel-order') {
       adminCancelOrder(trigger.dataset.orderId);
+    } else if (action === 'admin-adjust-stock') {
+      adminAdjustStock(trigger.dataset.productId);
     } else if (action === 'admin-edit-product') {
       openProductEditForm(trigger.dataset.productId);
     } else if (action === 'admin-toggle-product') {
@@ -2131,7 +2196,7 @@ function initEventBindings() {
     const isAKey = e.key && (e.key.toLowerCase() === 'a' || e.code === 'KeyA');
     if (isAKey && ((e.shiftKey && e.altKey) || (e.ctrlKey && e.shiftKey) || (e.altKey && e.key.toLowerCase() === 'a'))) {
       e.preventDefault();
-      if (state.adminAuthenticated || localStorage.getItem(STORAGE_KEY_ADMIN_SESSION)) {
+      if (state.adminAuthenticated && hasInventoryAdminToken()) {
         openAdminDashboardModal();
       } else {
         openAdminLoginModal();
@@ -2142,7 +2207,7 @@ function initEventBindings() {
   // Check URL query param for ?admin=1
   const params = new URLSearchParams(window.location.search);
   if (params.get('admin') === '1' || params.get('mode') === 'admin' || window.location.hash === '#admin') {
-    if (localStorage.getItem(STORAGE_KEY_ADMIN_SESSION)) {
+    if (state.adminAuthenticated && hasInventoryAdminToken()) {
       openAdminDashboardModal();
     } else {
       openAdminLoginModal();
@@ -2219,6 +2284,9 @@ function initApp() {
   updateOrderTrackerDockUI();
   initEventBindings();
   initRealtimeSync();
+  syncInventory().catch(() => {});
+  setInterval(() => syncInventory().catch(() => {}), 5000);
+  window.addEventListener('focus', () => syncInventory().catch(() => {}));
 
   // Cloud QRIS and settings sync for all visitors across devices
   syncSettingsWithCloud().then((updated) => {

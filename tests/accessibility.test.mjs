@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { createModalManager } from '../scripts/core/dialogs.js';
+import { createModalManager, bindTabs } from '../scripts/core/dialogs.js';
 
 const source = readFileSync(new URL('../scripts/app.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -94,4 +94,62 @@ test('QRIS upload has a keyboard button rather than a clickable container', () =
 test('all overlay visibility is delegated to the shared lifecycle', () => {
   assert.doesNotMatch(source, /(?:modal|receiptModal|drawer|adminDash|adminLogin)\.classList\.(?:add|remove)\('open'\)/);
   assert.match(source, /createModalManager/);
+});
+
+test('initial HTML exposes category filter state and payment selection', () => {
+  const categories = html.match(/<div class="category-tabs"[^>]*>([\s\S]*?)<\/div>/)[0];
+  assert.match(categories, /role="group" aria-label="Kategori produk"/);
+  assert.doesNotMatch(categories, /role="tab"/);
+  assert.equal((categories.match(/aria-pressed="true"/g) || []).length, 1);
+  assert.equal((categories.match(/aria-pressed="false"/g) || []).length, 6);
+  const paymentTabs = html.match(/<button[^>]*class="pay-tab[^>]*>/g);
+  assert.match(paymentTabs[0], /aria-selected="true"/);
+  assert.match(paymentTabs[1], /aria-selected="false"/);
+});
+
+function tabFixture() {
+  const listeners = {};
+  const panels = [0, 1].map(() => ({ setAttribute(name, value) { this[name] = value; } }));
+  const tabs = panels.map((panel, i) => ({
+    dataset: { target: `panel-${i}` },
+    selected: i === 0,
+    classList: { contains: () => tabs[i].selected },
+    setAttribute(name, value) { this[name] = value; },
+    focus() { container.focused = this; },
+    click() { tabs.forEach((tab) => { tab.selected = tab === this; }); listeners.click(); }
+  }));
+  const container = {
+    querySelectorAll: () => tabs,
+    ownerDocument: { getElementById: (id) => panels[Number(id.slice(-1))] },
+    setAttribute(name, value) { this[name] = value; },
+    addEventListener(type, handler) { listeners[type] = handler; }
+  };
+  return { tabs, panels, container, listeners };
+}
+
+test('payment tabs support arrows, Home and End with selected state and linked panels', () => {
+  const f = tabFixture();
+  bindTabs(f.container);
+  assert.equal(f.tabs[0]['aria-selected'], 'true');
+  assert.equal(f.panels[1].hidden, true);
+  for (const [key, from, to] of [['ArrowRight', 0, 1], ['ArrowRight', 1, 0], ['End', 0, 1], ['Home', 1, 0], ['ArrowLeft', 0, 1]]) {
+    f.listeners.keydown({ key, target: f.tabs[from], preventDefault() {} });
+    assert.equal(f.container.focused, f.tabs[to]);
+    assert.equal(f.tabs[to]['aria-selected'], 'true');
+    assert.equal(f.tabs[to].tabIndex, 0);
+    assert.equal(f.panels[to].hidden, false);
+    assert.equal(f.panels[to]['aria-labelledby'], f.tabs[to].id);
+    assert.equal(f.panels[1 - to].hidden, true);
+  }
+});
+
+test('category filters expose pressed state without hiding a shared catalog as a tab panel', () => {
+  const f = tabFixture();
+  bindTabs(f.container, { filter: true });
+  f.tabs[1].click();
+  assert.equal(f.container.role, 'group');
+  assert.equal(f.tabs[0]['aria-pressed'], 'false');
+  assert.equal(f.tabs[1]['aria-pressed'], 'true');
+  assert.ok(f.tabs.every((tab) => tab.tabIndex === 0));
+  assert.ok(f.panels.every((panel) => panel.hidden === undefined));
 });

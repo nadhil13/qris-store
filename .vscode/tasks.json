@@ -1,0 +1,266 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Verify selected regressions",
+			"type": "shell",
+			"command": "node --test tests/accessibility.test.mjs tests/orders-api.test.mjs tests/settings-api.test.mjs; node tests/core-store.test.mjs; node tests/catalog-contract.test.mjs; node tests/checkout-flow.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Preview storefront",
+			"type": "shell",
+			"command": "node server.js",
+			"args": [],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Inspect changes and Lua tooling",
+			"type": "shell",
+			"command": "git diff --stat; Get-Command redis-server,redis-cli,lua,wsl -ErrorAction SilentlyContinue | Select-Object Name,Source",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Inspect working changes",
+			"type": "shell",
+			"command": "git --no-pager diff --stat; Get-Command redis-server,redis-cli,lua,wsl -ErrorAction SilentlyContinue | Format-Table Name,Source",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Verify complete regression suite",
+			"type": "shell",
+			"command": "node --test tests/accessibility.test.mjs tests/orders-api.test.mjs tests/settings-api.test.mjs; node tests/qris.test.mjs; node tests/test-qris-render.mjs; node tests/core-store.test.mjs; node tests/catalog-contract.test.mjs; node tests/verify-assets.mjs; node tests/checkout-flow.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Check Git before push",
+			"type": "shell",
+			"command": "git status --short; git branch --show-current; git remote -v; git diff --check",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Inspect Git push target",
+			"type": "shell",
+			"command": "git --no-pager status --short; git --no-pager branch --show-current; git --no-pager remote -v; git --no-pager diff --check",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Commit and push storefront fixes",
+			"type": "shell",
+			"command": "git add api/settings.js index.html scripts/app.js scripts/core/store.js styles/main.css sw.js tests/catalog-contract.test.mjs tests/checkout-flow.test.mjs tests/core-store.test.mjs tests/settings-api.test.mjs; if ($LASTEXITCODE -eq 0) { git commit -m \"Fix catalog sync, checkout safety, and responsive layouts\"; if ($LASTEXITCODE -eq 0) { git push origin main; if ($LASTEXITCODE -eq 0) { git --no-pager log -1 --oneline; git --no-pager status --short } } }",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Push verified fixes to GitHub",
+			"type": "shell",
+			"command": "git commit -m 'Fix catalog sync, checkout safety, and responsive layouts'; if ($LASTEXITCODE -eq 0) { git push origin main; if ($LASTEXITCODE -eq 0) { git --no-pager log -1 --oneline; git --no-pager status --short } }",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Verify receipt and offline regressions",
+			"type": "shell",
+			"command": "node --test tests/service-worker.test.mjs; node tests/checkout-flow.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Push receipt and offline fixes",
+			"type": "shell",
+			"command": "git add index.html scripts/app.js sw.js tests/checkout-flow.test.mjs tests/service-worker.test.mjs assets/notification-icon.svg; if ($LASTEXITCODE -eq 0) { git commit -m 'Fix receipt sharing, offline asset cache, and notification icon'; if ($LASTEXITCODE -eq 0) { git push origin main; if ($LASTEXITCODE -eq 0) { git --no-pager log -1 --oneline; git --no-pager status --short } } }",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Verify design cleanup",
+			"type": "shell",
+			"command": "node --test tests/design-contract.test.mjs tests/service-worker.test.mjs; node tests/checkout-flow.test.mjs; git --no-pager diff --check; git --no-pager diff --stat",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify keyboard accessibility",
+			"type": "shell",
+			"command": "node --test tests/accessibility.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Inspect Redis integration prerequisites",
+			"type": "shell",
+			"command": "Get-Command docker,redis-server,redis-cli,wsl -ErrorAction SilentlyContinue | Format-Table Name,Source; Write-Output 'Configured storage variable names (values hidden):'; Get-ChildItem Env: | Where-Object { $_.Name -match '^(KV_REST_API_URL|KV_REST_API_TOKEN|UPSTASH_REDIS_REST_URL|UPSTASH_REDIS_REST_TOKEN)$' } | Select-Object -ExpandProperty Name; git --no-pager status --short",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Inspect available Linux runtime",
+			"type": "shell",
+			"command": "wsl --list --quiet; Get-Command python,node,git -ErrorAction SilentlyContinue | Format-Table Name,Source",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Verify transactional inventory API",
+			"type": "shell",
+			"command": "node --test tests/inventory-api.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Inspect inventory integration runtime",
+			"type": "shell",
+			"command": "Get-Command redis-server,redis-cli,lua,docker,python,node -ErrorAction SilentlyContinue | Format-Table Name,Source; python -c \"import importlib.util; print('lupa:', bool(importlib.util.find_spec('lupa')))); print('redislite:', bool(importlib.util.find_spec('redislite'))))\"",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Inspect Redis test tools",
+			"type": "shell",
+			"command": "Get-Command redis-server,redis-cli,lua,docker,python,node -ErrorAction SilentlyContinue | Format-Table Name,Source; wsl --list --quiet; python -m pip show lupa redis redislite",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify inventory and all regressions",
+			"type": "shell",
+			"command": "node --test tests/*.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node tests/run-tests.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager diff --check; git --no-pager status --short; git --no-pager diff --stat",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Inspect portable Redis release",
+			"type": "shell",
+			"command": "$release = Invoke-RestMethod -Uri 'https://api.github.com/repos/tporadowski/redis/releases/latest'; $release.assets | Select-Object name,browser_download_url | Format-Table -AutoSize",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Prepare isolated Redis test runtime",
+			"type": "shell",
+			"command": "$release = Invoke-RestMethod -Uri 'https://api.github.com/repos/tporadowski/redis/releases/latest'; $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1; $runtime = Join-Path $env:TEMP 'atelier-redis-test'; New-Item -ItemType Directory -Force -Path $runtime | Out-Null; Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile (Join-Path $runtime 'redis.zip'); Expand-Archive -Path (Join-Path $runtime 'redis.zip') -DestinationPath $runtime -Force; Get-ChildItem $runtime -Filter 'redis-server.exe' | Select-Object FullName; Write-Output ('Runtime: ' + $runtime)",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Verify inventory frontend integration",
+			"type": "shell",
+			"command": "node --test tests/inventory-frontend.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify real Redis reservations",
+			"type": "shell",
+			"command": "node tests/run-inventory-redis.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Inspect combined inventory changes",
+			"type": "shell",
+			"command": "git --no-pager status --short; git --no-pager diff --stat; Get-ChildItem tests -Name; Select-String -Path scripts/core/store.js,scripts/core/inventory.js,index.html -Pattern 'Authorization|adjustInventory|admin123|Token admin|token backend'; Select-String -Path sw.js,index.html -Pattern 'cache-v|app.js\\?v|inventory.js'",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Verify combined inventory regression suite",
+			"type": "shell",
+			"command": "node --test tests/*.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node tests/qris.test.mjs; node tests/test-qris-render.mjs; node tests/core-store.test.mjs; node tests/catalog-contract.test.mjs; node tests/verify-assets.mjs; node tests/checkout-flow.test.mjs; git --no-pager diff --check",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Final inventory asset and diff checks",
+			"type": "shell",
+			"command": "node --check server.js; node --check scripts/core/inventory.js; node --check scripts/core/auth.js; node --test tests/service-worker.test.mjs tests/inventory-client.test.mjs; git --no-pager diff --check; git --no-pager status --short",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Inspect all changes before GitHub push",
+			"type": "shell",
+			"command": "git --no-pager status --short; git remote -v; git branch --show-current; git --no-pager diff --check; Get-ChildItem .vscode -Force | Select-Object Name,Length; git ls-files --others --exclude-standard",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Commit and push all verified project changes",
+			"type": "shell",
+			"command": "git add -A; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git diff --cached --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git commit -m 'Add transactional inventory reservations and production safeguards'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager log -1 --oneline; git --no-pager status --short; git rev-parse HEAD; git ls-remote origin refs/heads/main",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		},
+		{
+			"label": "Push all staged project changes to GitHub",
+			"type": "shell",
+			"command": "git add -A; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager diff --cached --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git -c core.pager=cat commit -m 'Add transactional inventory reservations and production safeguards'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager log -1 --oneline; git --no-pager status --short; git rev-parse HEAD; git ls-remote origin refs/heads/main",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "none"
+		}
+	]
+}

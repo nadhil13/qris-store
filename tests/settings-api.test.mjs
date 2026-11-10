@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 
-const envNames = ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
+const envNames = ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'NODE_ENV', 'VERCEL_ENV', 'INVENTORY_ADMIN_TOKEN'];
 let savedEnv;
 let savedFetch;
 let handler;
@@ -28,14 +28,15 @@ function configureKV(prefix = 'KV_REST_API') {
   process.env[`${prefix}_TOKEN`] = 'test-token';
 }
 
-async function request(method, body) {
+async function request(method, body, headers = {}) {
   const response = {
-    setHeader() {},
+    headers: {},
+    setHeader(name, value) { this.headers[name] = value; },
     status(code) { this.statusCode = code; return this; },
     json(payload) { this.body = payload; return this; },
     end() {}
   };
-  await handler({ method, body }, response);
+  await handler({ method, body, headers }, response);
   return response;
 }
 
@@ -177,3 +178,66 @@ test('KV rejects malformed EVAL acknowledgements rather than reporting success',
     assert.equal(response.body.ok, false);
   }
 });
+
+for (const productionEnv of ['NODE_ENV', 'VERCEL_ENV']) {
+  test(`${productionEnv}: production requires KV without reading or changing memory`, async () => {
+    await request('POST', { updatedAt: 100, store: { name: 'Local only' } });
+    process.env[productionEnv] = 'production';
+    process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    for (const method of ['GET', 'POST']) {
+      const response = await request(method, { updatedAt: 200, store: { name: 'Blocked' } }, { authorization: 'Bearer admin-secret' });
+      assert.equal(response.statusCode, 503);
+      assert.deepEqual(response.body, { ok: false, code: 'STORAGE_UNAVAILABLE', error: 'Settings storage unavailable' });
+    }
+    delete process.env[productionEnv];
+    assert.equal((await request('GET')).body.settings.store.name, 'Local only');
+  });
+
+  test(`${productionEnv}: production settings GET remains public and canonical`, async () => {
+    process.env[productionEnv] = 'production';
+    configureKV('UPSTASH_REDIS_REST');
+    const record = { payload: 'qr', merchantName: 'Public Store', updatedAt: 100, store: { name: 'Public Store' }, catalogUpdatedAt: 200, products: [] };
+    globalThis.fetch = async (url) => {
+      assert.equal(url, 'https://redis.example/get/atelier_settings');
+      return { ok: true, json: async () => ({ result: JSON.stringify(record) }) };
+    };
+    const response = await request('GET');
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.body, {
+      ok: true, storage: 'kv', source: 'cloud',
+      settings: { updatedAt: 100, qris: { payload: 'qr', merchantName: 'Public Store', updatedAt: 100 }, store: record.store, catalogUpdatedAt: 200, products: [] }
+    });
+  });
+
+  test(`${productionEnv}: production settings POST requires admin token before parsing or writing`, async () => {
+    process.env[productionEnv] = 'production';
+    configureKV();
+    let calls = 0;
+    const record = { payload: 'qr', merchantName: 'Admin Store', updatedAt: 100, store: null, catalogUpdatedAt: 200, products: [] };
+    globalThis.fetch = async (_url, options) => {
+      calls++;
+      const command = JSON.parse(options.body);
+      assert.equal(command[0], 'EVAL');
+      assert.equal(command[3], 'atelier_settings');
+      return { ok: true, json: async () => ({ result: JSON.stringify(record) }) };
+    };
+    const unavailable = await request('POST', '{invalid');
+    assert.equal(unavailable.statusCode, 503);
+    assert.deepEqual(unavailable.body, { ok: false, code: 'ADMIN_UNAVAILABLE' });
+    process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    for (const authorization of [undefined, 'admin-secret', 'Basic admin-secret', 'Bearer ', 'Bearer wrong-secret', 'Bearer x', ['Bearer admin-secret']]) {
+      const denied = await request('POST', '{invalid', { authorization });
+      assert.equal(denied.statusCode, 401);
+      assert.deepEqual(denied.body, { ok: false, code: 'UNAUTHORIZED' });
+    }
+    assert.equal(calls, 0);
+    const allowed = await request('POST', record, { authorization: 'Bearer admin-secret' });
+    assert.equal(allowed.statusCode, 200);
+    assert.equal(allowed.body.storage, 'kv');
+    assert.equal(allowed.body.settings.catalogUpdatedAt, 200);
+    assert.deepEqual(allowed.body.settings.products, []);
+    assert.equal(calls, 1);
+    assert.match(allowed.headers['Access-Control-Allow-Headers'], /Authorization/i);
+    assert.equal((await request('OPTIONS')).statusCode, 204);
+  });
+}

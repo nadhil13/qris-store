@@ -3658,10 +3658,6 @@ a {
   font-size: 1.25rem;
 }
 
-.admin-view-tools {
-  background: #fffdf9 !important;
-}
-
 .admin-orders-table tbody tr {
   transition: background-color 180ms ease, box-shadow 180ms ease;
 }
@@ -3769,6 +3765,8 @@ a {
 .admin-workspace-shell .modal-header {
   flex: 0 0 auto;
   min-height: 82px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .admin-workspace-frame {
@@ -3780,6 +3778,8 @@ a {
 
 .admin-workspace-rail {
   width: 232px;
+  min-height: 0;
+  overflow-y: auto;
   flex: 0 0 232px;
   display: flex;
   flex-direction: column;
@@ -3877,11 +3877,6 @@ a {
   min-width: 0;
 }
 
-.admin-workspace-shell .modal-header {
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
 .admin-workspace-shell .modal-header > :first-child {
   flex: 1 1 240px;
 }
@@ -3906,21 +3901,10 @@ a {
   flex-wrap: wrap;
 }
 
-.admin-workspace-rail {
-  min-height: 0;
-  overflow-y: auto;
-}
-
 .admin-settings-card,
 .admin-overview-link,
 .metric-card {
   overflow-wrap: anywhere;
-}
-
-.admin-view-tools input,
-.admin-view-tools select {
-  min-width: 0;
-  max-width: 100%;
 }
 
 .admin-section-view[hidden] {

@@ -8,6 +8,7 @@
 
 import { PRODUCTS } from './catalog.js';
 import { applyExpiry } from './orders.js';
+import { inventoryAdminHeaders, hasInventoryAdminToken, rejectUnauthorized } from './auth.js';
 
 export const DEMO_STATIC_QRIS = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
 
@@ -143,18 +144,39 @@ export function isRealtimeSupported() {
 
 // Products
 
+let inventoryStock = null;
+export const getInventoryStock = () => inventoryStock ? structuredClone(inventoryStock) : null;
+export function setInventoryStock(snapshot) {
+  if (!snapshot || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0
+    || !snapshot.products || typeof snapshot.products !== 'object' || Array.isArray(snapshot.products)
+    || Object.values(snapshot.products).some(stock => stock !== null && (!Number.isSafeInteger(stock) || stock < 0 || stock > 1e9))) return false;
+  if (inventoryStock && snapshot.revision < inventoryStock.revision) return false;
+  inventoryStock = structuredClone(snapshot);
+  announce('products', { type: 'inventory-stock' });
+  return true;
+}
+
 export function getProducts() {
   const saved = read(KEYS.products, null);
-  if (Array.isArray(saved)) return saved;
-  return PRODUCTS.map((p) => ({ ...p }));
+  const products = Array.isArray(saved) ? saved : PRODUCTS;
+  return products.map(p => !inventoryStock ? { ...p }
+    : Object.hasOwn(inventoryStock.products, p.id)
+      ? { ...p, stock: inventoryStock.products[p.id] }
+      : { ...p, stock: 0, isAvailable: false });
 }
+
+const authoritative = order => Boolean(order?.inventory || order?.id?.startsWith('inv_'));
 
 export function getCatalogVersion() {
   return Number(read(KEYS.catalogVersion, 0) || 0);
 }
 
 export function saveProducts(list, detail = {}) {
-  const safeList = Array.isArray(list) ? list : [];
+  const metadata = read(KEYS.products, PRODUCTS);
+  const safeList = (Array.isArray(list) ? list : []).map(p => {
+    const original = metadata.find(old => old.id === p.id);
+    return inventoryStock && !detail.fromCloud && original ? { ...p, stock: original.stock } : p;
+  });
   write(KEYS.products, safeList);
   let version = getCatalogVersion();
   if (detail && detail.fromCloud) {
@@ -213,6 +235,7 @@ export function getOrder(id) {
 
 export function saveOrder(order, detail = {}) {
   const list = getOrders();
+  if (!detail.fromCloud && (authoritative(order) || authoritative(list.find(o => o.id === order.id)))) return null;
   const index = list.findIndex((o) => o.id === order.id);
   if (index >= 0) list[index] = order;
   else list.unshift(order);
@@ -225,7 +248,7 @@ export function saveOrder(order, detail = {}) {
 // Read-modify-write on a single order. `fn` returns the new order or null to skip.
 export function updateOrder(id, fn, detail = {}) {
   const current = getOrder(id);
-  if (!current) return null;
+  if (!current || authoritative(current)) return null;
   const next = fn(current);
   if (!next) return null;
   return saveOrder(next, detail);
@@ -236,6 +259,7 @@ export function sweepExpiredOrders(now = Date.now()) {
   const list = getOrders();
   const expired = [];
   const next = list.map((o) => {
+    if (authoritative(o)) return o;
     const updated = applyExpiry(o, now);
     if (updated !== o) expired.push(updated);
     return updated;
@@ -267,7 +291,7 @@ function orderForCloud(order) {
 }
 
 export function pushOrderToCloud(order) {
-  if (!canReachNetwork() || !order || !order.id) return;
+  if (!canReachNetwork() || !order || !order.id || authoritative(order)) return;
   try {
     fetch(ORDERS_ENDPOINT, {
       method: 'POST',
@@ -293,8 +317,9 @@ export function mergeRemoteOrders(remoteList) {
   const remoteIds = new Set();
 
   (Array.isArray(remoteList) ? remoteList : []).filter(isValidOrder).forEach((remote) => {
-    remoteIds.add(remote.id);
     const mine = byId.get(remote.id);
+    if (authoritative(remote) || authoritative(mine)) return;
+    remoteIds.add(remote.id);
     if (!mine) {
       byId.set(remote.id, remote);
       added.push(remote);
@@ -307,6 +332,7 @@ export function mergeRemoteOrders(remoteList) {
 
   const remoteById = new Map((Array.isArray(remoteList) ? remoteList : []).filter(isValidOrder).map((o) => [o.id, o]));
   const staleOnServer = local.filter((o) => {
+    if (authoritative(o)) return false;
     const remote = remoteById.get(o.id);
     return !remote || Number(o.updatedAt || 0) > Number(remote.updatedAt || 0);
   });
@@ -342,7 +368,7 @@ export async function syncOrdersWithCloud() {
 }
 
 export function clearOrders() {
-  write(KEYS.orders, []);
+  write(KEYS.orders, getOrders().filter(authoritative));
   announce('orders', { type: 'reset' });
 }
 
@@ -388,8 +414,8 @@ export function saveSettings(patchOrFn, detail = {}) {
 
 // Swaps the active static QRIS. The previous one is kept in history so the
 // admin can roll back. Open checkouts re-render from the new payload.
-export function replaceQRIS(payload, info = {}) {
-  const next = saveSharedSettings((s) => {
+export async function replaceQRIS(payload, info = {}) {
+  const next = await saveSharedSettings((s) => {
     const previous = s.qris.payload;
     const history = previous && previous !== payload
       ? [{ payload: previous, replacedAt: Date.now() }, ...s.qris.history.filter((h) => h.payload !== payload && h.payload !== previous)].slice(0, 5)
@@ -407,35 +433,51 @@ export function sharedVersion(settings) {
 
 // Saves settings that every visitor must see and publishes them. Each save
 // gets a fresh version so a later poll cannot roll it back.
-export function saveSharedSettings(patchOrFn, detail = {}) {
-  const now = Date.now();
-  const next = saveSettings((s) => {
-    const patched = typeof patchOrFn === 'function' ? patchOrFn(s) : { ...s, ...patchOrFn, store: { ...s.store, ...(patchOrFn?.store || {}) } };
-    return { ...patched, sharedUpdatedAt: Math.max(now, sharedVersion(s) + 1) };
-  }, detail);
-  pushSettingsToCloud(next);
-  return next;
+export async function saveSharedSettings(patchOrFn, detail = {}) {
+  const s = getSettings();
+  const patched = typeof patchOrFn === 'function' ? patchOrFn(structuredClone(s)) : { ...s, ...patchOrFn, store: { ...s.store, ...(patchOrFn?.store || {}) } };
+  const next = mergeSettings({ ...patched, sharedUpdatedAt: Math.max(Date.now(), sharedVersion(s) + 1) });
+  if (canReachNetwork() && !await pushSettingsToCloud(next)) throw Error('Pengaturan belum tersimpan di server. Periksa token dan koneksi lalu coba lagi.');
+  return saveSettings(next, detail);
+}
+
+export async function publishProducts(products, detail = {}) {
+  const metadata = read(KEYS.products, PRODUCTS);
+  const safeList = products.map(p => {
+    const original = metadata.find(old => old.id === p.id);
+    return inventoryStock && original ? { ...p, stock: original.stock } : { ...p };
+  });
+  const version = Math.max(Date.now(), getCatalogVersion() + 1);
+  if (canReachNetwork() && !await pushCatalogToCloud(safeList, version)) throw Error('Katalog belum tersimpan di server. Periksa token dan koneksi lalu coba lagi.');
+  return saveProducts(safeList, { ...detail, fromCloud: true, catalogUpdatedAt: version });
 }
 
 const CLOUD_SYNC_ENDPOINT = '/api/settings';
+async function postShared(payload) {
+  const response = await fetch(CLOUD_SYNC_ENDPOINT, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...inventoryAdminHeaders() },
+    body: JSON.stringify(payload), signal: AbortSignal.timeout(8000)
+  });
+  rejectUnauthorized(response);
+  if (!response.ok) throw Error('Pengaturan ditolak server.');
+  return response;
+}
 
-export async function pushCatalogToCloud(products = getProducts(), catalogUpdatedAt = getCatalogVersion()) {
-  if (!canReachNetwork()) return;
+export async function pushCatalogToCloud(products = read(KEYS.products, PRODUCTS), catalogUpdatedAt = getCatalogVersion()) {
+  if (!canReachNetwork() || !hasInventoryAdminToken()) return false;
   const version = Number(catalogUpdatedAt || 0);
   if (version <= 0) return;
   const payloadToPush = {
     catalogUpdatedAt: version,
-    products: Array.isArray(products) ? products : []
+    products: (Array.isArray(products) ? products : []).map(p => {
+      const metadata = read(KEYS.products, PRODUCTS).find(original => original.id === p.id);
+      return inventoryStock && metadata ? { ...p, stock: metadata.stock } : p;
+    })
   };
   try {
-    const response = await fetch(CLOUD_SYNC_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payloadToPush)
-    });
-    if (!response.ok) return false;
+    const response = await postShared(payloadToPush);
     const data = await response.json();
-    if (!data.ok || !data.settings) return false;
+    if (!data.ok || !data.settings || Number(data.settings.catalogUpdatedAt) !== version) return false;
     applyRemoteSettings(data.settings);
     return true;
   } catch { return false; }
@@ -489,19 +531,19 @@ export async function syncSettingsWithCloud() {
 
   const remoteCatalogVersion = Number(remote?.catalogUpdatedAt || 0);
   const localCatalogVersion = getCatalogVersion();
-  if (localCatalogVersion > remoteCatalogVersion) {
+  if (hasInventoryAdminToken() && localCatalogVersion > remoteCatalogVersion) {
     pushCatalogToCloud(getProducts(), localCatalogVersion);
   }
 
   const localSettings = getSettings();
-  if (sharedVersion(localSettings) > Number(remote?.updatedAt || remote?.qris?.updatedAt || 0)) {
+  if (hasInventoryAdminToken() && sharedVersion(localSettings) > Number(remote?.updatedAt || remote?.qris?.updatedAt || 0)) {
     pushSettingsToCloud(localSettings);
   }
   return applyRemoteSettings(remote);
 }
 
 export async function pushSettingsToCloud(settings) {
-  if (typeof window === 'undefined') return;
+  if (!canReachNetwork() || !hasInventoryAdminToken()) return false;
   const catalogVersion = getCatalogVersion();
   const payloadToPush = {
     payload: settings.qris?.payload || '',
@@ -511,25 +553,20 @@ export async function pushSettingsToCloud(settings) {
   };
   if (catalogVersion > 0) {
     payloadToPush.catalogUpdatedAt = catalogVersion;
-    payloadToPush.products = getProducts();
+    payloadToPush.products = read(KEYS.products, PRODUCTS);
   }
 
   try {
-    const response = await fetch(CLOUD_SYNC_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payloadToPush)
-    });
-    if (!response.ok) return false;
+    const response = await postShared(payloadToPush);
     const data = await response.json();
-    if (!data.ok || !data.settings) return false;
-    applyRemoteSettings(data.settings);
+    if (!data.ok || !data.settings || Number(data.settings.updatedAt) !== payloadToPush.updatedAt) return false;
     return true;
   } catch { return false; }
 }
 
 // Applies stock movement for an order (-1 when paid, +1 to restock on cancel).
 export function moveStockForOrder(order, direction = -1) {
+  if (authoritative(order) || inventoryStock) return;
   const list = getProducts();
   let changed = false;
   order.items.forEach((item) => {

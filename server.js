@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import settingsHandler from './api/settings.js';
 import ordersHandler from './api/orders.js';
+import inventoryHandler from './api/inventory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +63,22 @@ const server = http.createServer(async (req, res) => {
     let pathname = decodeURIComponent(parsed.pathname);
 
     // API Routes
+    if (pathname === '/api/inventory' || pathname === '/api/inventory/') {
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > 64 * 1024) {
+          res.writeHead(413, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ ok: false, code: 'PAYLOAD_TOO_LARGE' }));
+          return;
+        }
+        chunks.push(chunk);
+      }
+      adaptServerless(req, res, Buffer.concat(chunks).toString('utf8'));
+      await inventoryHandler(req, res);
+      return;
+    }
     if (pathname === '/api/settings' || pathname === '/api/settings/') {
       const body = await parseBody(req);
       adaptServerless(req, res, body);

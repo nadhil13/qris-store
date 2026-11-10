@@ -12,7 +12,8 @@
 
 import { convertStaticToDynamicQRIS } from '../qris.js';
 import { getOrder, updateOrder, moveStockForOrder, subscribe, sweepExpiredOrders } from './store.js';
-import { markPaid, cancelOrder, isExpired, isPaidStatus, remainingMs, STATUS } from './orders.js';
+import { markPaid, cancelOrder, advanceOrder, isExpired, isPaidStatus, remainingMs, STATUS } from './orders.js';
+import { isInventoryOrder, transitionInventoryOrder, refreshInventoryOrder } from './inventory.js';
 
 const manualProvider = {
   id: 'manual',
@@ -36,9 +37,23 @@ export function buildPaymentPayload(order, staticPayload) {
   return convertStaticToDynamicQRIS(staticPayload, order.totals.total, order.invoice);
 }
 
+async function inventoryTransition(action, orderId, detail) {
+  try { return { ok: true, order: await transitionInventoryOrder(action, orderId, detail) }; }
+  catch (error) { return { ok: false, reason: error.message }; }
+}
+
+export function advancePaymentOrder(orderId) {
+  const order = getOrder(orderId);
+  if (!order) return { ok: false, reason: 'not-found' };
+  if (isInventoryOrder(order)) return inventoryTransition('advance', orderId, { expectedStatus: order.status });
+  const next = advanceOrder(order, { by: 'admin_dashboard' });
+  return next ? { ok: true, order: updateOrder(orderId, () => next) } : { ok: false, reason: 'INVALID_TRANSITION' };
+}
+
 export function confirmPayment(orderId, { by = 'admin', reference = '', now = Date.now() } = {}) {
   const current = getOrder(orderId);
   if (!current) return { ok: false, reason: 'not-found' };
+  if (isInventoryOrder(current)) return inventoryTransition('confirm', orderId, { reference });
   if (current.status !== STATUS.AWAITING) return { ok: false, reason: current.status, order: current };
   if (isExpired(current, now)) {
     sweepExpiredOrders(now);
@@ -53,6 +68,7 @@ export function confirmPayment(orderId, { by = 'admin', reference = '', now = Da
 export function cancelOrderById(orderId, { by = 'admin', note = '' } = {}) {
   const current = getOrder(orderId);
   if (!current) return { ok: false, reason: 'not-found' };
+  if (isInventoryOrder(current)) return inventoryTransition('cancel', orderId, { note });
   const wasPaid = isPaidStatus(current.status);
   const saved = updateOrder(orderId, (o) => cancelOrder(o, { by, note }), { type: 'cancelled' });
   if (!saved) return { ok: false, reason: current.status };
@@ -93,9 +109,15 @@ export function watchOrder(orderId, { onUpdate, onTick } = {}) {
   }, 1000);
 
   const poll = setInterval(async () => {
-    if (stopped || polling || !last || last.status !== STATUS.AWAITING) return;
+    if (stopped || polling || !last) return;
     polling = true;
     try {
+      if (isInventoryOrder(last)) {
+        await refreshInventoryOrder(orderId);
+        push();
+        return;
+      }
+      if (last.status !== STATUS.AWAITING) return;
       const result = await provider.check(last);
       if (result && result.paid) confirmPayment(orderId, { by: provider.id, reference: result.reference || '' });
     } catch (err) {

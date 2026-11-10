@@ -131,3 +131,15 @@ every hover transform and are not a WCAG AAA certification. Keyboard focus uses
 a `2px` terracotta outline with a `3px` offset. Important declarations for focus,
 hidden views, print and bottom sheets remain cascade safeguards, including
 overrides of existing inline styles.
+
+## Maintenance boundaries
+
+Admin navigation uses `.admin-section-nav` and `.admin-section-view`; the Tools
+section uses the shared settings-card layout, not a separate `.admin-view-tools`
+component. Workspace header and rail declarations are grouped with their owning
+selectors. Breakpoint, print and reduced-motion rules remain separate because
+they apply under different conditions.
+
+`tests/design-contract.test.mjs` compares the documented root tokens with the
+stylesheet and checks for obsolete branding and decorative HTML comment banners.
+It does not validate visual rendering; responsive changes still need browser checks.

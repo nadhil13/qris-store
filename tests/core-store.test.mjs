@@ -99,7 +99,7 @@ assert.equal(demoVal.errors.length, 0);
 
 // 7. Store QRIS Replacement
 const newStatic = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
-const repResult = replaceQRIS(newStatic, { merchantName: 'Toko Baru' });
+const repResult = await replaceQRIS(newStatic, { merchantName: 'Toko Baru' });
 assert.equal(repResult.payload, newStatic);
 
 // 8. Payments lifecycle & expiry rejection

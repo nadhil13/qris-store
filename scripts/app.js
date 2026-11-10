@@ -1,4 +1,15 @@
 import { PRODUCTS as SEED_PRODUCTS, CATEGORIES, getCategoryLabel } from './core/catalog.js';
+import { createModalManager, createDialogService, bindTabs } from './core/dialogs.js';
+
+let modalManager;
+let dialogService;
+function overlays() {
+  return modalManager ||= createModalManager(document);
+}
+function showDialog(message, options) {
+  dialogService ||= createDialogService(overlays(), document);
+  return dialogService(message, options);
+}
 import {
   lineKey,
   getVariant,
@@ -415,12 +426,12 @@ export function openQuickView(productId) {
     }
   }
 
-  if (modal) modal.classList.add('open');
+  overlays().open(modal, closeQuickView);
 }
 
 export function closeQuickView() {
   const modal = document.getElementById('quick-view-modal-backdrop');
-  if (modal) modal.classList.remove('open');
+  overlays().close(modal);
   state.activeQuickViewId = null;
   state.selectedQuickViewVariant = null;
 }
@@ -493,12 +504,12 @@ export function updateQuantity(lineKeyToUpdate, newQty) {
   renderCatalog();
 }
 
-export function promptNote(targetLineKey) {
+export async function promptNote(targetLineKey) {
   const line = state.cart.find((l) => l.key === targetLineKey);
   if (!line) return;
   const product = getProduct(line.productId);
   const title = product ? product.name : 'Produk';
-  const val = prompt(`Catatan khusus untuk ${title} (${line.variant || 'Standar'}):`, line.note || '');
+  const val = await showDialog(`Catatan khusus untuk ${title} (${line.variant || 'Standar'}):`, { kind: 'prompt', value: line.note || '' });
   if (val !== null) {
     state.cart = setLineNote(state.cart, targetLineKey, val);
     saveCart(state.cart);
@@ -683,14 +694,14 @@ export function openCartDrawer() {
   sfx.playClick();
   const drawer = document.getElementById('cart-drawer');
   const backdrop = document.getElementById('drawer-backdrop');
-  if (drawer) drawer.classList.add('open');
+  overlays().open(drawer, closeCartDrawer);
   if (backdrop) backdrop.classList.add('open');
 }
 
 export function closeCartDrawer() {
   const drawer = document.getElementById('cart-drawer');
   const backdrop = document.getElementById('drawer-backdrop');
-  if (drawer) drawer.classList.remove('open');
+  overlays().close(drawer);
   if (backdrop) backdrop.classList.remove('open');
 }
 
@@ -704,9 +715,9 @@ export function openCheckoutModal() {
 
   // Ensure any other modal or drawer is properly closed
   const adminDash = document.getElementById('admin-dashboard-modal-backdrop');
-  if (adminDash) adminDash.classList.remove('open');
+  overlays().close(adminDash);
   const adminLogin = document.getElementById('admin-login-modal-backdrop');
-  if (adminLogin) adminLogin.classList.remove('open');
+  overlays().close(adminLogin);
   closeCartDrawer();
 
   updateCustomerInfo();
@@ -727,7 +738,7 @@ export function openCheckoutModal() {
 
   // Open modal immediately so buyer always sees the payment modal without delay
   const modal = document.getElementById('payment-modal-backdrop');
-  if (modal) modal.classList.add('open');
+  overlays().open(modal, closeCheckoutModal);
 
   try {
     renderCheckoutView(newOrder);
@@ -854,13 +865,13 @@ export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
 export function copyQRISPayload() {
   const payload = state.activeCheckoutPayload || getSettings().qris.payload || DEMO_STATIC_QRIS;
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(payload).then(() => {
+    return navigator.clipboard.writeText(payload).then(() => {
       showToast('Payload string QRIS berhasil disalin ke clipboard.');
     }).catch(() => {
-      prompt('Salin data string QRIS berikut:', payload);
+      return showDialog('Salin data string QRIS berikut:', { kind: 'prompt', value: payload, readOnly: true });
     });
   } else {
-    prompt('Salin data string QRIS berikut:', payload);
+    return showDialog('Salin data string QRIS berikut:', { kind: 'prompt', value: payload, readOnly: true });
   }
 }
 
@@ -988,7 +999,7 @@ function handlePaymentCompleted(order) {
   // Populate and open receipt modal
   renderReceiptModal(order);
   const receiptModal = document.getElementById('receipt-modal-backdrop');
-  if (receiptModal) receiptModal.classList.add('open');
+  overlays().open(receiptModal, closeReceiptModal);
   showToast('Pembayaran dikonfirmasi oleh toko.');
 }
 
@@ -1010,7 +1021,7 @@ export function restartExpiredOrder() {
 
 export function closeCheckoutModal() {
   const modal = document.getElementById('payment-modal-backdrop');
-  if (modal) modal.classList.remove('open');
+  overlays().close(modal);
   if (state.activeOrderStopWatch) {
     state.activeOrderStopWatch();
     state.activeOrderStopWatch = null;
@@ -1079,7 +1090,7 @@ export function renderReceiptModal(order) {
 
 export function closeReceiptModal() {
   const receiptModal = document.getElementById('receipt-modal-backdrop');
-  if (receiptModal) receiptModal.classList.remove('open');
+  overlays().close(receiptModal);
   showToast('Pesanan aktif. Anda dapat memantau prosesnya di dock bawah.');
 }
 
@@ -1240,12 +1251,12 @@ export function openOrderTrackerModal() {
     }).join('');
   }
 
-  if (modal) modal.classList.add('open');
+  overlays().open(modal, closeOrderTrackerModal);
 }
 
 export function closeOrderTrackerModal() {
   const modal = document.getElementById('order-tracker-modal-backdrop');
-  if (modal) modal.classList.remove('open');
+  overlays().close(modal);
 }
 
 export function clearActiveOrder() {
@@ -1271,15 +1282,14 @@ export function openAdminLoginModal() {
   if (username) username.value = 'admin';
   if (password) {
     password.value = '';
-    setTimeout(() => password.focus(), 150);
   }
   if (errorEl) errorEl.style.display = 'none';
-  if (modal) modal.classList.add('open');
+  overlays().open(modal, closeAdminLoginModal, { initialFocus: password });
 }
 
 export function closeAdminLoginModal() {
   const modal = document.getElementById('admin-login-modal-backdrop');
-  if (modal) modal.classList.remove('open');
+  overlays().close(modal);
 }
 
 export function submitAdminLogin(event) {
@@ -1330,7 +1340,7 @@ export function openAdminDashboardModal() {
 
   const modal = document.getElementById('admin-dashboard-modal-backdrop');
   if (modal) {
-    modal.classList.add('open');
+    overlays().open(modal, closeAdminDashboardModal);
     switchAdminSection('overview');
     refreshAdminDashboard();
   }
@@ -1338,7 +1348,7 @@ export function openAdminDashboardModal() {
 
 export function closeAdminDashboardModal() {
   const modal = document.getElementById('admin-dashboard-modal-backdrop');
-  if (modal) modal.classList.remove('open');
+  overlays().close(modal);
 }
 
 export function switchAdminSection(sectionName) {
@@ -1465,8 +1475,8 @@ export function adminAdvanceOrderStatus(invoice) {
   }
 }
 
-export function adminCancelOrder(orderId) {
-  if (!confirm('Batalkan pesanan ini?')) return;
+export async function adminCancelOrder(orderId) {
+  if (!await showDialog('Batalkan pesanan ini?', { kind: 'confirm' })) return;
   sfx.playClick();
   const res = cancelOrderById(orderId, { by: 'admin_dashboard', note: 'Dibatalkan oleh admin' });
   if (res.ok) {
@@ -1622,10 +1632,10 @@ export function toggleProductAvailability(productId) {
   showToast(`Status "${p.name}": ${p.isAvailable ? 'Tersedia' : 'Habis'}`);
 }
 
-export function deleteProduct(productId) {
+export async function deleteProduct(productId) {
   const p = getProduct(productId);
   if (!p) return;
-  if (!confirm(`Hapus produk "${p.name}" dari katalog toko?`)) return;
+  if (!await showDialog(`Hapus produk "${p.name}" dari katalog toko?`, { kind: 'confirm' })) return;
   sfx.playClick();
   const list = getProducts().filter((item) => item.id !== productId);
   saveProducts(list, { type: 'delete', id: productId });
@@ -1634,8 +1644,8 @@ export function deleteProduct(productId) {
   showToast(`Produk "${p.name}" dihapus.`);
 }
 
-export function resetProductsToDefault() {
-  if (!confirm('Kembalikan seluruh katalog ke daftar produk awal bawaan?')) return;
+export async function resetProductsToDefault() {
+  if (!await showDialog('Kembalikan seluruh katalog ke daftar produk awal bawaan?', { kind: 'confirm' })) return;
   sfx.playClick();
   resetProducts();
   refreshAdminDashboard();
@@ -1689,7 +1699,7 @@ function renderAdminPaymentsSection() {
         </p>
 
         <!-- Drag & Drop Zone -->
-        <div id="admin-qris-dropzone" class="qris-upload-dropzone" onclick="window.triggerQRISUpload()" ondragover="window.handleQRISDragOver(event)" ondragleave="window.handleQRISDragLeave(event)" ondrop="window.handleQRISDrop(event)">
+        <div id="admin-qris-dropzone" class="qris-upload-dropzone" ondragover="window.handleQRISDragOver(event)" ondragleave="window.handleQRISDragLeave(event)" ondrop="window.handleQRISDrop(event)">
           <div class="upload-icon-circle">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1699,10 +1709,10 @@ function renderAdminPaymentsSection() {
           </div>
           <strong style="display:block; font-size:0.88rem; margin-top:8px; color:var(--ink-primary);">Klik atau Seret Foto QRIS ke Sini</strong>
           <p style="font-size:0.75rem; color:var(--ink-secondary); margin:4px 0 10px;">Format: PNG, JPG, JPEG, atau WebP</p>
-          <button type="button" class="btn-primary" style="padding:6px 14px; font-size:0.78rem; pointer-events:none;">Pilih File Gambar</button>
-          <input type="file" id="admin-qris-file-input" accept="image/*" style="display:none;" onchange="window.handleQRISImageUpload(event)" />
+          <button type="button" class="btn-primary" onclick="window.triggerQRISUpload()">Pilih File Gambar</button>
+          <input type="file" id="admin-qris-file-input" aria-label="Foto QRIS" accept="image/*" hidden onchange="window.handleQRISImageUpload(event)" />
         </div>
-        <div id="admin-qris-scan-status" style="display:none; padding:8px 12px; border-radius:6px; font-size:0.8rem; margin-bottom:12px;"></div>
+        <div id="admin-qris-scan-status" role="status" style="display:none; padding:8px 12px; border-radius:6px; font-size:0.8rem; margin-bottom:12px;"></div>
 
         <!-- Manual String Option -->
         <div style="border-top:1px dashed var(--border-hairline); padding-top:12px; margin-top:8px;">
@@ -1793,7 +1803,7 @@ export async function processQRISFile(file) {
         statusEl.style.background = '#FEE2E2';
         statusEl.style.color = '#B91C1C';
         statusEl.style.border = '1px solid #FCA5A5';
-        statusEl.innerHTML = `Kode QR terdeteksi namun struktur QRIS tidak valid: ${val.errors.join(', ')}`;
+        statusEl.textContent = `Kode QR terdeteksi namun struktur QRIS tidak valid: ${val.errors.join(', ')}`;
       }
       showToast('QRIS tidak valid: ' + val.errors[0]);
       return;
@@ -1816,13 +1826,13 @@ export async function processQRISFile(file) {
   }
 }
 
-export function adminApplyCustomQRIS() {
+export async function adminApplyCustomQRIS() {
   const input = document.getElementById('admin-custom-qris-input');
   if (!input) return;
   const str = input.value.trim();
   const val = validateQRIS(str);
   if (!val.ok) {
-    alert(`String QRIS tidak valid:\n${val.errors.join('\n')}`);
+    await showDialog(`String QRIS tidak valid:\n${val.errors.join('\n')}`);
     return;
   }
   replaceQRIS(val.payload, val.info || {});
@@ -1985,6 +1995,7 @@ function initEventBindings() {
       state.searchQuery = '';
       searchClear.style.display = 'none';
       renderCatalog();
+      searchInput?.focus();
     });
   }
 
@@ -2042,18 +2053,10 @@ function initEventBindings() {
     });
   }
 
-  // Escape key closes modals
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeCartDrawer();
-      closeCheckoutModal();
-      closeReceiptModal();
-      closeQuickView();
-      closeOrderTrackerModal();
-      closeAdminLoginModal();
-      closeAdminDashboardModal();
-    }
-  });
+  bindTabs(document.querySelector('.category-tabs'), { filter: true });
+  bindTabs(document.querySelector('.payment-tabs'));
+  document.querySelectorAll('.modal-backdrop, #cart-drawer').forEach((root) => { root.inert = true; });
+  overlays();
 
   // Shift + Alt + A, Ctrl + Shift + A, or Alt + A opens admin login/dashboard
   document.addEventListener('keydown', (e) => {

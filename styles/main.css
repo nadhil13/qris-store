@@ -1137,7 +1137,26 @@ a {
   box-shadow: 0 0 0 3px rgba(28, 22, 19, 0.08);
 }
 
+.app-dialog {
+    width: min(32rem, calc(100% - 2rem));
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    padding: 24px;
+    background: var(--bg-primary, #fff);
+    color: var(--ink-primary);
+    border-radius: 12px;
+  }
+  .app-dialog p { white-space: pre-wrap; overflow-wrap: anywhere; margin-block: 16px; }
+  .app-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; }
+  .app-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+  .app-dialog button, #admin-qris-dropzone button { min-height: 44px; }
+  .app-dialog :focus-visible { outline: 3px solid var(--brand-forest); outline-offset: 3px; }
+  [hidden] { display: none !important; }
 .search-clear {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
   position: absolute;
   right: 12px;
   top: 50%;

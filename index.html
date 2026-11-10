@@ -106,7 +106,7 @@
     </div>
   </header>
 
-  <main>
+  <main tabindex="-1">
     <!-- ======================================================================
          SCROLL-CRAFT HERO SECTION
          ====================================================================== -->
@@ -211,7 +211,7 @@
                 </svg>
                 <input type="text" id="search-input" class="search-input" placeholder="Cari menu, kopi, bahan..."
                   aria-label="Cari produk" autocomplete="off" />
-                <span class="search-clear" id="search-clear" title="Hapus pencarian">&times;</span>
+                <button type="button" class="search-clear" id="search-clear" aria-label="Hapus pencarian" title="Hapus pencarian">&times;</button>
               </div>
 
               <select id="sort-select" class="sort-select" aria-label="Urutkan menu">
@@ -346,7 +346,7 @@
        SLIDE-OVER CART DRAWER
        ======================================================================== -->
   <div class="drawer-backdrop" id="drawer-backdrop" onclick="window.closeCartDrawer()"></div>
-  <aside class="cart-drawer" id="cart-drawer" aria-label="Keranjang Belanja">
+  <aside class="cart-drawer" id="cart-drawer" role="dialog" aria-modal="true" aria-label="Keranjang Belanja" inert>
     <div class="drawer-header">
       <div class="drawer-title-wrap">
         <h3 class="drawer-title">Pesanan Anda</h3>
@@ -452,7 +452,7 @@
   <!-- ========================================================================
        DYNAMIC PAYMENT CHECKOUT MODAL (QRIS & GATEWAY)
        ======================================================================== -->
-  <div class="modal-backdrop" id="payment-modal-backdrop">
+  <div class="modal-backdrop" id="payment-modal-backdrop" inert>
     <div class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-payment-title">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="modal-header">
@@ -601,8 +601,8 @@
   <!-- ========================================================================
        ORDER SUCCESS RECEIPT MODAL
        ======================================================================== -->
-  <div class="modal-backdrop" id="receipt-modal-backdrop">
-    <div class="receipt-card">
+  <div class="modal-backdrop" id="receipt-modal-backdrop" inert>
+    <div class="receipt-card" role="dialog" aria-modal="true" aria-label="Bukti pembayaran">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="receipt-icon-circle">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -683,7 +683,7 @@
   <!-- ========================================================================
        QUICK VIEW & PRODUCT VARIANT MODAL
        ======================================================================== -->
-  <div class="modal-backdrop" id="quick-view-modal-backdrop">
+  <div class="modal-backdrop" id="quick-view-modal-backdrop" inert>
     <div class="quick-view-modal" role="dialog" aria-modal="true" aria-labelledby="qv-title">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="modal-header">
@@ -741,7 +741,7 @@
     </div>
   </div>
 
-  <div class="modal-backdrop" id="order-tracker-modal-backdrop">
+  <div class="modal-backdrop" id="order-tracker-modal-backdrop" inert>
     <div class="order-tracker-modal" role="dialog" aria-modal="true" aria-labelledby="tracker-invoice">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="modal-header" style="padding: 0 0 16px; border-bottom: 1px solid var(--border-hairline);">
@@ -772,7 +772,7 @@
   <!-- ========================================================================
        ADMIN LOGIN MODAL
        ======================================================================== -->
-  <div class="modal-backdrop" id="admin-login-modal-backdrop">
+  <div class="modal-backdrop" id="admin-login-modal-backdrop" inert>
     <div class="admin-auth-modal" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-hairline);">
@@ -815,7 +815,7 @@
   <!-- ========================================================================
        STORE ADMIN DASHBOARD MODAL (Feature E)
        ======================================================================== -->
-  <div class="modal-backdrop" id="admin-dashboard-modal-backdrop">
+  <div class="modal-backdrop" id="admin-dashboard-modal-backdrop" inert>
     <div class="admin-dashboard-modal admin-workspace-shell" id="admin-workspace-shell" role="dialog" aria-modal="true" aria-labelledby="modal-admin-title">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-hairline);">

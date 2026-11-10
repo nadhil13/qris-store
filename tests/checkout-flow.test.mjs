@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { getSettings, saveSettings, getOrders } from '../scripts/core/store.js';
+import { getSettings, saveSettings, getOrders, saveProducts } from '../scripts/core/store.js';
 
 const requests = [];
 globalThis.fetch = async (url, options) => {
@@ -10,6 +10,7 @@ globalThis.fetch = async (url, options) => {
 
 // Set up minimal browser DOM mock
 const domMap = new Map();
+const storageMap = new Map();
 globalThis.document = {
   addEventListener: () => {},
   removeEventListener: () => {},
@@ -20,12 +21,17 @@ globalThis.document = {
         style: {},
         textContent: '',
         dataset: {},
+        inert: false,
+        parentElement: document.body,
         _html: '',
         addEventListener: () => {},
         removeEventListener: () => {},
         setAttribute: () => {},
         getAttribute: () => null,
         focus: () => {},
+        matches: (sel) => sel === '[role="dialog"]',
+        querySelector: (sel) => null,
+        querySelectorAll: () => [],
         set innerHTML(val) { this._html = val; },
         get innerHTML() { return this._html; },
         classList: {
@@ -37,9 +43,14 @@ globalThis.document = {
     }
     return domMap.get(id);
   },
-  querySelectorAll: () => [],
+  querySelectorAll: (sel) => {
+    if (sel === '[data-store-whatsapp]') {
+      return [document.getElementById('cta-whatsapp-link')];
+    }
+    return [];
+  },
   querySelector: () => null,
-  body: { classList: { add: () => {}, remove: () => {} } }
+  body: { children: [], style: {}, classList: { add: () => {}, remove: () => {} } }
 };
 
 globalThis.window = {
@@ -48,9 +59,9 @@ globalThis.window = {
   removeEventListener: () => {},
   location: { href: 'https://qris-store.vercel.app/' },
   localStorage: {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {}
+    getItem: (k) => storageMap.has(k) ? storageMap.get(k) : null,
+    setItem: (k, v) => { storageMap.set(k, String(v)); },
+    removeItem: (k) => { storageMap.delete(k); }
   }
 };
 
@@ -163,6 +174,37 @@ for (const [method, label] of [['va', 'Virtual Account'], ['whatsapp', 'Konfirma
   renderReceiptModal({ ...order, payment: { ...order.payment, method } });
   assert.equal(document.getElementById('receipt-method').textContent, label);
 }
+
+// Test 3: No fabricated Virtual Account numbers or fake auto-verification claims
+assert.doesNotMatch(source, /88019/, 'Source must not fabricate fake 88019 Virtual Account numbers');
+assert.doesNotMatch(html, /88019123456789/, 'HTML must not display fake Virtual Account number');
+assert.doesNotMatch(html, /real-time dalam hitungan detik/i, 'HTML must not claim automatic real-time bank verification without a gateway');
+assert.doesNotMatch(html, /Menunggu pembayaran otomatis dari aplikasi e-wallet Anda/i, 'HTML must not claim automatic e-wallet settlement');
+
+// Test 4: Final WhatsApp CTA uses dynamic store WhatsApp setting
+assert.match(html, /data-store-whatsapp/, 'Final CTA WhatsApp link must have data-store-whatsapp attribute');
+document.getElementById('admin-storefront-whatsapp').value = '081987654321';
+saveAdminStorefrontSetting('merchantWhatsApp');
+assert.match(document.getElementById('cta-whatsapp-link').href || '', /wa\.me\/6281987654321/, 'CTA WhatsApp link must reflect normalized admin WhatsApp number');
+
+// Test 5: Apostrophes in variant labels and cart keys do not produce broken inline JS handlers
+const customList = app.PRODUCTS.map((p, idx) => idx === 0
+  ? { ...p, variants: [{ label: "Jumbo 500g (Chef's Cut)", delta: 15000 }] }
+  : p
+);
+saveProducts(customList, { type: 'test-apostrophe' });
+
+app.openQuickView(app.PRODUCTS[0].id);
+const variantsHtml = document.getElementById('qv-variant-grid').innerHTML;
+assert.match(variantsHtml, /data-action="select-variant"/, 'Variant buttons must use data-action delegation');
+assert.match(variantsHtml, /data-variant="Jumbo 500g \(Chef&#39;s Cut\)"/, 'Variant label must be HTML-escaped in data-variant attribute');
+assert.doesNotMatch(variantsHtml, /onclick=/, 'Variant buttons must not use inline onclick strings');
+
+app.addToCart(app.PRODUCTS[0].id, "Jumbo 500g (Chef's Cut)");
+const cartHtml = document.getElementById('drawer-items').innerHTML;
+assert.match(cartHtml, /data-action="update-qty"/, 'Cart item controls must use data-action delegation');
+assert.match(cartHtml, /Chef&#39;s Cut/, 'Cart item key must escape apostrophe safely');
+assert.doesNotMatch(cartHtml, /onclick=/, 'Cart item controls must not use inline onclick strings');
 
 console.log('PASS checkout-flow.test.mjs! Dynamic & Static checkout rendering verified!');
 process.exit(0);

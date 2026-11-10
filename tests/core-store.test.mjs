@@ -3,7 +3,7 @@ import { PRODUCTS, getCategoryLabel } from '../scripts/core/catalog.js';
 import { addLine, setLineQty, setLineNote, removeLine, resolveLines, computeTotals, lineKey } from '../scripts/core/cart.js';
 import { createOrder, markPaid, advanceOrder, cancelOrder, isExpired, STATUS, trackerSteps } from '../scripts/core/orders.js';
 import { convertStaticToDynamicQRIS, parseEMVCoQRIS, calculateCRC16, describeQRIS, validateQRIS } from '../scripts/qris.js';
-import { getProducts, getOrders, saveOrder, replaceQRIS, syncSettingsWithCloud, pushSettingsToCloud, DEMO_STATIC_QRIS } from '../scripts/core/store.js';
+import { getProducts, saveProducts, applyRemoteCatalog, getCatalogVersion, getOrders, saveOrder, replaceQRIS, syncSettingsWithCloud, pushSettingsToCloud, DEMO_STATIC_QRIS } from '../scripts/core/store.js';
 import { confirmPayment, cancelOrderById } from '../scripts/core/payments.js';
 
 // 1. Catalog integrity
@@ -120,5 +120,34 @@ saveOrder(expiredOrder);
 const expiredConfirm = confirmPayment(expiredOrder.id, { by: 'admin', now });
 assert.equal(expiredConfirm.ok, false);
 assert.equal(expiredConfirm.reason, STATUS.EXPIRED);
+
+// 9. Cloud catalog versioning & remote sync
+assert.equal(typeof applyRemoteCatalog, 'function', 'applyRemoteCatalog must be exported');
+assert.equal(typeof getCatalogVersion, 'function', 'getCatalogVersion must be exported');
+const versionBefore = getCatalogVersion();
+const customProducts = PRODUCTS.map((item, idx) => idx === 0 ? { ...item, price: 79000, stock: 3 } : { ...item });
+saveProducts(customProducts, { reason: 'test-edit' });
+const versionAfterSave = getCatalogVersion();
+assert.ok(versionAfterSave > versionBefore, 'Local saveProducts must advance catalog version');
+assert.equal(getProducts()[0].price, 79000);
+
+// Stale remote catalog must be ignored
+const staleApplied = applyRemoteCatalog({
+  catalogUpdatedAt: versionAfterSave - 10,
+  products: [{ id: 'stale', name: 'Stale', price: 1000, stock: 1 }]
+});
+assert.equal(staleApplied, null, 'Stale remote catalog must not overwrite newer local catalog');
+assert.equal(getProducts()[0].price, 79000);
+
+// Newer remote catalog must apply without re-advancing local clock beyond remote version
+const remoteVersion = versionAfterSave + 5000;
+const remoteApplied = applyRemoteCatalog({
+  catalogUpdatedAt: remoteVersion,
+  products: customProducts.map((item, idx) => idx === 0 ? { ...item, price: 82000, stock: 2 } : item)
+});
+assert.ok(Array.isArray(remoteApplied), 'Newer remote catalog must be applied');
+assert.equal(getProducts()[0].price, 82000);
+assert.equal(getProducts()[0].stock, 2);
+assert.equal(getCatalogVersion(), remoteVersion);
 
 console.log('PASS core-store.test.mjs');

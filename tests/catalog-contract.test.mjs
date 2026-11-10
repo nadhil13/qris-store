@@ -18,7 +18,7 @@ assert.match(html, /admin-product-submit-label/);
 assert.match(html, /checkoutViaWhatsApp/);
 
 assert.match(appSource, /syncOrdersWithCloud\(\)/, 'app must pull cloud orders');
-assert.match(appSource, /adminCancelOrder\('\$\{o\.id\}'\)/, 'admin table must expose cancellation');
+assert.match(appSource, /data-action="admin-cancel-order"|adminCancelOrder/, 'admin table must expose cancellation');
 assert.doesNotMatch(htmlSource, /id="merchant-config-modal-backdrop"/, 'legacy QRIS modal must be removed');
 
 const productShape = {

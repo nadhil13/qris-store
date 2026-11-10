@@ -1461,7 +1461,9 @@ a {
   box-shadow: var(--shadow-overlay);
   transform: translateX(100%);
   transition: transform var(--trans-normal);
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-padding-block: 88px 24px;
 }
 
 .cart-drawer.open {
@@ -1469,6 +1471,10 @@ a {
 }
 
 .drawer-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-card-muted);
   flex-shrink: 0;
   padding: 18px 24px;
   border-bottom: 1px solid var(--border-hairline);
@@ -1510,9 +1516,8 @@ a {
 }
 
 .drawer-items {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
+  flex: 1 0 auto;
+  min-height: 120px;
   padding: 18px 24px;
   display: flex;
   flex-direction: column;
@@ -1822,10 +1827,10 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 260px;
-  height: 260px;
-  min-width: 240px;
-  min-height: 240px;
+  width: min(260px, 100%);
+  height: auto;
+  min-width: 0;
+  aspect-ratio: 1;
   max-width: 100%;
   padding: 12px;
   background: #FFFFFF;
@@ -2058,8 +2063,7 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
-  /* Above every modal (payment 180, receipt 190, admin 150-160). */
-  z-index: 300;
+  z-index: 1100;
   opacity: 0;
   pointer-events: none;
   transition: all var(--trans-normal);
@@ -2094,13 +2098,13 @@ a {
 
 .quick-view-grid {
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   overflow-y: auto;
 }
 
 @media (max-width: 680px) {
   .quick-view-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -2517,9 +2521,42 @@ a {
     gap: 20px;
   }
 
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.85fr);
+    gap: 32px;
+  }
+
+  .hero-features-list {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .story-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .story-visual {
+    width: 100%;
+    max-width: 540px;
+    justify-self: center;
+  }
+
+  .cta-shell {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .quick-view-grid {
-    grid-template-columns: 1fr 1.1fr;
-    gap: 24px;
+    gap: 0;
+  }
+
+  .admin-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-section-heading,
+  .admin-ops-summary {
+    flex-wrap: wrap;
   }
 }
 
@@ -2539,6 +2576,25 @@ a {
 
   .nav-inner {
     gap: 8px;
+  }
+
+  .nav-inner > nav,
+  .nav-actions .admin-login-btn {
+    display: none;
+  }
+
+  .nav-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .brand-wrapper,
+  .brand-title {
+    min-width: 0;
+  }
+
+  .brand-name {
+    overflow-wrap: anywhere;
   }
 
   .brand-mark {
@@ -2888,13 +2944,13 @@ a {
     width: 100% !important;
     max-width: 100% !important;
     border-radius: 24px 24px 0 0 !important;
-    max-height: 92dvh !important;
     max-height: 92vh !important;
+    max-height: 92dvh !important;
     border-bottom: none !important;
     transform: translateY(100%) !important;
     transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
     margin: 0 !important;
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .modal-backdrop.open .payment-modal,
@@ -2920,25 +2976,19 @@ a {
 
   .payment-content {
     padding: 14px;
-    max-height: calc(88dvh - 120px);
-    overflow-y: auto;
   }
 
   .qris-card-wrapper {
     padding: 12px;
   }
 
-  .qris-qr-box svg {
-    width: 220px;
-    height: 220px;
-  }
-
   .quick-view-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
   }
 
   .quick-view-media {
+    min-height: 0;
     height: 180px;
   }
 
@@ -3299,6 +3349,109 @@ a {
   border-color: var(--ink-secondary);
 }
 
+@media screen {
+  .payment-modal,
+  .quick-view-modal,
+  .receipt-card,
+  .order-tracker-modal,
+  .merchant-config-modal,
+  .admin-auth-modal {
+    min-height: 0;
+    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
+    overscroll-behavior-y: contain;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-card,
+  .order-tracker-modal,
+  .merchant-config-modal {
+    overflow-y: auto;
+    scroll-padding-block: 24px;
+  }
+
+  .merchant-config-modal > * {
+    flex-shrink: 0;
+  }
+
+  .modal-header,
+  .payment-tabs {
+    flex-shrink: 0;
+  }
+
+  .modal-header {
+    gap: 12px;
+  }
+
+  .modal-header > :first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .drawer-close {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .payment-content,
+  .quick-view-grid,
+  .admin-auth-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .quick-view-body,
+  .cart-item-info,
+  .admin-field-group,
+  .admin-settings-card,
+  .metric-card {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .quick-view-header,
+  .quick-view-actions,
+  .quick-view-facts,
+  .tracker-step-controls,
+  .config-mode-toggle,
+  .va-row,
+  .phone-steps-list {
+    flex-wrap: wrap;
+  }
+
+  .voucher-input {
+    min-width: 0;
+  }
+
+  .cart-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .drawer-title-wrap {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+
+  .summary-row,
+  .receipt-slip-row {
+    gap: 12px;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .toast-toaster {
+    width: max-content;
+    max-width: calc(100% - 24px);
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    overflow-wrap: anywhere;
+    z-index: 1100;
+  }
+}
+
 /* Isolate the receipt for 80mm thermal paper. */
 @media print {
   @page {
@@ -3619,6 +3772,7 @@ a {
 }
 
 .admin-workspace-frame {
+  min-width: 0;
   min-height: 0;
   flex: 1;
   display: flex;
@@ -3710,9 +3864,63 @@ a {
 }
 
 .admin-workspace-main > .admin-body {
+  min-width: 0;
   min-height: 0;
   flex: 1;
   padding: clamp(24px, 3vw, 44px);
+  overscroll-behavior-y: contain;
+  padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+}
+
+.admin-body > * {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.admin-workspace-shell .modal-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.admin-workspace-shell .modal-header > :first-child {
+  flex: 1 1 240px;
+}
+
+.admin-workspace-shell .modal-header > div:nth-child(2) {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-section-view,
+.admin-tab-view,
+.admin-table-container,
+.admin-section-heading > *,
+.admin-settings-card > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-section-actions,
+.admin-ops-counts {
+  flex-wrap: wrap;
+}
+
+.admin-workspace-rail {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.admin-settings-card,
+.admin-overview-link,
+.metric-card {
+  overflow-wrap: anywhere;
+}
+
+.admin-view-tools input,
+.admin-view-tools select {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .admin-section-view[hidden] {
@@ -3847,18 +4055,35 @@ a {
   font-size: 0.98rem;
 }
 
+@media (min-width: 769px) and (max-width: 1024px) {
+  .admin-settings-grid,
+  .admin-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   #admin-dashboard-modal-backdrop {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .admin-workspace-shell {
-    height: auto;
-    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+  }
+
+  .admin-workspace-shell .modal-header {
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
   }
 
   .admin-workspace-frame {
-    display: block;
+    flex-direction: column;
+  }
+
+  .admin-workspace-rail {
+    flex: 0 0 auto;
   }
 
   .admin-workspace-rail {
@@ -4017,7 +4242,7 @@ a {
 
 .admin-form-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -4106,12 +4331,34 @@ a {
   }
 
   .order-tracker-dock {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    right: 12px;
+    left: auto;
+    transform: none;
     max-width: calc(100vw - 24px);
+    gap: 10px;
+  }
+
+  .order-tracker-dock:hover {
+    transform: translateY(-2px);
   }
 
   .tracker-dock-text,
   .tracker-dock-status {
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .order-tracker-dock > div {
+    min-width: 0;
+  }
+
+  .tracker-dock-indicator {
+    flex-shrink: 0;
+  }
+
+  .toast-toaster {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
 
   .luxury-story {
@@ -4120,6 +4367,39 @@ a {
 
   .story-grid {
     gap: 42px;
+  }
+
+  .story-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cta-actions {
+    width: 100%;
+  }
+
+  .cta-actions > * {
+    flex: 1 1 180px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .story-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-workspace-shell .modal-header > :first-child {
+    flex-basis: calc(100% - 56px);
+  }
+
+  .admin-workspace-shell .modal-header > div:nth-child(2) {
+    flex-basis: 100%;
+    order: 1;
+    justify-content: flex-start !important;
   }
 }
 

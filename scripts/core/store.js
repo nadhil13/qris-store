@@ -13,6 +13,7 @@ export const DEMO_STATIC_QRIS = '00020101021126610014COM.GO-JEK.WWW0118936009143
 
 const KEYS = {
   products: 'an.products.v3',
+  catalogVersion: 'an.products.version.v3',
   orders: 'an.orders.v3',
   settings: 'an.settings.v3',
   cart: 'an.cart.v3',
@@ -148,9 +149,45 @@ export function getProducts() {
   return PRODUCTS.map((p) => ({ ...p }));
 }
 
+export function getCatalogVersion() {
+  return Number(read(KEYS.catalogVersion, 0) || 0);
+}
+
 export function saveProducts(list, detail = {}) {
-  write(KEYS.products, list);
-  announce('products', detail);
+  const safeList = Array.isArray(list) ? list : [];
+  write(KEYS.products, safeList);
+  let version = getCatalogVersion();
+  if (detail && detail.fromCloud) {
+    if (Number(detail.catalogUpdatedAt || 0) > 0) {
+      version = Number(detail.catalogUpdatedAt);
+      write(KEYS.catalogVersion, version);
+    }
+  } else {
+    version = Math.max(Date.now(), version + 1);
+    write(KEYS.catalogVersion, version);
+    pushCatalogToCloud(safeList, version);
+  }
+  announce('products', { ...detail, catalogUpdatedAt: version });
+  return safeList;
+}
+
+export function applyRemoteCatalog(remote) {
+  if (!remote || !Array.isArray(remote.products)) return null;
+  const remoteTime = Number(remote.catalogUpdatedAt || 0);
+  const localVersion = getCatalogVersion();
+  if (!(remoteTime > localVersion)) return null;
+
+  const current = getProducts();
+  const contentChanged = JSON.stringify(remote.products) !== JSON.stringify(current);
+  write(KEYS.catalogVersion, remoteTime);
+  if (!contentChanged) return null;
+
+  saveProducts(remote.products, {
+    fromCloud: true,
+    catalogUpdatedAt: remoteTime,
+    type: 'cloud-sync'
+  });
+  return remote.products;
 }
 
 export function resetProducts() {
@@ -381,12 +418,37 @@ export function saveSharedSettings(patchOrFn, detail = {}) {
 }
 
 const CLOUD_SYNC_ENDPOINT = '/api/settings';
-const DIRECT_CLOUD_BACKUP = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1beb3e79f6bc2';
+
+export async function pushCatalogToCloud(products = getProducts(), catalogUpdatedAt = getCatalogVersion()) {
+  if (!canReachNetwork()) return;
+  const version = Number(catalogUpdatedAt || 0);
+  if (version <= 0) return;
+  const payloadToPush = {
+    catalogUpdatedAt: version,
+    products: Array.isArray(products) ? products : []
+  };
+  try {
+    const response = await fetch(CLOUD_SYNC_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payloadToPush)
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    if (!data.ok || !data.settings) return false;
+    applyRemoteSettings(data.settings);
+    return true;
+  } catch { return false; }
+}
 
 // Adopts remote settings only when they are strictly newer than ours.
 // Returns the saved settings when something visible changed, else null.
 export function applyRemoteSettings(remote) {
-  if (!remote || !remote.qris || !remote.qris.payload) return null;
+  if (!remote) return null;
+  if (Array.isArray(remote.products) && Number(remote.catalogUpdatedAt || 0) > 0) {
+    applyRemoteCatalog(remote);
+  }
+  if (!remote.qris || !remote.qris.payload) return null;
   const current = getSettings();
   const remoteTime = Number(remote.updatedAt || remote.qris.updatedAt || 0);
   if (!(remoteTime > sharedVersion(current))) return null;
@@ -417,66 +479,53 @@ export async function syncSettingsWithCloud() {
     const res = await fetch(CLOUD_SYNC_ENDPOINT, { cache: 'no-store', signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const data = await res.json();
-      if (data && data.settings && data.settings.qris) {
+      if (data && data.settings) {
         remote = data.settings;
       }
     }
   } catch {
-    // If /api/settings is not reached, fall through to direct cloud
+    // Offline or endpoint unreachable
   }
 
-  if (!remote) {
-    try {
-      const res = await fetch(DIRECT_CLOUD_BACKUP, { signal: AbortSignal.timeout(3000) });
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.data && json.data.payload) {
-          remote = {
-            updatedAt: json.data.updatedAt || 0,
-            qris: {
-              payload: json.data.payload,
-              merchantName: json.data.merchantName || 'Atelier Nusantara',
-              updatedAt: json.data.updatedAt || 0
-            },
-            store: json.data.store || null
-          };
-        }
-      }
-    } catch {
-      // Offline fallback
-    }
+  const remoteCatalogVersion = Number(remote?.catalogUpdatedAt || 0);
+  const localCatalogVersion = getCatalogVersion();
+  if (localCatalogVersion > remoteCatalogVersion) {
+    pushCatalogToCloud(getProducts(), localCatalogVersion);
   }
 
+  const localSettings = getSettings();
+  if (sharedVersion(localSettings) > Number(remote?.updatedAt || remote?.qris?.updatedAt || 0)) {
+    pushSettingsToCloud(localSettings);
+  }
   return applyRemoteSettings(remote);
 }
 
 export async function pushSettingsToCloud(settings) {
   if (typeof window === 'undefined') return;
+  const catalogVersion = getCatalogVersion();
   const payloadToPush = {
     payload: settings.qris?.payload || '',
     merchantName: settings.qris?.merchantName || settings.store?.name || '',
     updatedAt: sharedVersion(settings) || Date.now(),
     store: settings.store
   };
+  if (catalogVersion > 0) {
+    payloadToPush.catalogUpdatedAt = catalogVersion;
+    payloadToPush.products = getProducts();
+  }
 
   try {
-    fetch(CLOUD_SYNC_ENDPOINT, {
+    const response = await fetch(CLOUD_SYNC_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payloadToPush)
-    }).catch(() => {});
-  } catch {}
-
-  try {
-    fetch(DIRECT_CLOUD_BACKUP, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'qris_store_settings',
-        data: payloadToPush
-      })
-    }).catch(() => {});
-  } catch {}
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    if (!data.ok || !data.settings) return false;
+    applyRemoteSettings(data.settings);
+    return true;
+  } catch { return false; }
 }
 
 // Applies stock movement for an order (-1 when paid, +1 to restock on cancel).

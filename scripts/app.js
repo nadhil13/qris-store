@@ -116,9 +116,35 @@ function updateStorefrontStatus() {
   if (label) label.textContent = `${store.isOpen === false ? 'Tutup' : 'Buka'} (${store.hours || 'Jam operasional belum diatur'})`;
   const dot = document.getElementById('store-status-dot');
   if (dot) dot.hidden = store.isOpen === false;
+
+  const waNum = configuredWhatsApp(store.whatsapp);
+  document.querySelectorAll('[data-store-whatsapp]').forEach((el) => {
+    el.href = waNum ? `https://wa.me/${waNum}` : '#contact';
+    el.setAttribute('aria-disabled', String(!waNum));
+  });
+}
+
+function configuredWhatsApp(value) {
+  const number = normalizePhone(value);
+  return /^62\d{8,13}$/.test(number) ? number : '';
+}
+
+function requireWhatsApp() {
+  const number = configuredWhatsApp(getSettings().store.whatsapp);
+  if (!number) showToast('Nomor WhatsApp toko belum tersedia. Silakan gunakan pembayaran QRIS.');
+  return number;
 }
 
 function canCheckout() {
+  const invalidLine = state.cart.find((line) => {
+    const product = PRODUCTS.find((p) => p.id === line.productId);
+    return !isPurchasable(product) || productQty(state.cart, line.productId) > maxQty(product);
+  });
+  if (invalidLine) {
+    showToast('Stok berubah. Sesuaikan atau hapus item keranjang sebelum melanjutkan.');
+    updateCartUI();
+    return false;
+  }
   const { store } = getSettings();
   if (store.isOpen !== false) return true;
   showToast(`Toko sedang tutup. Jam operasional: ${store.hours || 'belum diatur'}.`);
@@ -326,7 +352,7 @@ export function renderCatalog() {
     const singleVariantKey = lineKey(item.id, firstVariant);
 
     return `
-      <article class="${cardClass}" data-id="${item.id}" id="card-${item.id}">
+      <article class="${cardClass}" data-id="${escapeHTML(item.id)}" id="card-${escapeHTML(item.id)}">
         <div class="card-media">
           ${!available ? '<span class="badge-sold-out">Stok Habis</span>' : ''}
           <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.name)}" width="380" height="240" loading="lazy" style="aspect-ratio: 16/10; object-fit: cover;" />
@@ -336,7 +362,7 @@ export function renderCatalog() {
           </div>
         </div>
         <div class="card-body">
-          <button type="button" class="card-title-btn" onclick="window.openQuickView('${item.id}')" aria-label="Lihat detail ${escapeHTML(item.name)}">
+          <button type="button" class="card-title-btn" data-action="quick-view" data-product-id="${escapeHTML(item.id)}" aria-label="Lihat detail ${escapeHTML(item.name)}">
             <h3 class="card-title">${escapeHTML(item.name)}</h3>
           </button>
           <p class="card-desc">${escapeHTML(item.desc || '')}</p>
@@ -351,17 +377,17 @@ export function renderCatalog() {
                   Habis
                 </button>
               ` : totalInCart > 0 && item.variants && item.variants.length > 1 ? `
-                <button type="button" class="btn-add in-cart" onclick="window.openQuickView('${item.id}')" aria-label="Sudah ada ${totalInCart} di keranjang. Buka varian lain">
+                <button type="button" class="btn-add in-cart" data-action="quick-view" data-product-id="${escapeHTML(item.id)}" aria-label="Sudah ada ${totalInCart} di keranjang. Buka varian lain">
                   <span>${totalInCart} di Keranjang</span>
                 </button>
               ` : totalInCart > 0 && (!item.variants || item.variants.length <= 1) ? `
                 <div class="qty-stepper">
-                  <button type="button" class="stepper-btn" onclick="window.updateQuantity('${singleVariantKey}', ${totalInCart - 1})" aria-label="Kurangi kuantitas">−</button>
+                  <button type="button" class="stepper-btn" data-action="update-qty" data-line-key="${escapeHTML(singleVariantKey)}" data-qty="${totalInCart - 1}" aria-label="Kurangi kuantitas">−</button>
                   <span class="stepper-val">${totalInCart}</span>
-                  <button type="button" class="stepper-btn" onclick="window.updateQuantity('${singleVariantKey}', ${totalInCart + 1})" aria-label="Tambah kuantitas">+</button>
+                  <button type="button" class="stepper-btn" data-action="update-qty" data-line-key="${escapeHTML(singleVariantKey)}" data-qty="${totalInCart + 1}" aria-label="Tambah kuantitas">+</button>
                 </div>
               ` : `
-                <button type="button" class="btn-add" onclick="window.openQuickView('${item.id}')" aria-label="Pilih varian ${escapeHTML(item.name)}">
+                <button type="button" class="btn-add" data-action="quick-view" data-product-id="${escapeHTML(item.id)}" aria-label="Pilih varian ${escapeHTML(item.name)}">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                   <span>Pilih Varian</span>
                 </button>
@@ -411,11 +437,11 @@ export function openQuickView(productId) {
   if (variantGridEl) {
     if (product.variants && product.variants.length > 0) {
       if (variantTitleEl) variantTitleEl.textContent = product.variantTitle || 'Pilih Varian';
-      variantGridEl.innerHTML = product.variants.map((v, idx) => {
+      variantGridEl.innerHTML = product.variants.map((v) => {
         const delta = v.delta ? ` (+${formatIDR(v.delta)})` : '';
         const active = v.label === state.selectedQuickViewVariant ? 'active' : '';
         return `
-          <button type="button" class="variant-pill-label ${active}" data-variant="${escapeHTML(v.label)}" onclick="window.selectVariantOption('${escapeHTML(v.label)}', this)">
+          <button type="button" class="variant-pill-label ${active}" data-action="select-variant" data-variant="${escapeHTML(v.label)}">
             <span>${escapeHTML(v.label)}${delta}</span>
           </button>
         `;
@@ -467,13 +493,14 @@ export function addQuickViewToCart() {
     return;
   }
 
+  const chosenVariant = state.selectedQuickViewVariant || 'Standar';
   state.cart = res.cart;
   saveCart(state.cart);
   sfx.playClick();
   updateCartUI();
   renderCatalog();
   closeQuickView();
-  showToast(`Ditambahkan: ${product.name} (${state.selectedQuickViewVariant || 'Standar'})`);
+  showToast(`Ditambahkan: ${product.name} (${chosenVariant})`);
 }
 
 export function addToCart(productId, variantLabel = '') {
@@ -599,8 +626,8 @@ function renderShippingOptions(settings, totals) {
   if (grid.dataset.signature === signature) return;
   grid.dataset.signature = signature;
   grid.innerHTML = settings.shipping.map((s) => `
-    <button type="button" class="shipping-method-card ${s.id === state.activeShippingId ? 'active' : ''}" id="ship-${escapeHTML(s.id)}"
-      aria-pressed="${s.id === state.activeShippingId}" onclick="window.selectShippingMethod('${escapeHTML(s.id)}')">
+    <button type="button" class="shipping-option-card ${s.id === state.activeShippingId ? 'active' : ''}" data-action="select-shipping" data-shipping-id="${escapeHTML(s.id)}"
+      aria-pressed="${s.id === state.activeShippingId}">
       <span class="shipping-name">${escapeHTML(s.name)}</span>
       <span class="shipping-price">${Number(s.price) > 0 ? formatIDR(s.price) : 'Gratis'}</span>
       <span class="shipping-eta">${escapeHTML(s.eta || '')}</span>
@@ -677,14 +704,14 @@ export function updateCartUI() {
           ${item.variant ? `<span class="cart-variant-tag">${escapeHTML(item.variant)}</span>` : ''}
           <span class="cart-item-price">${formatIDR(item.unitPrice)}</span>
         </div>
-        <button type="button" class="cart-item-note" onclick="window.promptNote('${item.key}')" aria-label="Tambah catatan khusus">
+        <button type="button" class="btn-note" data-action="prompt-note" data-line-key="${escapeHTML(item.key)}" aria-label="Tambah catatan khusus">
           ${item.note ? `Catatan: ${escapeHTML(item.note)}` : '+ Catatan khusus'}
         </button>
       </div>
       <div class="qty-stepper">
-        <button type="button" class="stepper-btn" onclick="window.updateQuantity('${item.key}', ${item.qty - 1})" aria-label="Kurangi kuantitas">−</button>
+        <button type="button" class="stepper-btn" data-action="update-qty" data-line-key="${escapeHTML(item.key)}" data-qty="${item.qty - 1}" aria-label="Kurangi kuantitas">−</button>
         <span class="stepper-val">${item.qty}</span>
-        <button type="button" class="stepper-btn" onclick="window.updateQuantity('${item.key}', ${item.qty + 1})" aria-label="Tambah kuantitas">+</button>
+        <button type="button" class="stepper-btn" data-action="update-qty" data-line-key="${escapeHTML(item.key)}" data-qty="${item.qty + 1}" aria-label="Tambah kuantitas">+</button>
       </div>
     </div>
   `).join('');
@@ -789,9 +816,13 @@ function renderCheckoutView(order) {
   if (invoiceEl) invoiceEl.textContent = order.invoice;
   if (merchantEl) merchantEl.textContent = desc.merchantName || settings.store.name;
   if (nmidEl) nmidEl.textContent = [desc.nmid ? `NMID: ${desc.nmid}` : '', desc.city].filter(Boolean).join(' · ');
-  const generatedVa = '88019' + order.invoice.replace(/[^0-9]/g, '').padEnd(8, '7').slice(-8);
-  if (vaEl) vaEl.textContent = generatedVa;
-  if (btnCopyVa) btnCopyVa.dataset.copy = generatedVa;
+  if (vaEl) {
+    vaEl.textContent = 'Toko ini belum mengaktifkan integrasi penyedia Virtual Account perbankan.';
+  }
+  if (btnCopyVa) {
+    btnCopyVa.hidden = true;
+    btnCopyVa.dataset.copy = '';
+  }
 
   switchQRISDisplayMode(state.currentQRISDisplayMode || 'dynamic', order);
 }
@@ -1099,7 +1130,7 @@ export function closeReceiptModal() {
 const WHATSAPP_ORDER_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function checkoutViaWhatsApp() {
-  if (!canCheckout()) return;
+  if (!canCheckout() || !requireWhatsApp()) return;
   const { lines, totals, settings, activeShipping } = getCalculatedCart();
   if (totals.itemCount === 0) {
     showToast('Keranjang Anda masih kosong.');
@@ -1145,7 +1176,7 @@ export function checkoutViaWhatsApp() {
   msg += `----------------------------------------\n`;
   msg += `Mohon konfirmasi ketersediaan pesanan ini. Terima kasih!`;
 
-  const waNum = normalizePhone(settings.store.whatsapp) || '6281234567890';
+  const waNum = configuredWhatsApp(settings.store.whatsapp);
   window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
 
   // The order now lives in the tracker; an empty cart also stops a second
@@ -1172,7 +1203,8 @@ export function sendOrderToWhatsApp() {
   msg += `Total Tagihan: ${formatIDR(order.totals.total)}\n`;
   msg += `Status: Menunggu Pembayaran (Batas 10 Menit)\n`;
   msg += `String QRIS: ${state.activeCheckoutPayload || settings.qris.payload}\n`;
-  const waNum = normalizePhone(settings.store.whatsapp) || '6281234567890';
+  const waNum = requireWhatsApp();
+  if (!waNum) return;
   window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -1186,7 +1218,8 @@ export function shareReceiptWhatsApp() {
   msg += `Status: ${statusLabel(order.status)}\n`;
   msg += `Total: ${formatIDR(order.totals.total)}\n`;
   msg += `Terima kasih atas pesanan Anda!`;
-  const waNum = normalizePhone(settings.store.whatsapp) || '6281234567890';
+  const waNum = requireWhatsApp();
+  if (!waNum) return;
   window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -1399,11 +1432,15 @@ export function refreshAdminDashboard() {
   if (hoursInput && document.activeElement !== hoursInput) hoursInput.value = settings.store.hours || '';
   if (openInput && document.activeElement !== openInput) openInput.checked = settings.store.isOpen !== false;
   if (storefrontWa && document.activeElement !== storefrontWa) storefrontWa.value = settings.store.whatsapp || '';
-  if (syncStatus) syncStatus.textContent = formatTime(Date.now());
+  if (syncStatus) syncStatus.textContent = 'Sinkronisasi tab aktif · server diperiksa setiap 12 detik';
 
   renderAdminOrderTable();
   renderAdminProductsTable();
-  renderAdminPaymentsSection();
+  const customQrisInput = document.getElementById('admin-custom-qris-input');
+  const hasQrisDraft = customQrisInput && customQrisInput.value !== customQrisInput.defaultValue;
+  if (!hasQrisDraft && (!customQrisInput || document.activeElement !== customQrisInput)) {
+    renderAdminPaymentsSection();
+  }
 }
 
 function renderAdminOrderTable() {
@@ -1427,18 +1464,18 @@ function renderAdminOrderTable() {
 
     let actionBtn = '';
     if (isAwaiting) {
-      actionBtn = `<button type="button" class="btn-admin-action" style="background:var(--brand-forest); color:#fff;" onclick="window.adminConfirmPayment('${o.id}')">Konfirmasi Lunas</button>`;
+      actionBtn = `<button type="button" class="btn-admin-action" style="background:var(--brand-forest); color:#fff;" data-action="admin-confirm-payment" data-order-id="${escapeHTML(o.id)}">Konfirmasi Lunas</button>`;
     } else if (!isComplete) {
-      actionBtn = `<button type="button" class="btn-admin-action" onclick="window.adminAdvanceOrderStatus('${o.invoice}')">Majukan status</button>`;
+      actionBtn = `<button type="button" class="btn-admin-action" data-action="admin-advance-order" data-invoice="${escapeHTML(o.invoice)}">Majukan status</button>`;
     } else {
       actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Selesai</span>`;
     }
     if (!isComplete) {
-      actionBtn += ` <button type="button" class="btn-admin-action" onclick="window.adminCancelOrder('${o.id}')">Batalkan</button>`;
+      actionBtn += ` <button type="button" class="btn-admin-action" data-action="admin-cancel-order" data-order-id="${escapeHTML(o.id)}">Batalkan</button>`;
     }
 
     return `
-      <tr class="admin-order-row" data-admin-row="${o.invoice}">
+      <tr class="admin-order-row" data-admin-row="${escapeHTML(o.invoice)}">
         <td><strong style="font-family: var(--font-mono);">${escapeHTML(o.invoice)}</strong></td>
         <td style="white-space: nowrap; font-size: 0.74rem;">${formatDateTime(o.createdAt)}</td>
         <td><strong>${escapeHTML(o.customer.name || 'Pelanggan')}</strong><br><span style="font-size:0.7rem; color:var(--ink-secondary);">${escapeHTML(o.customer.phone || '-')}</span></td>
@@ -1504,19 +1541,19 @@ function renderAdminProductsTable() {
         </div>
       </td>
       <td style="font-size:0.78rem;">${escapeHTML(getCategoryLabel(p.category))}</td>
-      <td style="font-family:var(--font-mono); font-weight:600;">${formatIDR(p.price)}</td>
+      <td style="font-family:var(--font-mono); font-weight:700;">${formatIDR(p.price)}</td>
       <td>
-        <span class="status-badge-step ${p.isAvailable !== false ? 'done' : 'muted'}">
+        <span class="status-badge-step ${p.isAvailable !== false ? 'status-paid' : 'status-cancelled'}">
           ${p.isAvailable !== false ? 'Tersedia' : 'Habis'}
         </span>
       </td>
       <td>
-        <div style="display:flex; gap:6px;">
-          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" onclick="window.openProductEditForm('${p.id}')">Edit</button>
-          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" onclick="window.toggleProductAvailability('${p.id}')">
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" data-action="admin-edit-product" data-product-id="${escapeHTML(p.id)}">Edit</button>
+          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" data-action="admin-toggle-product" data-product-id="${escapeHTML(p.id)}">
             ${p.isAvailable !== false ? 'Set Habis' : 'Set Ready'}
           </button>
-          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem; color:var(--status-danger);" onclick="window.deleteProduct('${p.id}')">Hapus</button>
+          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem; color:var(--status-danger);" data-action="admin-delete-product" data-product-id="${escapeHTML(p.id)}">Hapus</button>
         </div>
       </td>
     </tr>
@@ -1729,7 +1766,7 @@ function renderAdminPaymentsSection() {
           <div style="margin-top:14px; border-top:1px dashed var(--border-hairline); padding-top:8px;">
             <small style="color:var(--ink-secondary); display:block; margin-bottom:4px; font-weight:600;">Riwayat QRIS Sebelumnya:</small>
             ${settings.qris.history.map((h, idx) => `
-              <button type="button" class="btn-secondary" style="font-size:0.72rem; padding:4px 8px; margin:2px;" onclick="window.adminRestoreQRIS('${escapeHTML(h.payload)}')">
+              <button type="button" class="btn-secondary" style="font-size:0.72rem; padding:4px 8px; margin:2px;" data-action="admin-restore-qris" data-qris-payload="${escapeHTML(h.payload)}">
                 Pulihkan #${idx + 1} (${formatDateTime(h.replacedAt)})
               </button>
             `).join('')}
@@ -1860,9 +1897,13 @@ export function adminResetQRISDefault() {
 export function saveAdminStorefrontSetting(key) {
   if (key === 'merchantWhatsApp') {
     const input = document.getElementById('admin-storefront-whatsapp');
-    if (!input) return;
-    const num = input.value.trim();
-    saveSharedSettings((s) => ({ ...s, store: { ...s.store, whatsapp: num } }));
+    const whatsapp = configuredWhatsApp(input?.value.trim() || '');
+    if (!whatsapp) {
+      showToast('Isi nomor WhatsApp Indonesia yang valid, diawali 08 atau 62.');
+      return;
+    }
+    saveSharedSettings((s) => ({ ...s, store: { ...s.store, whatsapp } }));
+    updateStorefrontStatus();
     showToast('Nomor WhatsApp storefront berhasil diperbarui.');
   } else if (key === 'availability') {
     const hours = document.getElementById('admin-storefront-hours')?.value.trim();
@@ -1872,6 +1913,7 @@ export function saveAdminStorefrontSetting(key) {
       return;
     }
     saveSharedSettings((s) => ({ ...s, store: { ...s.store, hours, isOpen } }));
+    updateStorefrontStatus();
     showToast('Ketersediaan toko berhasil disimpan.');
   }
 }
@@ -2040,18 +2082,37 @@ function initEventBindings() {
     });
   });
 
-  // Dynamic VA Copy button fix
-  const btnCopyVa = document.getElementById('btn-copy-va');
-  if (btnCopyVa) {
-    btnCopyVa.addEventListener('click', () => {
-      const vaNumber = document.getElementById('va-code-number')?.textContent.trim() || btnCopyVa.dataset.copy;
-      if (vaNumber && navigator.clipboard) {
-        navigator.clipboard.writeText(vaNumber).then(() => {
-          showToast(`Nomor Virtual Account disalin: ${vaNumber}`);
-        });
-      }
-    });
-  }
+  // Delegated dynamic actions (safe from apostrophes/quotes in IDs, variant labels, or QR payloads)
+  document.addEventListener('click', (e) => {
+    const trigger = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-action]') : null;
+    if (!trigger) return;
+    const action = trigger.dataset.action;
+    if (action === 'quick-view') {
+      openQuickView(trigger.dataset.productId);
+    } else if (action === 'update-qty') {
+      updateQuantity(trigger.dataset.lineKey, Number(trigger.dataset.qty));
+    } else if (action === 'select-variant') {
+      selectVariantOption(trigger.dataset.variant, trigger);
+    } else if (action === 'select-shipping') {
+      selectShippingMethod(trigger.dataset.shippingId);
+    } else if (action === 'prompt-note') {
+      promptNote(trigger.dataset.lineKey);
+    } else if (action === 'admin-confirm-payment') {
+      adminConfirmPayment(trigger.dataset.orderId);
+    } else if (action === 'admin-advance-order') {
+      adminAdvanceOrderStatus(trigger.dataset.invoice);
+    } else if (action === 'admin-cancel-order') {
+      adminCancelOrder(trigger.dataset.orderId);
+    } else if (action === 'admin-edit-product') {
+      openProductEditForm(trigger.dataset.productId);
+    } else if (action === 'admin-toggle-product') {
+      toggleProductAvailability(trigger.dataset.productId);
+    } else if (action === 'admin-delete-product') {
+      deleteProduct(trigger.dataset.productId);
+    } else if (action === 'admin-restore-qris') {
+      adminRestoreQRIS(trigger.dataset.qrisPayload);
+    }
+  });
 
   bindTabs(document.querySelector('.category-tabs'), { filter: true });
   bindTabs(document.querySelector('.payment-tabs'));
@@ -2092,6 +2153,7 @@ function initRealtimeSync() {
       renderCategoryBadges();
       if (state.adminAuthenticated) renderAdminProductsTable();
     } else if (change.domain === 'orders') {
+      updateCartUI();
       updateOrderTrackerDockUI();
       if (state.adminAuthenticated) refreshAdminDashboard();
     } else if (change.domain === 'settings') {

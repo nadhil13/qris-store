@@ -261,6 +261,87 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "none"
+		},
+		{
+			"label": "Verify security and checkout repairs",
+			"type": "shell",
+			"command": "node --test tests/frontend-recovery.test.mjs tests/frontend-ui-recovery.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Check reservation reuse regression",
+			"type": "shell",
+			"command": "node --test tests/frontend-recovery.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify checkout resume integration",
+			"type": "shell",
+			"command": "node --test tests/frontend-recovery.test.mjs tests/frontend-ui-recovery.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify final checkout recovery",
+			"type": "shell",
+			"command": "node --test tests/frontend-recovery.test.mjs tests/frontend-ui-recovery.test.mjs",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify complete security checkout suite",
+			"type": "shell",
+			"command": "node --test tests/*.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node tests/run-inventory-redis.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node tests/run-tests.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager diff --check",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Verify content honesty",
+			"type": "shell",
+			"command": "node --test tests/content-honesty.test.mjs",
+			"group": "test"
+		},
+		{
+			"label": "Show original index fragments",
+			"type": "shell",
+			"command": "git --no-pager show HEAD:index.html | Select-String -Pattern 'brand-name|luxury-story|story-copy|section-kicker\">Tentang|</footer>|gsap.min|Hak Cipta|story-grid|container story' -Context 0,3"
+		},
+		{
+			"label": "Diff index html",
+			"type": "shell",
+			"command": "git --no-pager diff --no-color HEAD -- index.html | Out-File -Encoding utf8 $env:TEMP\\index-diff.txt; (Get-Content $env:TEMP\\index-diff.txt).Count; $env:TEMP"
+		},
+		{
+			"label": "Check HEAD script tags",
+			"type": "shell",
+			"command": "git --no-pager show HEAD:index.html | Select-String -Pattern 'scripts/vendor|main.css' | Out-File -Encoding utf8 $env:TEMP\\head-scripts.txt"
+		},
+		{
+			"label": "Cleanup and diff all",
+			"type": "shell",
+			"command": "Remove-Item -LiteralPath PRIVACY.md.new -ErrorAction SilentlyContinue; git --no-pager diff --no-color HEAD -- index.html styles/main.css sw.js DESIGN.md | Out-File -Encoding utf8 $env:TEMP\\all-diff.txt; git --no-pager status --short | Out-File -Encoding utf8 $env:TEMP\\status.txt"
+		},
+		{
+			"label": "Full suite to file",
+			"type": "shell",
+			"command": "& { node --test tests/*.test.mjs; \"EXIT1=$LASTEXITCODE\"; node tests/run-inventory-redis.mjs; \"EXIT2=$LASTEXITCODE\"; node tests/run-tests.mjs; \"EXIT3=$LASTEXITCODE\"; git --no-pager diff --check; \"EXIT4=$LASTEXITCODE\" } *>&1 | Out-File -Encoding utf8 $env:TEMP\\suite.txt"
+		},
+		{
+			"label": "Commit and push honesty and accessibility fixes",
+			"type": "shell",
+			"command": "git add -A; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager diff --cached --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git -c core.pager=cat commit -m 'Harden checkout security, honest storefront copy, privacy notice and accessibility fixes'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git push origin main; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; git --no-pager log -1 --oneline; git --no-pager status --short; git rev-parse HEAD; git ls-remote origin refs/heads/main"
 		}
 	]
 }

@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Atelier Nusantara: Butik Belanja Multi-Kategori | Makanan, Barang, Mode & Kriya</title>
   <meta name="description"
-    content="Platform belanja kurasi serbaguna: makanan gourmet, minuman artisan, busana kriya, peralatan gaya hidup, gadget, dan produk digital dengan sistem pembayaran QRIS dinamis otomatis.">
-  <link rel="stylesheet" href="styles/main.css?v=20261110-v8">
+    content="Toko online makanan, minuman, kriya, fashion, gadget meja, dan produk digital. Stok terlihat langsung, pembayaran lewat QRIS dengan nominal terisi otomatis, atau pesan lewat WhatsApp.">
+  <link rel="stylesheet" href="styles/main.css?v=20261111-v9">
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {
@@ -26,7 +26,7 @@
     "@context": "https://schema.org",
     "@type": "OnlineStore",
     "name": "Atelier Nusantara",
-    "description": "Butik kurasi multi-kategori: makanan gourmet, kopi artisan, karya keramik, busana etis, gadget meja, dan voucher eksklusif dengan pembayaran QRIS dinamis.",
+    "description": "Toko online makanan, minuman, kriya, fashion, gadget meja, dan produk digital dengan pembayaran QRIS dinamis.",
     "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
     "priceRange": "Rp 36.000 - Rp 500.000",
     "paymentAccepted": "QRIS, Mobile Banking, E-Wallet, WhatsApp",
@@ -47,6 +47,7 @@
 </head>
 
 <body>
+  <a href="#main-content" class="skip-link">Langsung ke konten utama</a>
 
   <!-- Site header / navigation -->
   <header class="site-header" id="site-header">
@@ -55,7 +56,7 @@
         <div class="brand-mark">AN</div>
         <div class="brand-title">
           <span class="brand-name">Atelier Nusantara</span>
-          <span class="brand-tagline">Kurasi Makanan, Barang, Mode & Kriya</span>
+          <span class="brand-tagline">Makanan, Minuman, Kriya & Fashion</span>
         </div>
       </div>
 
@@ -68,15 +69,6 @@
       </nav>
 
       <div class="nav-actions">
-        <button type="button" class="admin-login-btn" id="header-admin-btn" onclick="window.openAdminDashboardModal()"
-          aria-label="Panel Admin Toko" title="Masuk ke Dasbor Toko & QRIS (Username: admin)">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          <span>Admin</span>
-        </button>
-
         <div class="status-badge">
           <span class="beacon-dot" id="store-status-dot"></span>
           <span id="store-status-label" role="status">Buka (08:00 - 22:00)</span>
@@ -104,28 +96,28 @@
     </div>
   </header>
 
-  <main tabindex="-1">
+  <main id="main-content" tabindex="-1">
     <!-- Scroll-craft hero section -->
     <section class="hero-section" id="hero">
       <div class="container hero-grid">
         <div class="hero-editorial">
           <h1 class="hero-headline reveal-up">
-            Kurasi makanan, seduhan, dan kriya dalam <em>satu etalase tenang.</em>
+            Makanan, kopi, dan barang kriya <em>dalam satu keranjang.</em>
           </h1>
           <p class="hero-description reveal-up">
-            Setiap hidangan gourmet, seduhan kopi, dan karya perajin dipilih dengan bahan jujur dan konteks yang jelas. Pesan langsung dengan sistem QRIS dinamis yang mengunci nominal tagihan otomatis.
+            Pilih menu dan barang, lihat sisa stok sebelum checkout, lalu bayar dengan QRIS yang nominalnya sudah terisi. Stok Anda ditahan 10 menit selama menunggu pembayaran.
           </p>
 
           <div class="hero-actions reveal-up">
             <a href="#katalog" class="btn-primary">
-              <span>Jelajahi Koleksi</span>
+              <span>Lihat Katalog</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
               </svg>
             </a>
             <button type="button" class="btn-secondary" onclick="window.addToCart('prod-01')">
-              <span>+ Pesan Pilihan Chef</span>
+              <span>+ Pesan Wagyu Se’i</span>
             </button>
           </div>
 
@@ -133,7 +125,7 @@
 
         <div class="hero-visual">
           <div class="showcase-card">
-            <div class="showcase-tag">Pilihan Chef Hari Ini</div>
+            <div class="showcase-tag">Produk unggulan</div>
             <div class="showcase-img-wrap">
               <img src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80"
                 alt="Wagyu Se’i Sapi Asap Atelier Nusantara" width="800" height="600" fetchpriority="high"
@@ -144,8 +136,7 @@
                 <h2 class="showcase-title">Wagyu Se’i Sapi Asap</h2>
                 <span class="showcase-price">Rp 78.000</span>
               </div>
-              <p class="showcase-desc">Daging wagyu meltique asap kayu kosambi 12 jam, sambal lu’at kecombrang segar,
-                dan jasmine rice wangi.</p>
+              <p class="showcase-desc">Daging sapi asap kayu kosambi dengan sambal lu’at kecombrang dan nasi putih.</p>
               <button class="showcase-btn" onclick="window.addToCart('prod-01')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <path d="M12 5v14M5 12h14" />
@@ -210,7 +201,7 @@
 
               <select id="sort-select" class="sort-select" aria-label="Urutkan menu">
                 <option value="featured">Rekomendasi</option>
-                <option value="popular">Paling Populer</option>
+                <option value="popular">Favorit penjual dulu</option>
                 <option value="price-low">Harga: Rendah ke Tinggi</option>
                 <option value="price-high">Harga: Tinggi ke Rendah</option>
               </select>
@@ -224,6 +215,9 @@
           <h2 class="catalog-title">Menu & Karya Pilihan</h2>
           <span class="catalog-results-count" id="results-count">Menampilkan 12 menu & barang pilihan</span>
         </div>
+        <p class="demo-notice" data-demo-notice>
+          Katalog contoh. Deskripsi, asal bahan, dan foto dipakai untuk mencoba alur belanja dan belum diverifikasi oleh penjual.
+        </p>
 
         <!-- Dynamic Product Grid -->
         <div class="product-grid" id="product-grid">
@@ -236,40 +230,40 @@
     <section class="luxury-story reveal-section" id="filosofi">
       <div class="container story-grid">
         <div class="story-copy">
-          <span class="section-kicker">Tentang Atelier Nusantara</span>
-          <h2>Kurasi yang memberi ruang untuk memilih dengan lebih tenang.</h2>
+          <span class="section-kicker">Cara pesan</span>
+          <h2>Dari keranjang ke pembayaran dalam tiga langkah.</h2>
           <p>
-            Atelier Nusantara mempertemukan makanan gourmet, minuman artisan, kriya lokal, mode, gadget meja, dan produk digital dalam satu etalase. Kami menata setiap pilihan dengan konteks yang jujur, agar Anda dapat melihat bahan, karakter, harga, dan ketersediaan stok apa adanya.
+            Isi nama dan nomor WhatsApp, pilih pengiriman, lalu bayar dengan QRIS atau lanjutkan pesanan lewat WhatsApp. Harga, varian, dan sisa stok di halaman ini berasal dari data yang sama dengan yang dipakai saat checkout.
           </p>
           <div class="story-metrics">
             <div>
-              <strong>18+ Koleksi</strong>
-              <span>tersebar di 6 kategori kurasi</span>
+              <strong>6 kategori</strong>
+              <span>makanan, minuman, kriya, fashion, gadget, digital</span>
             </div>
             <div>
-              <strong>QRIS Dinamis</strong>
-              <span>nominal tagihan terkunci otomatis</span>
+              <strong>QRIS dinamis</strong>
+              <span>nominal tagihan terisi otomatis</span>
             </div>
             <div>
-              <strong>Admin Terpadu</strong>
-              <span>kontrol toko & ganti QRIS langsung</span>
+              <strong>Stok ditahan 10 menit</strong>
+              <span>selama Anda menyelesaikan pembayaran</span>
             </div>
           </div>
         </div>
 
         <div class="story-visual">
           <div class="curated-preview-card">
-            <span class="mini-label">Paket Pilihan Hari Ini</span>
-            <h3>Slow Morning Set</h3>
+            <span class="mini-label">Contoh produk</span>
+            <h3>Wagyu Se’i Sapi Asap</h3>
             <p style="font-size: 0.85rem; color: var(--ink-secondary); margin: 6px 0 12px; line-height: 1.5;">
-              Kombinasi Wagyu Se’i Sapi Asap dengan seduhan Uji Matcha Cold Whisk Espresso dan Cangkir Stoneware Kasongan.
+              Buka detail untuk melihat varian sambal, sisa stok, dan harga sebelum menambahkannya ke keranjang.
             </p>
             <div class="price-row" style="margin-bottom: 12px;">
-              <span>Mulai dari</span>
-              <strong>Rp 118.000</strong>
+              <span>Harga</span>
+              <strong>Rp 78.000</strong>
             </div>
             <button type="button" class="btn-primary" style="width: 100%; justify-content: center;" onclick="window.openQuickView('prod-01')">
-              <span>Lihat Detail Pilihan</span>
+              <span>Lihat Detail Wagyu Se’i</span>
             </button>
           </div>
         </div>
@@ -280,15 +274,15 @@
     <section class="final-cta reveal-section">
       <div class="container cta-shell">
         <div class="cta-copy">
-          <span class="section-kicker dark">Koleksi Lengkap Nusantara</span>
-          <h2>Koleksi pilihan untuk kebutuhan santap dan ruang kerja Anda.</h2>
+          <span class="section-kicker dark">Siap memesan</span>
+          <h2>Makan siang, kopi, dan perlengkapan meja kerja dalam satu pesanan.</h2>
           <p>
-            Dari sajian asap kayu kosambi dan seduhan teh dataran tinggi, hingga numpad kayu jati dan keramik bakar suhu tinggi. Semua pesanan diproses langsung dengan struk digital dan pelacak status pesanan transparan.
+            Setiap pesanan mendapat nomor invoice dan struk digital. Status pesanan tersimpan di browser Anda, jadi Anda bisa membukanya lagi setelah halaman dimuat ulang.
           </p>
         </div>
         <div class="cta-actions">
           <a href="#katalog" class="btn-primary">
-            <span>Belanja Sekarang</span>
+            <span>Pilih Produk</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="5" y1="12" x2="19" y2="12" />
               <polyline points="12 5 19 12 12 19" />
@@ -357,16 +351,20 @@
           <span>Data Pemesan & Pengiriman</span>
         </div>
         <div class="customer-fields-grid">
-          <label for="customer-name" class="sr-only">Nama Lengkap Pemesan</label>
-          <input type="text" class="customer-input-field" id="customer-name" placeholder="Nama Lengkap Pemesan"
-            aria-label="Nama Lengkap Pemesan" oninput="window.updateCustomerInfo()" />
-          <label for="customer-phone" class="sr-only">No. WhatsApp / HP</label>
-          <input type="tel" class="customer-input-field" id="customer-phone" placeholder="No. WhatsApp / HP (08...)"
-            aria-label="No. WhatsApp / HP" oninput="window.updateCustomerInfo()" />
-          <label for="customer-address" class="sr-only">Alamat Pengantaran / Catatan Lokasi</label>
+          <label for="customer-name" class="customer-field-label">Nama pemesan</label>
+          <input type="text" class="customer-input-field" id="customer-name" placeholder="Nama lengkap"
+            autocomplete="name" aria-describedby="checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+          <label for="customer-phone" class="customer-field-label">Nomor WhatsApp</label>
+          <input type="tel" class="customer-input-field" id="customer-phone" placeholder="08..."
+            autocomplete="tel" inputmode="tel" aria-describedby="checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+          <label for="customer-address" class="customer-field-label">Alamat atau catatan lokasi</label>
           <input type="text" class="customer-input-field" id="customer-address"
-            placeholder="Alamat Pengantaran / Catatan Lokasi" aria-label="Alamat Pengantaran / Catatan Lokasi" oninput="window.updateCustomerInfo()" />
+            placeholder="Kosongkan jika ambil di toko" autocomplete="street-address" aria-describedby="checkout-privacy-note" oninput="window.updateCustomerInfo()" />
         </div>
+        <p class="checkout-privacy-note" id="checkout-privacy-note">
+          Nama, nomor, dan alamat dikirim ke server toko untuk membuat pesanan dan menahan stok, lalu dipakai penjual untuk menghubungi dan mengantar pesanan Anda.
+          <a href="#privasi" onclick="window.closeCartDrawer()">Baca cara data disimpan</a>
+        </p>
 
         <div style="margin-top: 10px;">
           <div class="cart-section-title" style="margin-bottom: 4px;">
@@ -389,8 +387,8 @@
 
       <!-- Voucher Promo -->
       <div class="voucher-row">
-        <label for="voucher-input" class="sr-only">Kode Voucher Promo</label>
-        <input type="text" class="voucher-input" id="voucher-input" placeholder="Kode Promo (RASAHEMAT)" aria-label="Kode Promo Voucher" />
+        <label for="voucher-input" class="sr-only">Kode voucher</label>
+        <input type="text" class="voucher-input" id="voucher-input" placeholder="Kode voucher (contoh: RASAHEMAT)" autocomplete="off" />
         <button type="button" class="voucher-btn" onclick="window.applyVoucher()">Pasang</button>
       </div>
 
@@ -432,6 +430,7 @@
         </svg>
         <span>Pesan Langsung via WhatsApp</span>
       </button>
+      <a id="checkout-whatsapp-link" href="https://wa.me/" target="_blank" rel="noopener noreferrer" hidden>Buka WhatsApp untuk reservasi ini (pesan belum dikirim)</a>
     </div>
   </aside>
 
@@ -676,8 +675,7 @@
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
       <div class="modal-header">
         <span
-          style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--accent-terracotta);">Kurasi
-          Detail Menu</span>
+          style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--accent-terracotta);">Detail produk</span>
         <button class="drawer-close" onclick="window.closeQuickView()" aria-label="Tutup detail produk">&times;</button>
       </div>
 
@@ -1166,14 +1164,6 @@
       </div>
       <span>Keranjang</span>
     </button>
-    <button type="button" class="mobile-nav-item" id="mob-nav-admin" onclick="window.openAdminDashboardModal()"
-      title="Buka Dasbor Admin Toko">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </svg>
-      <span>Admin</span>
-    </button>
   </nav>
 
   <!-- Footer -->
@@ -1184,18 +1174,20 @@
       <div style="font-family: var(--font-serif); font-size: 1.4rem; font-weight: 700; color: var(--ink-primary);">
         Atelier Nusantara</div>
       <p style="font-size: 0.88rem; color: var(--ink-tertiary); max-width: 500px;">
-        Kurasi cita rasa dan estetika kriya tanah air. Dihidangkan dengan integritas, diracik dengan presisi.
+        Makanan, minuman, kriya, fashion, gadget meja, dan produk digital. Bayar dengan QRIS atau pesan lewat WhatsApp.
       </p>
-      <div>
-        <button type="button" onclick="window.openAdminDashboardModal()"
-          style="background: transparent; border: 1.5px solid var(--brand-forest); border-radius: 999px; padding: 6px 16px; font-size: 0.82rem; font-weight: 700; color: var(--brand-forest); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s ease;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span>Masuk Panel Admin Toko</span>
-        </button>
-      </div>
-      <div
-        style="font-size: 0.8rem; color: var(--ink-tertiary); border-top: 1px solid var(--border-hairline); padding-top: 20px; width: 100%;">
-        &copy; 2026 Atelier Nusantara. Hak Cipta Dilindungi.
+      <section class="privacy-section" id="privasi" aria-labelledby="privasi-title" tabindex="-1">
+        <h2 id="privasi-title">Privasi data pesanan</h2>
+        <ul>
+          <li>Nama, nomor WhatsApp, alamat, isi keranjang, dan total tagihan disimpan di server toko (database Redis/KV) sebagai catatan pesanan. Penjual memakainya untuk konfirmasi pembayaran dan pengiriman.</li>
+          <li>Keranjang dan daftar pesanan Anda juga disimpan di browser ini (localStorage). Hapus data situs di browser untuk menghapus salinan lokal.</li>
+          <li>Jika memilih WhatsApp, ringkasan pesanan dan data Anda dikirim ke WhatsApp dan tunduk pada kebijakan WhatsApp.</li>
+          <li>Untuk meminta penghapusan data pesanan di server, hubungi penjual lewat WhatsApp toko.</li>
+        </ul>
+      </section>
+      <div class="footer-meta">
+        <span>&copy; 2026 Atelier Nusantara. Hak Cipta Dilindungi.</span>
+        <a href="?admin=1" class="footer-staff-link">Akses penjual</a>
       </div>
     </div>
   </footer>
@@ -1205,7 +1197,7 @@
   <script src="scripts/vendor/jsqr.js"></script>
   <script src="scripts/vendor/gsap.min.js"></script>
   <script src="scripts/vendor/ScrollTrigger.min.js"></script>
-  <script type="module" src="scripts/app.js?v=20261110-v9"></script>
+  <script type="module" src="scripts/app.js?v=20261111-v10"></script>
 </body>
 
 </html>

@@ -7,8 +7,8 @@
 // record carries an updatedAt version and the newer copy wins on merge.
 
 import { PRODUCTS } from './catalog.js';
-import { applyExpiry } from './orders.js';
-import { inventoryAdminHeaders, hasInventoryAdminToken, rejectUnauthorized } from './auth.js';
+import { applyExpiry, STATUS } from './orders.js';
+import { inventoryAdminHeaders, hasInventoryAdminToken, rejectUnauthorized, onAdminLogout } from './auth.js';
 
 export const DEMO_STATIC_QRIS = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
 
@@ -156,9 +156,13 @@ export function setInventoryStock(snapshot) {
   return true;
 }
 
-export function getProducts() {
+export function getCatalogProducts() {
   const saved = read(KEYS.products, null);
-  const products = Array.isArray(saved) ? saved : PRODUCTS;
+  return structuredClone(Array.isArray(saved) ? saved : PRODUCTS);
+}
+
+export function getProducts() {
+  const products = getCatalogProducts();
   return products.map(p => !inventoryStock ? { ...p }
     : Object.hasOwn(inventoryStock.products, p.id)
       ? { ...p, stock: inventoryStock.products[p.id] }
@@ -172,6 +176,7 @@ export function getCatalogVersion() {
 }
 
 export function saveProducts(list, detail = {}) {
+  if (detail.fromCloud && detail.catalogUpdatedAt && Number(detail.catalogUpdatedAt) < getCatalogVersion()) return getCatalogProducts();
   const metadata = read(KEYS.products, PRODUCTS);
   const safeList = (Array.isArray(list) ? list : []).map(p => {
     const original = metadata.find(old => old.id === p.id);
@@ -199,7 +204,7 @@ export function applyRemoteCatalog(remote) {
   const localVersion = getCatalogVersion();
   if (!(remoteTime > localVersion)) return null;
 
-  const current = getProducts();
+  const current = getCatalogProducts();
   const contentChanged = JSON.stringify(remote.products) !== JSON.stringify(current);
   write(KEYS.catalogVersion, remoteTime);
   if (!contentChanged) return null;
@@ -224,9 +229,40 @@ export function getProduct(id) {
 
 // Orders
 
+function ownedIds() {
+  const reservations = read('an.inventory.reservations.v1', []);
+  return new Set([...getMyOrderIds(), ...(Array.isArray(reservations) ? reservations.map(r => r?.payload?.id) : [])]);
+}
 export function getOrders() {
   const list = read(KEYS.orders, []);
-  return Array.isArray(list) ? list : [];
+  if (!Array.isArray(list)) return [];
+  const ids = ownedIds();
+  const owned = list.filter(o => ids.has(o.id));
+  if (owned.length !== list.length) write(KEYS.orders, owned);
+  return owned;
+}
+const adminOrders = new Map();
+onAdminLogout(() => { adminOrders.clear(); announce('orders', { type: 'admin-logout' }); });
+export const getAdminOrders = () => hasInventoryAdminToken()
+  ? [...new Map([...getOrders(), ...adminOrders.values()].map(o => [o.id, o])).values()] : [];
+export const getAdminOrder = id => getAdminOrders().find(o => o.id === id) || null;
+export function acceptsOrder(current, next) {
+  if (!Object.values(STATUS).includes(next?.status)) return false;
+  if (!current) return true;
+  const a = Number(current.revision ?? current.updatedAt ?? 0);
+  const b = Number(next.revision ?? next.updatedAt ?? 0);
+  if (b < a) return false;
+  const rank = s => [STATUS.AWAITING, STATUS.PAID, STATUS.PROCESSING, STATUS.READY, STATUS.COMPLETED].indexOf(s);
+  if ([STATUS.COMPLETED, STATUS.CANCELLED, STATUS.EXPIRED].includes(current.status) && next.status !== current.status) return false;
+  if (rank(current.status) > rank(next.status) && next.status !== STATUS.CANCELLED) return false;
+  return b !== a || next.status === current.status || rank(next.status) > rank(current.status) || next.status === STATUS.CANCELLED || (current.status === STATUS.AWAITING && next.status === STATUS.EXPIRED);
+}
+export function saveAdminOrder(order) {
+  const current = adminOrders.get(order.id);
+  if (!acceptsOrder(current, order)) return current || null;
+  adminOrders.set(order.id, structuredClone(order));
+  announce('orders', { id: order.id, type: 'admin-inventory' });
+  return order;
 }
 
 export function getOrder(id) {
@@ -237,6 +273,9 @@ export function saveOrder(order, detail = {}) {
   const list = getOrders();
   if (!detail.fromCloud && (authoritative(order) || authoritative(list.find(o => o.id === order.id)))) return null;
   const index = list.findIndex((o) => o.id === order.id);
+  if (!acceptsOrder(list[index], order)) return list[index] || null;
+  if (!detail.fromCloud) rememberMyOrder(order.id);
+  if (!ownedIds().has(order.id)) return detail.fromCloud ? saveAdminOrder(order) : null;
   if (index >= 0) list[index] = order;
   else list.unshift(order);
   write(KEYS.orders, list);
@@ -320,6 +359,7 @@ export function mergeRemoteOrders(remoteList) {
     const mine = byId.get(remote.id);
     if (authoritative(remote) || authoritative(mine)) return;
     remoteIds.add(remote.id);
+    if (!mine && !ownedIds().has(remote.id)) return;
     if (!mine) {
       byId.set(remote.id, remote);
       added.push(remote);
@@ -433,11 +473,15 @@ export function sharedVersion(settings) {
 
 // Saves settings that every visitor must see and publishes them. Each save
 // gets a fresh version so a later poll cannot roll it back.
+let allocatedSettingsVersion = 0;
+let allocatedCatalogVersion = 0;
 export async function saveSharedSettings(patchOrFn, detail = {}) {
   const s = getSettings();
   const patched = typeof patchOrFn === 'function' ? patchOrFn(structuredClone(s)) : { ...s, ...patchOrFn, store: { ...s.store, ...(patchOrFn?.store || {}) } };
-  const next = mergeSettings({ ...patched, sharedUpdatedAt: Math.max(Date.now(), sharedVersion(s) + 1) });
+  allocatedSettingsVersion = Math.max(Date.now(), sharedVersion(s) + 1, allocatedSettingsVersion + 1);
+  const next = mergeSettings({ ...patched, sharedUpdatedAt: allocatedSettingsVersion });
   if (canReachNetwork() && !await pushSettingsToCloud(next)) throw Error('Pengaturan belum tersimpan di server. Periksa token dan koneksi lalu coba lagi.');
+  if (sharedVersion(getSettings()) > sharedVersion(next)) return getSettings();
   return saveSettings(next, detail);
 }
 
@@ -447,7 +491,7 @@ export async function publishProducts(products, detail = {}) {
     const original = metadata.find(old => old.id === p.id);
     return inventoryStock && original ? { ...p, stock: original.stock } : { ...p };
   });
-  const version = Math.max(Date.now(), getCatalogVersion() + 1);
+  const version = allocatedCatalogVersion = Math.max(Date.now(), getCatalogVersion() + 1, allocatedCatalogVersion + 1);
   if (canReachNetwork() && !await pushCatalogToCloud(safeList, version)) throw Error('Katalog belum tersimpan di server. Periksa token dan koneksi lalu coba lagi.');
   return saveProducts(safeList, { ...detail, fromCloud: true, catalogUpdatedAt: version });
 }
@@ -532,7 +576,7 @@ export async function syncSettingsWithCloud() {
   const remoteCatalogVersion = Number(remote?.catalogUpdatedAt || 0);
   const localCatalogVersion = getCatalogVersion();
   if (hasInventoryAdminToken() && localCatalogVersion > remoteCatalogVersion) {
-    pushCatalogToCloud(getProducts(), localCatalogVersion);
+    pushCatalogToCloud(getCatalogProducts(), localCatalogVersion);
   }
 
   const localSettings = getSettings();

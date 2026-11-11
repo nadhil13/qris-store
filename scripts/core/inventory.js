@@ -1,7 +1,7 @@
-import { saveOrder, setInventoryStock, getOrders } from './store.js';
+import { saveOrder, saveAdminOrder, rememberMyOrder, setInventoryStock, getOrders } from './store.js';
 
 const KEY = 'an.inventory.reservations.v1';
-import { hasInventoryAdminToken, inventoryAdminHeaders, rejectUnauthorized } from './auth.js';
+import { hasInventoryAdminToken, getAdminSessionVersion, inventoryAdminHeaders, rejectUnauthorized } from './auth.js';
 export { hasInventoryAdminToken, setInventoryAdminToken } from './auth.js';
 let reserving = false;
 let syncing = false;
@@ -13,8 +13,9 @@ function durableStorage() {
   return storage;
 }
 function getReservations() {
-  try { return JSON.parse(durableStorage().getItem(KEY) || '[]'); } catch { return []; }
+  try { const records = JSON.parse(durableStorage().getItem(KEY) || '[]'); return Array.isArray(records) ? records.filter(r => r?.payload?.id && r.payload.capability) : []; } catch { return []; }
 }
+export const getPendingReservation = () => structuredClone(getReservations().find(r => r.pending) || null);
 function persist(records) {
   const storage = durableStorage();
   const raw = JSON.stringify(records);
@@ -28,17 +29,22 @@ function randomHex(bytes) {
 async function request(action, { body, query = {}, admin = false } = {}) {
   if (globalThis.window?.location?.protocol === 'file:') throw Error('Reservasi tidak didukung pada demo file. Gunakan server HTTP.');
   if (admin && !hasInventoryAdminToken()) throw Error('Token admin backend diperlukan. Masuk melalui formulir admin.');
+  const sessionVersion = getAdminSessionVersion();
   const url = body ? '/api/inventory' : `/api/inventory?${new URLSearchParams({ action, ...query })}`;
   const response = await fetch(url, {
     method: body ? 'POST' : 'GET', cache: 'no-store',
     headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(admin ? inventoryAdminHeaders() : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(8000)
   });
+  if (admin && sessionVersion !== getAdminSessionVersion()) throw Error('Sesi admin berubah. Masuk kembali.');
   rejectUnauthorized(response);
   const result = await response.json();
+  if (admin && response.status !== 401 && sessionVersion !== getAdminSessionVersion()) throw Error('Sesi admin berubah. Masuk kembali.');
   if (!response.ok || result.ok !== true) {
     const error = Error(result.code || 'Reservasi gagal. Coba lagi dengan pesanan yang sama.');
-    error.definitive = response.status >= 400 && response.status < 500;
+    error.code = result.code;
+    error.status = response.status;
+    error.definitive = response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status);
     throw error;
   }
   if (action === 'stock' || action === 'adjust') {
@@ -47,8 +53,11 @@ async function request(action, { body, query = {}, admin = false } = {}) {
   return result;
 }
 function accept(order) {
-  if (!order?.id || !order.status || !Array.isArray(order.items) || !order.totals) throw Error('Respons pesanan tidak valid. Coba lagi.');
-  return saveOrder({ ...order, inventory: true }, { fromCloud: true, type: 'inventory' });
+  if (!order?.id || !['awaiting_payment','paid','processing','ready','completed','expired','cancelled'].includes(order.status) || !Array.isArray(order.items) || !order.totals) throw Error('Respons pesanan tidak valid. Coba lagi.');
+  const owned = getReservations().some(r => r.payload.id === order.id);
+  if (owned) rememberMyOrder(order.id);
+  const next = { ...order, inventory: true };
+  return owned ? saveOrder(next, { fromCloud: true, type: 'inventory' }) : saveAdminOrder(next);
 }
 export async function reserveInventory(input) {
   if (reserving) throw Error('Reservasi sedang diproses.');
@@ -58,6 +67,20 @@ export async function reserveInventory(input) {
     const signature = JSON.stringify(input);
     let record = records.find(r => r.pending);
     if (record && record.signature !== signature) throw Error('Reservasi sebelumnya belum pasti. Coba lagi dengan keranjang dan data pemesan yang sama.');
+    if (!record) {
+      const known = new Map(getOrders().map(order => [order.id, order]));
+      const existing = records.find(r => r.signature === signature && known.get(r.payload.id)?.status === 'awaiting_payment');
+      if (existing) {
+        const recovered = await refreshInventoryOrder(existing.payload.id);
+        if (recovered.status === 'awaiting_payment') return recovered;
+      }
+    }
+    if (record) {
+      try { return await refreshInventoryOrder(record.payload.id); }
+      catch (error) {
+        if (!(error.status === 404 && error.code === 'ORDER_NOT_FOUND')) throw error;
+      }
+    }
     if (!record) {
       record = { signature, pending: true, payload: { action: 'reserve', id: `inv_${randomHex(16)}`, capability: randomHex(32), ...input } };
       records.push(record);
@@ -88,7 +111,13 @@ export async function refreshInventoryStock() { return request('stock'); }
 export async function refreshInventoryOrder(id) {
   const record = getReservations().find(r => r.payload.id === id);
   if (!record) throw Error('Kapabilitas pesanan tidak tersedia.');
-  return accept((await request('order', { query: { id, capability: record.payload.capability } })).order);
+  const result = await request('order', { query: { id, capability: record.payload.capability } });
+  if (result.order?.id !== id) throw Error('Respons pesanan tidak cocok.');
+  const order = accept(result.order);
+  const records = getReservations();
+  const current = records.find(r => r.payload.id === id);
+  if (current) { current.pending = false; persist(records); }
+  return order;
 }
 export async function listInventoryOrders() {
   const result = await request('list', { admin: true });

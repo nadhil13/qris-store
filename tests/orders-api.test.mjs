@@ -46,32 +46,15 @@ async function request(method, incoming, headers = {}) {
 }
 
 for (const prefix of ['KV_REST_API', 'UPSTASH_REDIS_REST']) {
-  test(`${prefix}: POST submits one EVAL command using the legacy key and incoming order`, async () => {
+  test(`${prefix}: durable legacy POST is disabled even for an authenticated admin`, async () => {
     configureKV(prefix);
-    const calls = [];
-    globalThis.fetch = async (...args) => {
-      calls.push(args);
-      return { ok: true, json: async () => ({ result: 1 }) };
-    };
-    const incoming = order();
-    const response = await request('POST', incoming);
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body, { ok: true, storage: 'kv', id: 'order-1' });
-    assert.equal(calls.length, 1, 'No client-side GET/SET read-modify-write');
-    const [url, options] = calls[0];
-    assert.equal(url, 'https://redis.example');
-    assert.equal(options.method, 'POST');
-    assert.equal(options.headers.Authorization, 'Bearer test-token');
-    assert.equal(options.headers['Content-Type'], 'application/json');
-    assert.ok(options.signal instanceof AbortSignal);
-    const [command, script, keyCount, key, payload, limit] = JSON.parse(options.body);
-    assert.equal(command, 'EVAL');
-    assert.equal(typeof script, 'string');
-    assert.ok(script.length > 0);
-    assert.equal(keyCount, 1);
-    assert.equal(key, 'atelier_orders');
-    assert.deepEqual(JSON.parse(payload), incoming);
-    assert.equal(Number(limit), 200);
+    process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; throw new Error('Must not write legacy orders'); };
+    const response = await request('POST', order(), { authorization: 'Bearer admin-secret' });
+    assert.equal(response.statusCode, 409);
+    assert.deepEqual(response.body, { ok: false, code: 'LEGACY_ORDER_WRITES_DISABLED' });
+    assert.equal(calls, 0);
   });
 }
 
@@ -112,17 +95,19 @@ test('KV GET reads the existing serialized array', async () => {
     assert.equal(url, 'https://redis.example/get/atelier_orders');
     return { ok: true, json: async () => ({ result: JSON.stringify(existing) }) };
   };
-  assert.deepEqual((await request('GET')).body, { ok: true, storage: 'kv', orders: existing });
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+  assert.deepEqual((await request('GET', undefined, { authorization: 'Bearer admin-secret' })).body, { ok: true, storage: 'kv', orders: existing });
 });
 
 test('a missing KV key returns an empty list, never process memory', async () => {
   await request('POST', order());
   configureKV();
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: null }) });
-  assert.deepEqual((await request('GET')).body, { ok: true, storage: 'kv', orders: [] });
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+  assert.deepEqual((await request('GET', undefined, { authorization: 'Bearer admin-secret' })).body, { ok: true, storage: 'kv', orders: [] });
 });
 
-for (const method of ['GET', 'POST']) {
+for (const method of ['GET']) {
   for (const failure of ['HTTP', 'Redis', 'network', 'invalid JSON', 'invalid result']) {
     test(`${method}: configured KV ${failure} failure returns 503 without memory success`, async () => {
       const prior = order({ id: 'memory-only' });
@@ -141,7 +126,8 @@ for (const method of ['GET', 'POST']) {
           }
         };
       };
-      const response = await request(method, order());
+      process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+      const response = await request(method, order(), { authorization: 'Bearer admin-secret' });
       assert.equal(response.statusCode, 503);
       assert.equal(response.body.ok, false);
       assert.equal(response.body.storage, undefined);
@@ -152,12 +138,13 @@ for (const method of ['GET', 'POST']) {
   }
 }
 
-test('Redis stale/no-op acknowledgement is a durable success', async () => {
+test('durable legacy POST cannot fall back to previously populated memory', async () => {
+  await request('POST', order());
   configureKV();
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ result: 0 }) });
-  const response = await request('POST', order());
-  assert.equal(response.statusCode, 200);
-  assert.equal(response.body.storage, 'kv');
+  assert.equal((await request('POST', order({ id: 'blocked' }))).statusCode, 409);
+  delete process.env.KV_REST_API_URL;
+  delete process.env.KV_REST_API_TOKEN;
+  assert.deepEqual((await request('GET')).body.orders, [order()]);
 });
 
 for (const productionEnv of ['NODE_ENV', 'VERCEL_ENV']) {

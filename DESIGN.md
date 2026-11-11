@@ -39,7 +39,7 @@ Current `:root` values:
 
   --status-success: #2d6246;
   --status-success-bg: #edf5ef;
-  --status-pending: #c08a38;
+  --status-pending: #8a5a12;
   --status-pending-bg: #faf0dc;
 
   --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;

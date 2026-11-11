@@ -13,6 +13,10 @@ const input = { items: [{ productId: 'one', qty: 1, variant: '', note: '' }], cu
 test('ambiguous reservation retries use durable identical payload and canonical response without legacy upload', async () => {
   const calls = [];
   globalThis.fetch = async (url, options) => {
+    if (options.method === 'GET') {
+      assert.match(url, /^\/api\/inventory\?action=order/);
+      return { ok: false, status: 404, json: async () => ({ ok: false, code: 'ORDER_NOT_FOUND' }) };
+    }
     assert.equal(url, '/api/inventory');
     const payload = JSON.parse(options.body); calls.push(payload);
     assert.ok([...data.values()].some(raw => raw.includes(payload.capability) && raw.includes(payload.id)));

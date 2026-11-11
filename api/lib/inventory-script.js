@@ -7,15 +7,27 @@ local function decode(raw)
   if not ok or type(value) ~= 'table' then error('Invalid stored JSON') end
   return value
 end
-local arrayKeys = {items=true,timeline=true}
-local function encode(value, key)
+local fields = {
+  state={stock='map',holds='holds',orders='records'},
+  record={order='order',quantities='map'},
+  hold={quantities='map'},
+  order={items='items',timeline='timeline'},
+  response={order='order',orders='orderList',stock='snapshot'},
+  snapshot={products='map'}
+}
+local elements = {records='record',holds='hold',orderList='order'}
+local arrays = {items=true,timeline=true,orderList=true}
+local function encode(value, context)
   if type(value) ~= 'table' then return cjson.encode(value) end
   local parts = {}
-  if arrayKeys[key] or (#value > 0) or (key=='orders' and next(value)==nil) then
-    for _, v in ipairs(value) do table.insert(parts, encode(v)) end
+  if arrays[context] or (context==nil and #value>0) then
+    for _, v in ipairs(value) do table.insert(parts, encode(v,elements[context])) end
     return '[' .. table.concat(parts, ',') .. ']'
   end
-  for k,v in pairs(value) do table.insert(parts,cjson.encode(tostring(k)) .. ':' .. encode(v,k)) end
+  for k,v in pairs(value) do
+    local child=elements[context] or (fields[context] and fields[context][k])
+    table.insert(parts,cjson.encode(tostring(k)) .. ':' .. encode(v,child))
+  end
   return '{' .. table.concat(parts, ',') .. '}'
 end
 local function integer(n, max) return type(n)=='number' and n>=0 and n<=max and n==math.floor(n) end
@@ -77,8 +89,9 @@ local function run()
     end
   end
   local function transition(order,status,note)
-    order.status=status; order.updatedAt=now
-    table.insert(order.timeline,{status=status,at=now,by='server',note=note or ''})
+    local updatedAt=math.max(now,(tonumber(order.updatedAt) or 0)+1)
+    order.status=status; order.updatedAt=updatedAt
+    table.insert(order.timeline,{status=status,at=updatedAt,by='server',note=note or ''})
   end
   for i=1,math.min(#expired,RECLAIM_LIMIT) do
     local id=expired[i]
@@ -112,7 +125,7 @@ local function run()
     if #expired>RECLAIM_LIMIT then return fail('RECLAIM_REQUIRED',503) end
     if input.action=='reserve' then
       if count>=RECORD_LIMIT then return fail('ORDER_CAPACITY_REACHED',503) end
-      if settings.store and settings.store.isOpen==false then return fail('STORE_CLOSED') end
+      if type(settings.store)=='table' and settings.store.isOpen==false then return fail('STORE_CLOSED') end
       local items,quantities={},{}
       local subtotal,itemCount,digitalOnly=0,0,true
       local seen={}
@@ -155,7 +168,9 @@ local function run()
       local packaging=(not digitalOnly and subtotal>0) and input.commerce.packagingFee or 0
       local shippingCost=subtotal>0 and shipping.price or 0
       local totals={itemCount=itemCount,subtotal=subtotal,discount=discount,shippingCost=shippingCost,packaging=packaging,total=math.max(0,subtotal-discount+shippingCost+packaging),digitalOnly=digitalOnly}
-      local order={id=input.id,invoice='AN' .. tostring(now) .. '-' .. tostring(state.sequence+1),createdAt=now,updatedAt=now,expiresAt=now+600000,status='awaiting_payment',items=items,totals=totals,voucherCode=input.voucherCode,customer=input.customer,shipping=shipping,payment={method=input.paymentMethod,payload='',paidAt=cjson.null,confirmedBy=cjson.null},timeline={{status='awaiting_payment',at=now,by='pelanggan'}}}
+      local payload=''
+      if type(settings.qris)=='table' and type(settings.qris.payload)=='string' then payload=settings.qris.payload end
+      local order={id=input.id,invoice='AN' .. tostring(now) .. '-' .. tostring(state.sequence+1),createdAt=now,updatedAt=now,expiresAt=now+600000,status='awaiting_payment',items=items,totals=totals,voucherCode=input.voucherCode,customer=input.customer,shipping=shipping,payment={method=input.paymentMethod,payload=payload,paidAt=cjson.null,confirmedBy=cjson.null},timeline={{status='awaiting_payment',at=now,by='pelanggan'}}}
       for id,qty in pairs(quantities) do if state.stock[id]~=cjson.null then state.stock[id]=state.stock[id]-qty end end
       state.sequence=state.sequence+1
       state.orders[input.id]={order=order,capabilityHash=input.capabilityHash,fingerprint=input.fingerprint,sequence=state.sequence,quantities=quantities}
@@ -205,13 +220,13 @@ local function run()
     return success(order)
   end
   local result=execute()
-  local encodedState=encode(state)
-  local encodedResult=encode(result)
+  local encodedState=encode(state,'state')
+  local encodedResult=encode(result,'response')
   redis.call('SET',KEYS[1],encodedState)
   return encodedResult
 end
 local ok,result=pcall(run)
 if not ok then return cjson.encode(fail('INVENTORY_STATE_INVALID',503)) end
-if type(result)=='table' then return encode(result) end
+if type(result)=='table' then return encode(result,'response') end
 return result
 `;

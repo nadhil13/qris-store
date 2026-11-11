@@ -329,7 +329,7 @@ export default async function handler(req, res) {
   const storage = kv ? 'kv' : 'memory';
   const production = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
 
-  if (production && (req.method === 'GET' || req.method === 'POST')) {
+  if ((production || kv) && (req.method === 'GET' || req.method === 'POST')) {
     if (!kv) {
       res.status(503).json({ ok: false, code: 'STORAGE_UNAVAILABLE', error: 'Settings storage unavailable' });
       return;

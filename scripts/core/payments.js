@@ -11,7 +11,7 @@
 // { paid: true, reference } when money has arrived.
 
 import { convertStaticToDynamicQRIS } from '../qris.js';
-import { getOrder, updateOrder, moveStockForOrder, subscribe, sweepExpiredOrders } from './store.js';
+import { getOrder, getAdminOrder, updateOrder, moveStockForOrder, subscribe, sweepExpiredOrders } from './store.js';
 import { markPaid, cancelOrder, advanceOrder, isExpired, isPaidStatus, remainingMs, STATUS } from './orders.js';
 import { isInventoryOrder, transitionInventoryOrder, refreshInventoryOrder } from './inventory.js';
 
@@ -33,8 +33,15 @@ export function getPaymentProvider() {
   return provider;
 }
 
+export function paymentStaticPayload(order, fallback) {
+  if (isInventoryOrder(order)) {
+    if (!order?.payment?.payload) throw Error('Snapshot QRIS pesanan belum tersedia. Muat ulang pesanan atau hubungi toko.');
+    return order.payment.payload;
+  }
+  return fallback;
+}
 export function buildPaymentPayload(order, staticPayload) {
-  return convertStaticToDynamicQRIS(staticPayload, order.totals.total, order.invoice);
+  return convertStaticToDynamicQRIS(paymentStaticPayload(order, staticPayload), order.totals.total, order.invoice);
 }
 
 async function inventoryTransition(action, orderId, detail) {
@@ -43,7 +50,7 @@ async function inventoryTransition(action, orderId, detail) {
 }
 
 export function advancePaymentOrder(orderId) {
-  const order = getOrder(orderId);
+  const order = getAdminOrder(orderId) || getOrder(orderId);
   if (!order) return { ok: false, reason: 'not-found' };
   if (isInventoryOrder(order)) return inventoryTransition('advance', orderId, { expectedStatus: order.status });
   const next = advanceOrder(order, { by: 'admin_dashboard' });
@@ -51,7 +58,7 @@ export function advancePaymentOrder(orderId) {
 }
 
 export function confirmPayment(orderId, { by = 'admin', reference = '', now = Date.now() } = {}) {
-  const current = getOrder(orderId);
+  const current = getAdminOrder(orderId) || getOrder(orderId);
   if (!current) return { ok: false, reason: 'not-found' };
   if (isInventoryOrder(current)) return inventoryTransition('confirm', orderId, { reference });
   if (current.status !== STATUS.AWAITING) return { ok: false, reason: current.status, order: current };
@@ -66,7 +73,7 @@ export function confirmPayment(orderId, { by = 'admin', reference = '', now = Da
 }
 
 export function cancelOrderById(orderId, { by = 'admin', note = '' } = {}) {
-  const current = getOrder(orderId);
+  const current = getAdminOrder(orderId) || getOrder(orderId);
   if (!current) return { ok: false, reason: 'not-found' };
   if (isInventoryOrder(current)) return inventoryTransition('cancel', orderId, { note });
   const wasPaid = isPaidStatus(current.status);

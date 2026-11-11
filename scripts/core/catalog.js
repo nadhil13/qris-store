@@ -10,10 +10,10 @@ export const PRODUCTS = [
       "Best Seller",
       "Signature"
     ],
-    "desc": "Daging wagyu meltique diasap perlahan dengan kayu kosambi 12 jam, disajikan bersama sambal lu’at kecombrang dan tumis daun pepaya organik.",
-    "story": "Terinspirasi tradisi se’i Rote dan Kupang, menggunakan kayu kosambi liar NTT beraroma manis alami yang mengunci kelembutan serat marbling wagyu.",
+    "desc": "Daging sapi asap kayu kosambi, disajikan bersama sambal lu’at kecombrang, tumis daun pepaya, dan nasi putih.",
+    "story": "Resep mengikuti cara se’i Rote dan Kupang: daging diasap di atas bara kayu kosambi sampai permukaannya kemerahan.",
     "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=700&q=80",
-    "spec": "480 kkal",
+    "spec": "Porsi 1 orang",
     "origin": "Kupang x Wagyu Australia",
     "variantTitle": "Tingkat Kepedasan Sambal Lu’at",
     "variants": [
@@ -49,9 +49,9 @@ export const PRODUCTS = [
       "Vegetarian"
     ],
     "desc": "Roti sourdough ragi alami buatan sendiri, tumisan jamur portobello & shimeji lokal, krim bawang putih panggang, dan minyak truffle organik.",
-    "story": "Ragi sourdough dirawat aktif selama 4 tahun dengan fermentasi lambat 36 jam menghasilkan rongga roti renyah luar biasa dan ramah pencernaan.",
+    "story": "Adonan difermentasi lambat sebelum dipanggang, sehingga kulit roti renyah dan bagian dalamnya berongga.",
     "image": "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=700&q=80",
-    "spec": "360 kkal",
+    "spec": "Porsi 1 orang",
     "origin": "Sourdough 36h Ferment",
     "variantTitle": "Pilihan Tambahan Toping",
     "variants": [
@@ -84,7 +84,7 @@ export const PRODUCTS = [
     "desc": "Bebek lokal Bali dimasak lambat metode confit rempah 8 jam lalu digoreng garing keemasan. Dilengkapi trio sambal matah, mbe, dan embe Bali.",
     "story": "Menggunakan bebek muda dari Gianyar yang direndam dalam rempah base genep lengkap dan lemak bebek murni hingga dagingnya mudah lepas dari tulang.",
     "image": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=700&q=80",
-    "spec": "590 kkal",
+    "spec": "Porsi 1 orang",
     "origin": "Gianyar, Bali",
     "variantTitle": "Pilihan Sambal Pendamping",
     "variants": [
@@ -118,7 +118,7 @@ export const PRODUCTS = [
     "desc": "Tempe kedelai lokal non-GMO panggang glasir asam jawa karamel, alpukat mentega segar, rempah biji wijen di atas multigrain toast.",
     "story": "Mengangkat tempe warisan tradisional pengrajin Grobogan, dipadukan karamel asam jawa Purworejo yang gurih, asam, dan legit.",
     "image": "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=700&q=80",
-    "spec": "340 kkal",
+    "spec": "Porsi 1 orang",
     "origin": "Kedelai Lokal Grobogan",
     "variantTitle": "Pilihan Roti Dasar",
     "variants": [
@@ -152,7 +152,7 @@ export const PRODUCTS = [
     "desc": "Ceremonial grade Uji Matcha di-whisk segar saat dipesan, dipadukan espresso single-origin Bali Kintamani dan oat milk barista creamy.",
     "story": "Perpaduan harmonis teh hijau Uji Kyoto kelas seremoni dengan aroma citrus segar jeruk kintamani dari kopi pegunungan Bali.",
     "image": "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=700&q=80",
-    "spec": "140 kkal",
+    "spec": "1 gelas",
     "origin": "Uji Kyoto x Kintamani Bali",
     "variantTitle": "Pilihan Es & Tingkat Manis",
     "variants": [
@@ -189,7 +189,7 @@ export const PRODUCTS = [
     "desc": "Espresso Aceh Gayo washed, saus artisan butterscotch buatan rumah, garam laut Kusamba Bali, dan susu segar steam bertekstur beludru.",
     "story": "Karamel mentega dibuat perlahan dengan gula kelapa organik Kulon Progo dan sejumput kristal garam laut Kusamba yang mengangkat cita rasa manis gurih.",
     "image": "https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=700&q=80",
-    "spec": "190 kkal",
+    "spec": "1 gelas",
     "origin": "Gayo Arabica x Garam Kusamba",
     "variantTitle": "Suhu & Pilihan Susu",
     "variants": [
@@ -217,13 +217,13 @@ export const PRODUCTS = [
     "category": "minuman",
     "price": 36000,
     "tags": [
-      "Organic",
-      "Probiotik"
+      "Fermentasi",
+      "Bersoda"
     ],
-    "desc": "Fermentasi teh bunga rosella merah liar pegunungan, sereh wangi, madu hutan murni, dan soda alami berkilau menyegarkan.",
-    "story": "Difermentasi batch kecil selama 14 hari menghasilkan gelembung mikro alami yang kaya probiotik baik untuk kesehatan pencernaan.",
+    "desc": "Teh bunga rosella yang difermentasi bersama sereh wangi dan madu, bersoda alami dari proses fermentasi.",
+    "story": "Dibuat dalam batch kecil. Rasa asam segar rosella berpadu dengan aroma sereh.",
     "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=700&q=80",
-    "spec": "65 kkal",
+    "spec": "1 botol",
     "origin": "Rosella Lereng Merbabu",
     "variantTitle": "Tingkat Kesegaran Es",
     "variants": [
@@ -250,9 +250,9 @@ export const PRODUCTS = [
       "Artisan Tea"
     ],
     "desc": "Seduhan teh hitam bergamot organik, sirup lavender alami, busa susu vanila lembut Madagascar, dan kelopak bunga edible.",
-    "story": "Teh bergamot dataran tinggi Malabar dipadukan bunga lavender kering aromaterapi yang menenangkan pikiran di tengah kesibukan.",
+    "story": "Teh hitam bergamot dari Malabar dipadukan bunga lavender kering untuk aroma floral yang lembut.",
     "image": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=700&q=80",
-    "spec": "110 kkal",
+    "spec": "1 gelas",
     "origin": "Perkebunan Malabar Jawa Barat",
     "variantTitle": "Suhu & Penyajian",
     "variants": [
@@ -279,7 +279,7 @@ export const PRODUCTS = [
       "Kriya Lokal",
       "Limited"
     ],
-    "desc": "Cangkir keramik tanah liat lokal diputar tangan dan dibakar suhu tinggi 1200°C oleh perajin Kasongan. Tekstur matte alami, tahan panas & microwave.",
+    "desc": "Cangkir keramik tanah liat lokal diputar tangan dan dibakar suhu tinggi 1200°C oleh perajin Kasongan. Tekstur matte alami.",
     "story": "Setiap cangkir memiliki guratan unik jejak jemari perajin Yogyakarta. Didesain ergonomis pas dalam genggaman untuk momen menyeruput kopi santai.",
     "image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=700&q=80",
     "spec": "Kapasitas 280ml",
@@ -382,10 +382,10 @@ export const PRODUCTS = [
     "tags": [
       "Aromaterapi"
     ],
-    "desc": "Lilin aromaterapi 100% natural soy wax dalam toples kaca amber, dipadukan minyak atsiri kayu cendana NTT dan sentuhan hangat cengkeh.",
-    "story": "Menghadirkan kehangatan malam nusantara dengan sumbu katun bebas timbal, menghasilkan aroma menenangkan yang membantu tidur lelap.",
+    "desc": "Lilin aroma berbahan lilin kedelai dalam toples kaca amber, dengan wangi kayu cendana dan cengkeh.",
+    "story": "Memakai sumbu katun. Wangi kayu yang hangat untuk ruang kerja atau kamar.",
     "image": "https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&w=700&q=80",
-    "spec": "Durasi 45 Jam Bakar",
+    "spec": "Berat 200g",
     "origin": "Kupang x Banyuwangi",
     "variantTitle": "Pilihan Aroma Varian",
     "variants": [
@@ -452,7 +452,7 @@ export const PRODUCTS = [
     "desc": "Dompet saku 6 slot kartu dan 1 kompartemen uang kertas, dibuat dari kulit sapi samak nabati tanpa kromium yang menua dengan patina indah.",
     "story": "Dijahit tangan dengan benang lilin poliester tahan putus oleh perajin kulit Manding, Bantul. Semakin sering digunakan, kilau patinanya semakin elegan.",
     "image": "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=700&q=80",
-    "spec": "Kulit Sapi Asli 100%",
+    "spec": "Kulit samak nabati",
     "origin": "Sentra Kulit Manding, DIY",
     "variantTitle": "Pilihan Warna Kulit",
     "variants": [
@@ -551,7 +551,7 @@ export const PRODUCTS = [
       "Gift Card"
     ],
     "desc": "Voucher belanja digital dengan kode aktivasi instan otomatis setelah scan QRIS. Dapat digunakan untuk belanja makanan, kopi, maupun barang kriya.",
-    "story": "Hadiah sempurna tanpa repot untuk kerabat dan rekan kerja. Berlaku selamanya tanpa tanggal kedaluwarsa dan bisa digabung dengan promo lainnya.",
+    "story": "Bisa dikirim sebagai hadiah untuk kerabat atau rekan kerja. Masa berlaku dan aturan penggabungan dengan promo ditetapkan oleh toko.",
     "image": "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&w=700&q=80",
     "spec": "Digital Gift Code",
     "origin": "Atelier Digital Registry",
@@ -584,8 +584,8 @@ export const PRODUCTS = [
       "Interactive Pass",
       "Community"
     ],
-    "desc": "Akses eksklusif kelas interaktif 2 jam bersama Q-Grader bersertifikat internasional: belajar kalibrasi grind size, rasio pour over, dan sensori rasa.",
-    "story": "Setiap peserta mendapatkan e-sertifikat resmi, lembar panduan cupping digital, serta kupon diskon 20% untuk pembelian biji kopi single origin.",
+    "desc": "Kelas praktik 2 jam bersama pemandu kelas: mengatur ukuran gilingan, rasio pour over, dan mengenali rasa kopi.",
+    "story": "Peserta mendapat lembar panduan cupping digital. Detail fasilitas lain diumumkan toko sebelum jadwal kelas.",
     "image": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=700&q=80",
     "spec": "Durasi 120 Menit",
     "origin": "Atelier Coffee Lab",

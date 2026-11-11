@@ -245,6 +245,7 @@ let reserveCount = 0;
 let reservePayload;
 const cartBeforeReserve = JSON.stringify(app.state.cart);
 globalThis.fetch = async (url, options = {}) => {
+  if (url.startsWith('/api/inventory?action=order')) return { ok: false, status: 404, json: async () => ({ ok: false, code: 'ORDER_NOT_FOUND' }) };
   if (url !== '/api/inventory') return { ok: true, json: async () => ({}) };
   reserveCount++;
   reservePayload = JSON.parse(options.body);
@@ -262,9 +263,10 @@ assert.equal(JSON.stringify(app.state.cart), cartBeforeReserve, 'Failure preserv
 assert.equal(app.state.activeCheckoutOrderId, activeBeforeReserve);
 const originalPayload = reservePayload;
 const retry = app.openCheckoutModal();
+await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(reservePayload, originalPayload, 'Checkout retry keeps original capability and id');
 const now = Date.now();
-const canonical = { id: reservePayload.id, invoice: 'SERVER-INVOICE', createdAt: now, updatedAt: now, expiresAt: now + 600000, status: 'awaiting_payment', items: [], customer: { name: 'Buyer' }, totals: { total: 777, itemCount: 1 }, payment: { method: 'qris' }, timeline: [] };
+const canonical = { id: reservePayload.id, invoice: 'SERVER-INVOICE', createdAt: now, updatedAt: now, expiresAt: now + 600000, status: 'awaiting_payment', items: [], customer: { name: 'Buyer' }, totals: { total: 777, itemCount: 1 }, payment: { method: 'qris', payload: getSettings().qris.payload }, timeline: [] };
 respondReserve({ ok: true, json: async () => ({ ok: true, order: canonical }) });
 await retry;
 assert.equal(app.state.activeCheckoutOrderId, canonical.id);
@@ -272,7 +274,10 @@ assert.equal(getOrders().find(o => o.id === canonical.id).totals.total, 777);
 app.state.activeOrderStopWatch?.();
 app.closeCheckoutModal();
 let whatsappMessage = '';
-window.open = url => { whatsappMessage = decodeURIComponent(url); };
+window.open = url => {
+  assert.equal(url, 'about:blank', 'Reserve a window during the click, before awaiting network');
+  return { location: { set href(value) { whatsappMessage = decodeURIComponent(value); } }, close() {} };
+};
 globalThis.fetch = async (url, options = {}) => {
   assert.equal(url, '/api/inventory');
   const payload = JSON.parse(options.body);

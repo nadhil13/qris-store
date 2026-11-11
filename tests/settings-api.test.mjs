@@ -122,10 +122,11 @@ test('configured KV failure returns 503 instead of silently reporting success', 
   assert.equal(getRes.statusCode, 503);
   assert.equal(getRes.body.ok, false);
 
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
   const postRes = await request('POST', {
     updatedAt: 100,
     store: { name: 'Toko KV' }
-  });
+  }, { authorization: 'Bearer admin-secret' });
   assert.equal(postRes.statusCode, 503);
   assert.equal(postRes.body.ok, false);
 });
@@ -152,10 +153,11 @@ test('configured KV uses atomic EVAL script to merge settings and catalog', asyn
     };
   };
 
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
   const postRes = await request('POST', {
     catalogUpdatedAt: 800,
     products: [{ id: 'p-kv', name: 'Matcha', price: 42000, stock: 6 }]
-  });
+  }, { authorization: 'Bearer admin-secret' });
   assert.equal(postRes.statusCode, 200);
   assert.equal(postRes.body.storage, 'kv');
   assert.equal(calls.length, 1);
@@ -173,7 +175,8 @@ test('KV rejects malformed EVAL acknowledgements rather than reporting success',
   configureKV();
   for (const result of [null, {}, 'null', JSON.stringify({ payload: 'qr', products: {} })]) {
     globalThis.fetch = async () => ({ ok: true, json: async () => ({ result }) });
-    const response = await request('POST', { products: [], catalogUpdatedAt: 900 });
+    process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    const response = await request('POST', { products: [], catalogUpdatedAt: 900 }, { authorization: 'Bearer admin-secret' });
     assert.equal(response.statusCode, 503);
     assert.equal(response.body.ok, false);
   }

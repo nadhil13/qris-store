@@ -36,7 +36,7 @@ export function statusLabel(status, order) {
     case STATUS.COMPLETED: return 'Selesai';
     case STATUS.EXPIRED: return 'Kedaluwarsa';
     case STATUS.CANCELLED: return 'Dibatalkan';
-    default: return status;
+    default: return 'Status tidak dikenal';
   }
 }
 

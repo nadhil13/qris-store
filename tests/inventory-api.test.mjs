@@ -55,6 +55,17 @@ test('reserve submits one atomic script with hashed capability and normalized im
   await request(); assert.equal(JSON.parse(calls[1].command[5]).fingerprint,payload.fingerprint);
   assert.equal(calls.length,2); assert.ok(calls[0].options.signal instanceof AbortSignal);
 });
+test('accepts schema-name and numeric-looking reservation and product IDs without a reserved-name blacklist', async () => {
+  kv();
+  const calls = mock({ok:true});
+  for (const id of ['items', 'timeline', 'orders', 'stock', 'holds', 'quantities', '1', '01', '0', '123']) {
+    const response = await request('POST', {...draft(), id, items:[{productId:id,qty:1}]});
+    assert.equal(response.statusCode,200);
+    const payload = JSON.parse(calls.at(-1).command[5]);
+    assert.equal(payload.id,id);
+    assert.equal(payload.items[0].productId,id);
+  }
+});
 test('maps explicit script errors and hides transport errors and credentials', async () => {
   kv(); mock({ok:false,code:'OUT_OF_STOCK',status:409}); assert.equal((await request()).statusCode,409);
   globalThis.fetch=async()=>{ throw Error('private-kv admin-test'); };

@@ -29,18 +29,66 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf'
 };
 
+const MAX_BODY_BYTES = 64 * 1024;
+const PUBLIC_FILES = new Set(['/index.html', '/manifest.json', '/sw.js']);
+const PUBLIC_ROOTS = {
+  scripts: new Set(['.js']),
+  styles: new Set(['.css']),
+  assets: new Set(['.png', '.jpg', '.jpeg', '.webp', '.svg', '.ico', '.woff', '.woff2', '.ttf']),
+  qris: new Set(['.png', '.jpg', '.jpeg', '.webp'])
+};
+
 function parseBody(req) {
-  return new Promise((resolve) => {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        resolve(body ? JSON.parse(body) : {});
-      } catch {
-        resolve(body);
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let exceeded = false;
+    const tooLarge = () => Object.assign(new Error('Payload too large'), { statusCode: 413 });
+    if (Number(req.headers['content-length']) > MAX_BODY_BYTES) {
+      req.resume();
+      reject(tooLarge());
+      return;
+    }
+    req.on('data', chunk => {
+      if (exceeded) return;
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        exceeded = true;
+        chunks.length = 0;
+        reject(tooLarge());
+        return;
       }
+      chunks.push(chunk);
     });
+    req.on('end', () => {
+      if (!exceeded) resolve(Buffer.concat(chunks).toString('utf8'));
+    });
+    req.on('error', reject);
+    req.on('aborted', () => reject(new Error('Request aborted')));
   });
+}
+
+function notFound(res) {
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' });
+  res.end('404 Not Found');
+}
+
+function publicPath(pathname) {
+  const parts = pathname.slice(1).split('/');
+  if (!pathname.startsWith('/') || /[\\\\\u0000-\u001f\u007f%:]/.test(pathname)
+    || parts.some(part => !part || part.startsWith('.'))) return null;
+  if (!PUBLIC_FILES.has(pathname)
+    && (!Object.hasOwn(PUBLIC_ROOTS, parts[0]) || !PUBLIC_ROOTS[parts[0]].has(path.extname(pathname)))) return null;
+  const candidate = path.resolve(ROOT, ...parts);
+  try {
+    const realPath = fs.realpathSync(candidate);
+    const relative = path.relative(ROOT, realPath);
+    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null;
+    if (!fs.statSync(realPath).isFile()) return null;
+    return realPath;
+  } catch {
+    return null;
+  }
 }
 
 function adaptServerless(req, res, body) {
@@ -59,23 +107,17 @@ function adaptServerless(req, res, body) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    const parsed = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    let pathname = decodeURIComponent(parsed.pathname);
+    let pathname;
+    try {
+      pathname = decodeURIComponent(req.url.split('?')[0]);
+    } catch {
+      notFound(res);
+      return;
+    }
 
     // API Routes
     if (pathname === '/api/inventory' || pathname === '/api/inventory/') {
-      const chunks = [];
-      let size = 0;
-      for await (const chunk of req) {
-        size += chunk.length;
-        if (size > 64 * 1024) {
-          res.writeHead(413, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-          res.end(JSON.stringify({ ok: false, code: 'PAYLOAD_TOO_LARGE' }));
-          return;
-        }
-        chunks.push(chunk);
-      }
-      adaptServerless(req, res, Buffer.concat(chunks).toString('utf8'));
+      adaptServerless(req, res, await parseBody(req));
       await inventoryHandler(req, res);
       return;
     }
@@ -96,14 +138,9 @@ const server = http.createServer(async (req, res) => {
       pathname = '/index.html';
     }
 
-    const safePath = path.normalize(path.join(ROOT, pathname));
-    if (!safePath.startsWith(ROOT)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain' });
-      res.end('403 Forbidden');
-      return;
-    }
+    const safePath = publicPath(pathname);
 
-    if (fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+    if (safePath) {
       const ext = path.extname(safePath).toLowerCase();
       const mime = MIME_TYPES[ext] || 'application/octet-stream';
       res.writeHead(200, {
@@ -113,12 +150,16 @@ const server = http.createServer(async (req, res) => {
       });
       fs.createReadStream(safePath).pipe(res);
     } else {
-      res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`<h3>404 Tidak Ditemukan</h3><p>File <code>${pathname}</code> tidak ditemukan di server.</p>`);
+      notFound(res);
     }
   } catch (err) {
-    res.writeHead(500, { 'Content-Type': 'text/plain' });
-    res.end('500 Internal Server Error: ' + err.message);
+    if (err.statusCode === 413) {
+      res.writeHead(413, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: false, code: 'PAYLOAD_TOO_LARGE' }));
+      return;
+    }
+    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('500 Internal Server Error');
   }
 });
 

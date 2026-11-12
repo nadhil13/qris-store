@@ -80,3 +80,19 @@ for (const environment of ['development', 'preview', 'production']) {
     });
   }
 }
+
+test('admin secret pasted with quotes, spaces or newline still authorizes the bare token', async () => {
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.example';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'test-only-token';
+  globalThis.fetch = async url => {
+    if (url.endsWith('/get/atelier_orders')) return { ok: true, json: async () => ({ result: '[]' }) };
+    return { ok: true, json: async () => ({ result: null }) };
+  };
+  for (const stored of ['QrisnyaOK2026\n', ' QrisnyaOK2026 ', '"QrisnyaOK2026"', "'QrisnyaOK2026'\r\n"]) {
+    process.env.INVENTORY_ADMIN_TOKEN = stored;
+    assert.equal((await request(orders, 'GET', 'Bearer QrisnyaOK2026')).statusCode, 200, JSON.stringify(stored));
+    assert.equal((await request(orders, 'GET', 'Bearer QrisnyaOK2027')).statusCode, 401);
+  }
+  process.env.INVENTORY_ADMIN_TOKEN = '  ""  ';
+  assert.equal((await request(orders, 'GET', 'Bearer ')).statusCode, 503);
+});

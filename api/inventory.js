@@ -54,12 +54,15 @@ function normalize(body) {
   invalid();
 }
 
+// Dashboard-pasted env values often carry quotes, spaces or a trailing newline.
+const normalizeSecret = value => String(value ?? '').trim().replace(/^(['"])([\s\S]*)\1$/, '$2').trim();
+
 function authorize(req) {
-  const secret = process.env.INVENTORY_ADMIN_TOKEN;
+  const secret = normalizeSecret(process.env.INVENTORY_ADMIN_TOKEN);
   if (!secret) return 503;
   const header = req.headers?.authorization;
   if (typeof header !== 'string' || !header.startsWith('Bearer ')) return 401;
-  return timingSafeEqual(Buffer.from(hash(header.slice(7))),Buffer.from(hash(secret))) ? 0 : 401;
+  return timingSafeEqual(Buffer.from(hash(header.slice(7).trim())),Buffer.from(hash(secret))) ? 0 : 401;
 }
 
 export default async function handler(req,res) {

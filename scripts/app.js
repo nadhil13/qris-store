@@ -2321,32 +2321,48 @@ function initRealtimeSync() {
 export function initGSAPAnimations() {
   if (typeof window.gsap === 'undefined') return;
   const gsap = window.gsap;
-  if (typeof window.ScrollTrigger !== 'undefined') {
-    gsap.registerPlugin(window.ScrollTrigger);
-  }
-
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
   if (reduced) return;
 
-  gsap.from('.site-header', { y: -16, opacity: 0, duration: 0.6, ease: 'power2.out' });
-  gsap.from('.hero-headline', { y: 24, opacity: 0, duration: 0.8, ease: 'power2.out', delay: 0.1 });
-  gsap.from('.hero-description', { y: 16, opacity: 0, duration: 0.7, ease: 'power2.out', delay: 0.2 });
-  gsap.from('.hero-actions', { y: 12, opacity: 0, duration: 0.6, ease: 'power2.out', delay: 0.3 });
-  gsap.from('.showcase-card', { y: 28, opacity: 0, duration: 0.9, ease: 'power2.out', delay: 0.25 });
+  const entrance = gsap.timeline({ defaults: { ease: 'power2.out' } });
+  entrance
+    .from('.hero-headline', { y: 28, opacity: 0, duration: 0.85 })
+    .from('.hero-description', { y: 16, opacity: 0, duration: 0.65 }, '-=0.5')
+    .from('.hero-actions', { y: 12, opacity: 0, duration: 0.55 }, '-=0.4')
+    .from('.hero-visual', { y: 36, opacity: 0, duration: 1 }, '-=0.85');
 
-  document.querySelectorAll('.reveal-section').forEach((sec) => {
-    gsap.from(sec, {
-      y: 30,
-      opacity: 0,
-      duration: 0.75,
-      ease: 'power2.out',
+  if (typeof window.ScrollTrigger === 'undefined') return;
+  gsap.registerPlugin(window.ScrollTrigger);
+  const largeScreen = window.matchMedia?.('(min-width: 769px)')?.matches;
+  if (largeScreen) {
+    gsap.to('.showcase-img-wrap img', {
+      yPercent: -8,
+      ease: 'none',
       scrollTrigger: {
-        trigger: sec,
-        start: 'top 85%',
-        once: true
+        trigger: '.hero-section',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 0.8
       }
     });
-  });
+  }
+
+  const reveal = (selector, options = {}) => {
+    const element = document.querySelector(selector);
+    if (!element) return;
+    gsap.from(element, {
+      y: options.y ?? 22,
+      x: options.x ?? 0,
+      opacity: 0,
+      duration: options.duration ?? 0.8,
+      ease: 'power2.out',
+      scrollTrigger: { trigger: element, start: 'top 88%', once: true }
+    });
+  };
+  reveal('.story-copy', { x: -24, y: 0 });
+  reveal('.story-visual', { x: 24, y: 0, duration: 0.95 });
+  reveal('.cta-copy', { y: 28 });
+  reveal('.ritual-copy', { y: 20 });
 }
 
 function initApp() {

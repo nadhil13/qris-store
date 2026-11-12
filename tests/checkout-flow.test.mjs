@@ -68,6 +68,7 @@ globalThis.window = {
 };
 
 globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
 
 const app = await import('../scripts/app.js');
 const { setInventoryAdminToken } = await import('../scripts/core/inventory.js');

@@ -107,22 +107,20 @@ The hero heading uses `clamp(2.7rem, 5vw, 4.8rem)`, line height `0.98` and track
 
 ## Motion and interaction
 
-`initGSAPAnimations()` returns if GSAP is unavailable or reduced motion is
-requested. Otherwise it animates opacity and vertical position with `power2.out`:
+`initGSAPAnimations()` leaves the page static if GSAP is unavailable or reduced
+motion is requested. Otherwise a short timeline brings in the headline,
+description, actions and product photograph in sequence. On screens wider than
+`768px`, ScrollTrigger shifts only the photograph within its clipped frame by
+`8%` while the hero scrolls. Story copy and its preview enter from opposite
+sides; the closing invitation and payment explanation enter vertically. The
+sticky catalog toolbar, product grid, checkout controls and admin workspace do
+not receive scroll reveals, so navigation and transactions remain available.
 
-| Target | Initial Y | Duration | Delay |
-| --- | --- | --- | --- |
-| `.site-header` | `-16px` | `0.6s` | `0s` |
-| `.hero-headline` | `24px` | `0.8s` | `0.1s` |
-| `.hero-description` | `16px` | `0.7s` | `0.2s` |
-| `.hero-actions` | `12px` | `0.6s` | `0.3s` |
-| `.showcase-card` | `28px` | `0.9s` | `0.25s` |
-
-ScrollTrigger is registered when available. Each `.reveal-section` gets a one-time
-`30px` / opacity entrance lasting `0.75s`, starting at `top 85%`. The initializer
-does not implement pointer-following tilt or magnetic buttons. CSS still provides
-hover transforms, including the showcase card's fixed `rotateX(0.5deg)` and
-product-image zoom.
+The hero retains the warm paper palette and uses a restrained forest-tinted
+frame shadow. On narrow screens the background returns to flat paper, the
+frame shadow tightens, and the scroll-driven image movement is omitted. No new
+visual assets or product claims are introduced. CSS does not hide content
+before animation initializes.
 
 Reduced-motion CSS sets animation and transition durations to `0.01ms`, limits
 animation iterations to one and disables smooth scrolling. Admin row/link

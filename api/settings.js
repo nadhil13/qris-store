@@ -103,7 +103,7 @@ record.staleCatalog = staleCatalog
 return encodeRecord(record)
 `;
 
-class SettingsStorageError extends Error {}
+class SettingsStorageError extends Error { }
 
 // Version 0 so a cold-start default never overrides a visitor's saved state.
 let inMemorySettings = {
@@ -351,6 +351,42 @@ function authorizeAdmin(req) {
   return timingSafeEqual(digest(header.slice(7).trim()), digest(secret)) ? 0 : 401;
 }
 
+const MAX_SETTINGS_BODY = 256 * 1024;
+const MAX_CATALOG_INT = 1_000_000_000;
+
+function validateCatalogProducts(products) {
+  if (!Array.isArray(products)) return 'Catalog products must be an array';
+  if (products.length > 2000) return 'Catalog exceeds 2000 products limit';
+  const ids = new Set();
+  for (let i = 0; i < products.length; i++) {
+    const p = products[i];
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return `Product at index ${i} must be an object`;
+    if (typeof p.id !== 'string' || !p.id.trim() || ids.has(p.id)) return `Product at index ${i} has invalid or duplicate id`;
+    ids.add(p.id);
+    if (typeof p.name !== 'string' || !p.name.trim()) return `Product "${p.id}" must have a name`;
+    if (!Number.isSafeInteger(p.price) || p.price < 0 || p.price > MAX_CATALOG_INT) {
+      return `Product "${p.id}" price must be an integer between 0 and ${MAX_CATALOG_INT}`;
+    }
+    if (p.stock !== undefined && p.stock !== null && (!Number.isSafeInteger(p.stock) || p.stock < 0 || p.stock > MAX_CATALOG_INT)) {
+      return `Product "${p.id}" stock must be null or an integer between 0 and ${MAX_CATALOG_INT}`;
+    }
+    if (p.variants !== undefined) {
+      if (!Array.isArray(p.variants)) return `Product "${p.id}" variants must be an array`;
+      const labels = new Set();
+      for (const v of p.variants) {
+        if (!v || typeof v !== 'object' || Array.isArray(v) || typeof v.label !== 'string' || !v.label || labels.has(v.label)) {
+          return `Product "${p.id}" contains an invalid or duplicate variant label`;
+        }
+        labels.add(v.label);
+        if (typeof v.delta !== 'number' || !Number.isSafeInteger(v.delta) || Math.abs(v.delta) > MAX_CATALOG_INT || p.price + v.delta < 0) {
+          return `Product "${p.id}" variant "${v.label}" has an invalid price delta`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -364,20 +400,21 @@ export default async function handler(req, res) {
 
   const kv = getKVClient();
   const storage = kv ? 'kv' : 'memory';
-  const production = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  const production = process.env.NODE_ENV === 'production'
+    || process.env.VERCEL_ENV === 'production'
+    || process.env.VERCEL_ENV === 'preview';
 
-  if ((production || kv) && (req.method === 'GET' || req.method === 'POST')) {
-    if (!kv) {
-      res.status(503).json({ ok: false, code: 'STORAGE_UNAVAILABLE', error: 'Settings storage unavailable' });
+  if (req.method === 'POST') {
+    const status = authorizeAdmin(req);
+    if (status) {
+      res.status(status).json({ ok: false, code: status === 401 ? 'UNAUTHORIZED' : 'ADMIN_UNAVAILABLE' });
       return;
     }
-    if (req.method === 'POST') {
-      const status = authorizeAdmin(req);
-      if (status) {
-        res.status(status).json({ ok: false, code: status === 401 ? 'UNAUTHORIZED' : 'ADMIN_UNAVAILABLE' });
-        return;
-      }
-    }
+  }
+
+  if (production && !kv && (req.method === 'GET' || req.method === 'POST')) {
+    res.status(503).json({ ok: false, code: 'STORAGE_UNAVAILABLE', error: 'Settings storage unavailable' });
+    return;
   }
 
   if (req.method === 'GET') {
@@ -401,10 +438,37 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       let body = req.body;
-      if (typeof body === 'string') {
-        body = JSON.parse(body);
+      let serialized = '';
+      try {
+        serialized = typeof body === 'string' ? body : JSON.stringify(body ?? {});
+      } catch {
+        res.status(400).json({ ok: false, code: 'INVALID_REQUEST', error: 'Invalid settings payload' });
+        return;
       }
-      const saved = await writeToCloud(kv, body || {});
+      if (Buffer.byteLength(serialized || '', 'utf8') > MAX_SETTINGS_BODY) {
+        res.status(413).json({ ok: false, code: 'PAYLOAD_TOO_LARGE', error: 'Settings payload exceeds 256 KiB limit' });
+        return;
+      }
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch {
+          res.status(400).json({ ok: false, code: 'INVALID_REQUEST', error: 'Invalid JSON body' });
+          return;
+        }
+      }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        res.status(400).json({ ok: false, code: 'INVALID_REQUEST', error: 'Settings body must be a JSON object' });
+        return;
+      }
+      if (body.products !== undefined && body.products !== null) {
+        const catalogError = validateCatalogProducts(body.products);
+        if (catalogError) {
+          res.status(400).json({ ok: false, code: 'INVALID_CATALOG', error: catalogError });
+          return;
+        }
+      }
+      const saved = await writeToCloud(kv, body);
       res.status(200).json({
         ok: true,
         storage,

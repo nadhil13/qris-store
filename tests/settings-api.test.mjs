@@ -40,13 +40,21 @@ async function request(method, body, headers = {}) {
   return response;
 }
 
-test('memory mode preserves independent settings and catalog versions without clobbering', async () => {
+test('memory mode requires admin auth and preserves independent settings and catalog versions without clobbering', async () => {
+  const noTokenRes = await request('POST', { updatedAt: 100, store: { name: 'Blocked' } });
+  assert.equal(noTokenRes.statusCode, 503);
+
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+  const unauthRes = await request('POST', { updatedAt: 100, store: { name: 'Blocked' } });
+  assert.equal(unauthRes.statusCode, 401);
+
+  const authHeaders = { authorization: 'Bearer admin-secret' };
   const settingsRes = await request('POST', {
     updatedAt: 100,
     payload: '000201010211',
     merchantName: 'Toko Satu',
     store: { name: 'Toko Satu', whatsapp: '628111111111' }
-  });
+  }, authHeaders);
   assert.equal(settingsRes.statusCode, 200);
   assert.equal(settingsRes.body.ok, true);
   assert.equal(settingsRes.body.settings.updatedAt, 100);
@@ -55,7 +63,7 @@ test('memory mode preserves independent settings and catalog versions without cl
   const catalogRes = await request('POST', {
     catalogUpdatedAt: 200,
     products: [{ id: 'p-1', name: "Wagyu Se'i", price: 65000, stock: 4, available: true }]
-  });
+  }, authHeaders);
   assert.equal(catalogRes.statusCode, 200);
   assert.equal(catalogRes.body.ok, true);
   assert.equal(catalogRes.body.settings.updatedAt, 100, 'Catalog save must not overwrite settings version');
@@ -70,7 +78,7 @@ test('memory mode preserves independent settings and catalog versions without cl
     payload: '000201010211',
     merchantName: 'Toko Dua',
     store: { name: 'Toko Dua', whatsapp: '628222222222' }
-  });
+  }, authHeaders);
   assert.equal(settingsRes2.statusCode, 200);
   assert.equal(settingsRes2.body.settings.updatedAt, 150);
   assert.equal(settingsRes2.body.settings.catalogUpdatedAt, 200);
@@ -79,17 +87,19 @@ test('memory mode preserves independent settings and catalog versions without cl
 });
 
 test('stale settings or stale catalog versions are rejected independently', async () => {
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+  const authHeaders = { authorization: 'Bearer admin-secret' };
   await request('POST', {
     updatedAt: 300,
     store: { name: 'Terbaru', whatsapp: '628999999999' },
     catalogUpdatedAt: 400,
     products: [{ id: 'p-fresh', name: 'Kopi', price: 25000, stock: 10 }]
-  });
+  }, authHeaders);
 
   const staleSettings = await request('POST', {
     updatedAt: 250,
     store: { name: 'Lama', whatsapp: '628000000000' }
-  });
+  }, authHeaders);
   assert.equal(staleSettings.statusCode, 200);
   assert.equal(staleSettings.body.stale, true);
   assert.equal(staleSettings.body.settings.store.name, 'Terbaru');
@@ -97,17 +107,18 @@ test('stale settings or stale catalog versions are rejected independently', asyn
   const staleCatalog = await request('POST', {
     catalogUpdatedAt: 350,
     products: [{ id: 'p-old', name: 'Lama', price: 10000, stock: 1 }]
-  });
+  }, authHeaders);
   assert.equal(staleCatalog.statusCode, 200);
   assert.equal(staleCatalog.body.staleCatalog, true);
   assert.equal(staleCatalog.body.settings.products[0].id, 'p-fresh');
 });
 
 test('empty product catalog array is persisted as valid state', async () => {
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
   await request('POST', {
     catalogUpdatedAt: 500,
     products: []
-  });
+  }, { authorization: 'Bearer admin-secret' });
   const getRes = await request('GET');
   assert.equal(getRes.statusCode, 200);
   assert.equal(getRes.body.settings.catalogUpdatedAt, 500);
@@ -184,9 +195,9 @@ test('KV rejects malformed EVAL acknowledgements rather than reporting success',
 
 for (const productionEnv of ['NODE_ENV', 'VERCEL_ENV']) {
   test(`${productionEnv}: production requires KV without reading or changing memory`, async () => {
-    await request('POST', { updatedAt: 100, store: { name: 'Local only' } });
-    process.env[productionEnv] = 'production';
     process.env.INVENTORY_ADMIN_TOKEN = 'admin-secret';
+    await request('POST', { updatedAt: 100, store: { name: 'Local only' } }, { authorization: 'Bearer admin-secret' });
+    process.env[productionEnv] = 'production';
     for (const method of ['GET', 'POST']) {
       const response = await request(method, { updatedAt: 200, store: { name: 'Blocked' } }, { authorization: 'Bearer admin-secret' });
       assert.equal(response.statusCode, 503);

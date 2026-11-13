@@ -1,6 +1,18 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { INVENTORY_SCRIPT } from './lib/inventory-script.js';
+import { PRODUCTS as SEED_PRODUCTS } from '../scripts/core/catalog.js';
 export { INVENTORY_SCRIPT };
+
+export const INVENTORY_SEED_PRODUCTS = SEED_PRODUCTS.map((product) => ({
+  id: product.id,
+  name: product.name,
+  price: product.price,
+  stock: product.stock ?? null,
+  category: product.category,
+  isAvailable: product.isAvailable !== false,
+  image: product.image,
+  variants: Array.isArray(product.variants) ? product.variants : []
+}));
 
 const MAX_BODY = 64 * 1024;
 const idPattern = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -102,7 +114,7 @@ export default async function handler(req,res) {
     const url=process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN ? process.env.KV_REST_API_URL : process.env.UPSTASH_REDIS_REST_URL;
     const token=process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN ? process.env.KV_REST_API_TOKEN : process.env.UPSTASH_REDIS_REST_TOKEN;
     if (!url || !token) return send(503,{ok:false,code:'STORAGE_UNAVAILABLE'});
-    const response=await fetch(url.replace(/\/$/,''),{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(4000),body:JSON.stringify(['EVAL',INVENTORY_SCRIPT,2,'atelier_inventory_v1','atelier_settings',JSON.stringify(input)])});
+    const response=await fetch(url.replace(/\/$/,''),{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(4000),body:JSON.stringify(['EVAL',INVENTORY_SCRIPT,2,'atelier_inventory_v1','atelier_settings',JSON.stringify({ ...input, seedProducts: INVENTORY_SEED_PRODUCTS })])});
     if (!response.ok) throw Error();
     const envelope=await response.json();
     if (envelope.error || typeof envelope.result!=='string') throw Error();

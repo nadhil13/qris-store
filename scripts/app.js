@@ -104,7 +104,7 @@ import {
 } from './core/payments.js';
 
 import { reserveInventory, getPendingReservation, refreshInventoryOrder, isInventoryOrder, syncInventory, listInventoryOrders, setInventoryAdminToken, hasInventoryAdminToken, refreshInventoryStock, adjustInventoryStock, formatInventoryError } from './core/inventory.js';
-import { inventoryAdminHeaders } from './core/auth.js';
+import { inventoryAdminHeaders, onAdminLogout } from './core/auth.js';
 
 // Realtime synchronization across browser tabs powered by BroadcastChannel
 export const REALTIME_CHANNEL_TYPE = typeof BroadcastChannel !== 'undefined' ? 'BroadcastChannel' : 'StorageEvent';
@@ -182,9 +182,7 @@ function canCheckout() {
     const product = products.find((p) => p.id === line.productId);
     return !isPurchasable(product) || productQty(state.cart, line.productId) > maxQty(product);
   });
-  // A retry may see stock already held by its own unresolved reservation.
-  // HTTP checkout always lets the server validate the immutable request.
-  if (invalidLine && window.location.protocol === 'file:') {
+  if (invalidLine) {
     showToast('Stok berubah. Sesuaikan atau hapus item keranjang sebelum melanjutkan.');
     updateCartUI();
     return false;
@@ -329,6 +327,7 @@ export const state = {
   selectedQuickViewVariant: null,
   activeCheckoutOrderId: null,
   activeReceiptOrderId: null,
+  activeTrackerOrderId: null,
   activeOrderStopWatch: null,
   currentQRISDisplayMode: 'dynamic',
   adminAuthenticated: false,
@@ -365,6 +364,8 @@ export function renderCategoryBadges() {
     }
   });
 }
+
+let lastRenderedCatalogHtml = '';
 
 export function renderCatalog() {
   const grid = document.getElementById('product-grid');
@@ -406,19 +407,15 @@ export function renderCatalog() {
   lastCatalogFilterKey = filterKey;
   lastCatalogCount = list.length;
 
-  if (list.length === 0) {
-    grid.innerHTML = `
+  const emptyHtml = `
       <div class="empty-state">
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <h3>Koleksi tidak ditemukan</h3>
         <p>Coba gunakan kata kunci lain atau pilih kategori koleksi di atas.</p>
       </div>
     `;
-    if (countChanged) scheduleScrollTriggerRefresh();
-    return;
-  }
 
-  grid.innerHTML = list.map((item) => {
+  const nextHtml = list.length === 0 ? emptyHtml : list.map((item) => {
     const available = isPurchasable(item);
     const cardClass = available ? 'product-card' : 'product-card is-sold-out';
     const totalInCart = productQty(state.cart, item.id);
@@ -472,6 +469,18 @@ export function renderCatalog() {
       </article>
     `;
   }).join('');
+
+  if (!filterChanged && !countChanged && nextHtml === lastRenderedCatalogHtml && grid.innerHTML !== '') {
+    return;
+  }
+
+  grid.innerHTML = nextHtml;
+  lastRenderedCatalogHtml = nextHtml;
+
+  if (list.length === 0) {
+    if (countChanged) scheduleScrollTriggerRefresh();
+    return;
+  }
 
   if (filterChanged) {
     animateCatalogCards(grid);
@@ -1028,7 +1037,7 @@ export async function openCheckoutModal(existingOrderId = null) {
     console.error('Checkout view render error:', err);
   }
 
-  if (state.activeOrderStopWatch) state.activeOrderStopWatch();
+  stopActiveOrderWatch();
   try {
     state.activeOrderStopWatch = watchOrder(newOrder.id, {
       onTick: (msRemaining, currentOrder) => {
@@ -1040,6 +1049,8 @@ export async function openCheckoutModal(existingOrderId = null) {
           handlePaymentCompleted(updatedOrder);
         } else if (updatedOrder.status === STATUS.EXPIRED) {
           handlePaymentExpired(updatedOrder);
+        } else if (updatedOrder.status === STATUS.CANCELLED) {
+          handlePaymentCancelled(updatedOrder);
         }
       },
       onError: () => {
@@ -1050,6 +1061,30 @@ export async function openCheckoutModal(existingOrderId = null) {
     });
   } catch (err) {
     console.warn('Watch order warning:', err);
+  }
+}
+
+function stopActiveOrderWatch() {
+  if (state.activeOrderStopWatch) {
+    state.activeOrderStopWatch();
+    state.activeOrderStopWatch = null;
+  }
+}
+
+function renderPaymentTerminationBanner(banner, mode) {
+  if (!banner) return;
+  if (mode === 'cancelled') {
+    banner.innerHTML = `
+      <strong>Pesanan Dibatalkan</strong>
+      <p style="font-size:0.8rem; margin:4px 0 8px;">Pesanan ini dibatalkan oleh toko dan reservasi stok telah dikembalikan.</p>
+      <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:6px 14px; font-size:0.8rem; margin:0 auto;">Buat Pesanan Ulang</button>
+    `;
+  } else {
+    banner.innerHTML = `
+      <strong>Waktu Pembayaran 10 Menit Habis</strong>
+      <p style="font-size:0.8rem; margin:4px 0 8px;">Pesanan ini telah hangus otomatis demi menjaga reservasi stok toko.</p>
+      <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:6px 14px; font-size:0.8rem; margin:0 auto;">Buat Pesanan Ulang</button>
+    `;
   }
 }
 
@@ -1070,11 +1105,15 @@ function renderCheckoutView(order) {
   const polling = document.querySelector('.polling-indicator');
   const clockEl = document.getElementById('payment-countdown-clock');
   const msLeft = remainingMs(order);
-  const expired = msLeft <= 0 || order.status === STATUS.EXPIRED;
+  const cancelled = order.status === STATUS.CANCELLED;
+  const expired = !cancelled && (msLeft <= 0 || order.status === STATUS.EXPIRED);
 
-  if (banner) banner.style.display = expired ? 'block' : 'none';
-  if (polling) polling.style.display = expired ? 'none' : 'flex';
-  if (clockEl) clockEl.textContent = expired ? '00:00 (Hangus)' : formatCountdown(msLeft);
+  if (banner) {
+    renderPaymentTerminationBanner(banner, cancelled ? 'cancelled' : 'expired');
+    banner.style.display = (cancelled || expired) ? 'block' : 'none';
+  }
+  if (polling) polling.style.display = (cancelled || expired) ? 'none' : 'flex';
+  if (clockEl) clockEl.textContent = cancelled ? 'Dibatalkan' : (expired ? '00:00 (Hangus)' : formatCountdown(msLeft));
 
   if (amountEl) amountEl.textContent = formatIDR(order.totals.total);
   if (uniqueBadgeEl) {
@@ -1294,16 +1333,17 @@ export function downloadQRISImage() {
 }
 
 function handlePaymentCompleted(order) {
-  if (state.activeOrderStopWatch) {
-    state.activeOrderStopWatch();
-    state.activeOrderStopWatch = null;
-  }
+  stopActiveOrderWatch();
   closeCheckoutModal();
   sfx.playCashChime();
   triggerPaymentAlert(order);
 
-  // Clear cart after payment
+  // Clear cart & applied voucher after payment
   state.cart = [];
+  state.activeVoucherCode = '';
+  state.voucherDiscountPercent = 0;
+  const voucherInput = document.getElementById('voucher-input');
+  if (voucherInput) voucherInput.value = '';
   saveCart(state.cart);
   updateCartUI();
   renderCatalog();
@@ -1317,13 +1357,31 @@ function handlePaymentCompleted(order) {
 }
 
 function handlePaymentExpired(order) {
+  stopActiveOrderWatch();
   const clockEl = document.getElementById('payment-countdown-clock');
   if (clockEl) clockEl.textContent = '00:00 (Hangus)';
   const banner = document.getElementById('payment-expired-banner');
+  renderPaymentTerminationBanner(banner, 'expired');
   if (banner) banner.style.display = 'block';
   const polling = document.querySelector('.polling-indicator');
   if (polling) polling.style.display = 'none';
+  renderCatalog();
+  updateOrderTrackerDockUI();
   showToast('Batas waktu pembayaran 10 menit telah habis. Silakan buat pesanan ulang.');
+}
+
+function handlePaymentCancelled(order) {
+  stopActiveOrderWatch();
+  const clockEl = document.getElementById('payment-countdown-clock');
+  if (clockEl) clockEl.textContent = 'Dibatalkan';
+  const banner = document.getElementById('payment-expired-banner');
+  renderPaymentTerminationBanner(banner, 'cancelled');
+  if (banner) banner.style.display = 'block';
+  const polling = document.querySelector('.polling-indicator');
+  if (polling) polling.style.display = 'none';
+  renderCatalog();
+  updateOrderTrackerDockUI();
+  showToast('Pesanan dibatalkan oleh toko. Stok reservasi telah dikembalikan.');
 }
 
 export function restartExpiredOrder() {
@@ -1335,10 +1393,7 @@ export function restartExpiredOrder() {
 export function closeCheckoutModal() {
   const modal = document.getElementById('payment-modal-backdrop');
   overlays().close(modal);
-  if (state.activeOrderStopWatch) {
-    state.activeOrderStopWatch();
-    state.activeOrderStopWatch = null;
-  }
+  stopActiveOrderWatch();
 }
 
 function paymentMethodLabel(order, desc) {
@@ -1470,7 +1525,12 @@ export async function checkoutViaWhatsApp(existingOrderId = null) {
   let launched = false;
   try { if (popup && !popup.closed) { popup.location.href = url; launched = true; } } catch { popup?.close(); }
   if (!launched) {
+    const drawer = document.getElementById('cart-drawer');
+    if (drawer && !drawer.classList?.contains?.('open')) {
+      openCartDrawer();
+    }
     updateOrderTrackerDockUI();
+    fallback?.focus?.();
     showToast('Reservasi tersimpan. Ketuk Buka WhatsApp untuk melanjutkan; pesan belum dikirim dan keranjang tetap tersimpan.', { duration: 6000 });
     return;
   }
@@ -1557,6 +1617,7 @@ export async function openOrderTrackerModal() {
 
   if (active.status === STATUS.AWAITING && active.payment?.method === 'qris') return openCheckoutModal(active.id);
   if (active.status === STATUS.AWAITING && active.payment?.method === 'whatsapp') return checkoutViaWhatsApp(active.id);
+  state.activeTrackerOrderId = active.id;
   sfx.playClick();
   const modal = document.getElementById('order-tracker-modal-backdrop');
   const invoiceEl = document.getElementById('tracker-invoice');
@@ -1612,14 +1673,17 @@ export async function openOrderTrackerModal() {
 }
 
 export function closeOrderTrackerModal() {
+  state.activeTrackerOrderId = null;
   const modal = document.getElementById('order-tracker-modal-backdrop');
   overlays().close(modal);
 }
 
 export function clearActiveOrder() {
   const myIds = getMyOrderIds();
-  if (myIds.length) {
-    forgetMyOrder(myIds[0]);
+  const targetId = state.activeTrackerOrderId || myIds[0];
+  if (targetId) {
+    forgetMyOrder(targetId);
+    state.activeTrackerOrderId = null;
     updateOrderTrackerDockUI();
     closeOrderTrackerModal();
     showToast('Pesanan selesai diarsipkan.');
@@ -1665,20 +1729,36 @@ export async function submitAdminLogin(event) {
   setInventoryAdminToken(password);
   try {
     await listInventoryOrders();
-    if (errorEl) errorEl.style.display = 'none';
-    state.adminAuthenticated = true;
-    closeAdminLoginModal();
-    openAdminDashboardModal();
-    sfx.playSuccess();
-    showToast('Akses admin aktif. Dashboard toko terbuka.');
-    return;
   } catch (error) {
     state.adminAuthenticated = false;
     setInventoryAdminToken('');
     if (errorEl) { errorEl.textContent = error.message; errorEl.style.display = 'block'; }
     showToast('Akses backend belum terverifikasi. Periksa token dan koneksi.');
+    return;
   }
+  if (errorEl) errorEl.style.display = 'none';
+  state.adminAuthenticated = true;
+  closeAdminLoginModal();
+  openAdminDashboardModal();
+  sfx.playSuccess();
+  showToast('Akses admin aktif. Dashboard toko terbuka.');
 }
+
+function handleAdminSessionExpired() {
+  const wasAuthenticated = state.adminAuthenticated;
+  state.adminAuthenticated = false;
+  adminBaselineCaptured = false;
+  knownAdminOrderStates.clear();
+  recentAlertOrderIds.clear();
+  dismissAdminAlert();
+  if (!wasAuthenticated) return;
+  closeAdminDashboardModal();
+  showToast('Sesi admin berakhir atau tidak sah. Silakan login kembali.');
+}
+
+onAdminLogout(() => {
+  handleAdminSessionExpired();
+});
 
 export function logoutAdminSession() {
   state.adminAuthenticated = false;
@@ -1915,25 +1995,33 @@ function syncAdminOrderAlerts(orders) {
   }
 }
 
-let storefrontDraftBaseline = null;
-let storefrontDraftDirty = false;
-function storefrontDraftValues() {
-  return ['admin-storefront-hours', 'admin-storefront-is-open', 'admin-storefront-whatsapp'].map(id => {
-    const el = document.getElementById(id);
-    return id.endsWith('is-open') ? el?.checked : el?.value;
-  });
+const storefrontBaselines = { availability: null, merchantWhatsApp: null };
+const storefrontDirtyDomains = { availability: false, merchantWhatsApp: false };
+
+function readAvailabilityDraft() {
+  return [
+    document.getElementById('admin-storefront-hours')?.value,
+    document.getElementById('admin-storefront-is-open')?.checked
+  ];
 }
+
+function readMerchantWhatsAppDraft() {
+  return document.getElementById('admin-storefront-whatsapp')?.value;
+}
+
 export function refreshAdminDashboard() {
   const orders = getAdminOrders();
   const products = getProducts();
   const settings = getSettings();
   syncAdminOrderAlerts(orders);
 
-  const totalOmzet = orders.filter((o) => isPaidStatus(o.status)).reduce((sum, o) => sum + o.totals.total, 0);
+  const totalOmzet = orders.filter((o) => isPaidStatus(o.status)).reduce((sum, o) => sum + Number(o.totals?.total || 0), 0);
   const totalOrders = orders.length;
   const aov = totalOrders > 0 ? Math.round(totalOmzet / totalOrders) : 0;
   const needsAction = orders.filter((o) => o.status === STATUS.PAID || o.status === STATUS.PROCESSING).length;
   const activeOrders = orders.filter((o) => isOpenStatus(o.status)).length;
+  const readyCount = products.filter((p) => isPurchasable(p)).length;
+  const unavailableCount = Math.max(0, products.length - readyCount);
 
   const omzetEl = document.getElementById('admin-metric-omzet');
   const ordersEl = document.getElementById('admin-metric-orders');
@@ -1944,6 +2032,7 @@ export function refreshAdminDashboard() {
   const activeOrdersEl = document.getElementById('admin-active-orders');
   const overviewOrders = document.getElementById('admin-overview-orders');
   const overviewProducts = document.getElementById('admin-overview-products');
+  const storefrontCatalogStatus = document.getElementById('admin-storefront-catalog-status');
   const hoursInput = document.getElementById('admin-storefront-hours');
   const openInput = document.getElementById('admin-storefront-is-open');
   const storefrontWa = document.getElementById('admin-storefront-whatsapp');
@@ -1958,12 +2047,25 @@ export function refreshAdminDashboard() {
   if (activeOrdersEl) activeOrdersEl.textContent = activeOrders;
   if (overviewOrders) overviewOrders.textContent = `${totalOrders} pesanan (${activeOrders} aktif)`;
   if (overviewProducts) overviewProducts.textContent = `${products.length} produk di katalog`;
-  if (storefrontDraftBaseline && JSON.stringify(storefrontDraftValues()) !== JSON.stringify(storefrontDraftBaseline)) storefrontDraftDirty = true;
-  if (!storefrontDraftDirty) {
+  if (storefrontCatalogStatus) {
+    storefrontCatalogStatus.textContent = `${products.length} produk terdaftar (${readyCount} siap dipesan, ${unavailableCount} habis/nonaktif).`;
+  }
+
+  if (storefrontBaselines.availability !== null && JSON.stringify(readAvailabilityDraft()) !== JSON.stringify(storefrontBaselines.availability)) {
+    storefrontDirtyDomains.availability = true;
+  }
+  if (!storefrontDirtyDomains.availability) {
     if (hoursInput) hoursInput.value = settings.store.hours || '';
     if (openInput) openInput.checked = settings.store.isOpen !== false;
+    storefrontBaselines.availability = readAvailabilityDraft();
+  }
+
+  if (storefrontBaselines.merchantWhatsApp !== null && readMerchantWhatsAppDraft() !== storefrontBaselines.merchantWhatsApp) {
+    storefrontDirtyDomains.merchantWhatsApp = true;
+  }
+  if (!storefrontDirtyDomains.merchantWhatsApp) {
     if (storefrontWa) storefrontWa.value = settings.store.whatsapp || '';
-    storefrontDraftBaseline = storefrontDraftValues();
+    storefrontBaselines.merchantWhatsApp = readMerchantWhatsAppDraft();
   }
   if (syncStatus) syncStatus.textContent = 'Sinkronisasi aktif · server diperiksa tiap 2 detik saat dasbor terbuka';
 
@@ -1997,7 +2099,7 @@ function renderAdminOrderTable() {
 
   const desc = describeQRIS(getSettings().qris.payload || DEMO_STATIC_QRIS);
   tbody.innerHTML = orders.map((o) => {
-    const itemsSummary = o.items.map((i) => `${escapeHTML(i.name)} (x${i.qty})`).join(', ');
+    const itemsSummary = (o.items || []).map((i) => `${escapeHTML(i.name)} (x${i.qty})`).join(', ');
     const isAwaiting = o.status === STATUS.AWAITING;
     const isComplete = o.status === STATUS.COMPLETED || o.status === STATUS.CANCELLED || o.status === STATUS.EXPIRED;
 
@@ -2021,10 +2123,10 @@ function renderAdminOrderTable() {
       <tr class="admin-order-row${recentAlertOrderIds.has(o.id) ? ' is-new' : ''}" data-admin-row="${escapeHTML(o.invoice)}">
         <td><strong style="font-family: var(--font-mono);">${escapeHTML(o.invoice)}</strong></td>
         <td style="white-space: nowrap; font-size: 0.74rem;">${formatDateTime(o.createdAt)}</td>
-        <td><strong>${escapeHTML(o.customer.name || 'Pelanggan')}</strong><br><span style="font-size:0.7rem; color:var(--ink-secondary);">${escapeHTML(o.customer.phone || '-')}</span></td>
+        <td><strong>${escapeHTML(o.customer?.name || 'Pelanggan')}</strong><br><span style="font-size:0.7rem; color:var(--ink-secondary);">${escapeHTML(o.customer?.phone || '-')}</span></td>
         <td style="max-width: 220px; font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(itemsSummary)}">${escapeHTML(itemsSummary)}</td>
         <td style="font-size: 0.74rem;">${escapeHTML(paymentMethodLabel(o, desc))}</td>
-        <td style="font-weight: 700; font-family: var(--font-mono); color: var(--brand-forest);">${formatIDR(o.totals.total)}</td>
+        <td style="font-weight: 700; font-family: var(--font-mono); color: var(--brand-forest);">${formatIDR(o.totals?.total || 0)}</td>
         <td><span class="status-badge-step ${statusTone(o.status)}">${escapeHTML(statusLabel(o.status, o))}</span></td>
         <td>${actionBtn}</td>
       </tr>
@@ -2128,16 +2230,30 @@ function renderAdminProductsTable() {
   `).join('');
 }
 
+function resetProductFormFields() {
+  for (const id of ['new-prod-name', 'new-prod-price', 'new-prod-tag', 'new-prod-image', 'new-prod-desc', 'new-prod-story']) {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  }
+  const catSelect = document.getElementById('new-prod-category');
+  if (catSelect) catSelect.value = 'makanan';
+}
+
 export function toggleAddProductForm(forceOpen) {
   const formBox = document.getElementById('admin-product-form-box');
   if (!formBox) return;
-  if (typeof forceOpen === 'boolean') {
-    formBox.style.display = forceOpen ? 'flex' : 'none';
-  } else {
-    formBox.style.display = formBox.style.display === 'none' ? 'flex' : 'none';
-  }
-  if (!forceOpen) {
+  const wasEditing = Boolean(state.editingProductId);
+  const nextVisible = typeof forceOpen === 'boolean'
+    ? forceOpen
+    : formBox.style.display === 'none';
+  formBox.style.display = nextVisible ? 'flex' : 'none';
+  if (!nextVisible || forceOpen === undefined) {
     state.editingProductId = null;
+    if (wasEditing || (forceOpen === undefined && nextVisible)) {
+      resetProductFormFields();
+    }
+    const title = document.getElementById('admin-product-form-title');
+    if (title) title.textContent = 'Tambah Produk Baru ke Toko';
     const label = document.getElementById('admin-product-submit-label');
     if (label) label.textContent = 'Simpan Produk Baru';
   }
@@ -2155,6 +2271,8 @@ export function openProductEditForm(productId) {
   const tagInput = document.getElementById('new-prod-tag');
   const imgInput = document.getElementById('new-prod-image');
   const descInput = document.getElementById('new-prod-desc');
+  const storyInput = document.getElementById('new-prod-story');
+  const title = document.getElementById('admin-product-form-title');
   const label = document.getElementById('admin-product-submit-label');
 
   if (nameInput) nameInput.value = p.name || '';
@@ -2163,6 +2281,8 @@ export function openProductEditForm(productId) {
   if (tagInput) tagInput.value = p.tags && p.tags[0] ? p.tags[0] : '';
   if (imgInput) imgInput.value = p.image || '';
   if (descInput) descInput.value = p.desc || '';
+  if (storyInput) storyInput.value = p.story || '';
+  if (title) title.textContent = `Edit Produk: ${p.name}`;
   if (label) label.textContent = 'Simpan Perubahan Produk';
 }
 
@@ -2170,15 +2290,25 @@ export async function submitNewProduct(e) {
   if (e && e.preventDefault) e.preventDefault();
   sfx.playClick();
 
-  const name = document.getElementById('new-prod-name')?.value.trim();
+  const name = String(document.getElementById('new-prod-name')?.value ?? '').trim();
   const category = document.getElementById('new-prod-category')?.value || 'makanan';
-  const price = Number(document.getElementById('new-prod-price')?.value) || 0;
-  const tag = document.getElementById('new-prod-tag')?.value.trim();
-  let image = document.getElementById('new-prod-image')?.value.trim();
-  const desc = document.getElementById('new-prod-desc')?.value.trim() || 'Koleksi pilihan toko.';
+  const rawPrice = Number(document.getElementById('new-prod-price')?.value);
+  const price = rawPrice;
+  const tag = String(document.getElementById('new-prod-tag')?.value ?? '').trim();
+  let image = String(document.getElementById('new-prod-image')?.value ?? '').trim();
+  const desc = String(document.getElementById('new-prod-desc')?.value ?? '').trim() || 'Koleksi pilihan toko.';
+  const story = String(document.getElementById('new-prod-story')?.value ?? '').trim();
 
-  if (!name || price <= 0) {
-    showToast('Mohon isi nama produk dan harga yang valid.');
+  if (!name) {
+    showToast('Mohon isi nama produk terlebih dahulu.');
+    return;
+  }
+  if (!Number.isSafeInteger(price) || price < 1 || price > 1_000_000_000) {
+    showToast('Harga produk harus bilangan bulat antara Rp 1 hingga Rp 1.000.000.000.');
+    return;
+  }
+  if (image && !/^(https?:\/\/|\.\/|\/)/i.test(image)) {
+    showToast('URL foto produk harus diawali http://, https://, atau path lokal.');
     return;
   }
 
@@ -2199,7 +2329,20 @@ export async function submitNewProduct(e) {
   if (state.editingProductId) {
     const target = list.find((p) => p.id === state.editingProductId);
     if (target) {
-      Object.assign(target, { name, category, price, tags: tag ? [tag] : target.tags, desc, image });
+      const invalidVariant = (target.variants || []).find((v) => !Number.isSafeInteger(v.delta) || price + v.delta < 0);
+      if (invalidVariant) {
+        showToast(`Harga baru membuat varian "${invalidVariant.label}" bernilai negatif.`);
+        return;
+      }
+      Object.assign(target, {
+        name,
+        category,
+        price,
+        tags: tag ? [tag] : target.tags,
+        desc,
+        story: story || target.story || desc,
+        image
+      });
       await publishProducts(list, { type: 'edit', id: target.id });
       showToast(`Produk "${name}" berhasil diperbarui.`);
     }
@@ -2211,7 +2354,7 @@ export async function submitNewProduct(e) {
       price,
       tags: tag ? [tag] : ['Baru'],
       desc,
-      story: desc,
+      story: story || desc,
       image,
       isAvailable: false,
       stock: 0,
@@ -2622,6 +2765,8 @@ export async function saveAdminStorefrontSetting(key) {
     }
     await saveSharedSettings((s) => ({ ...s, store: { ...s.store, whatsapp } }));
     updateStorefrontStatus();
+    storefrontDirtyDomains.merchantWhatsApp = false;
+    storefrontBaselines.merchantWhatsApp = null;
     showToast('Nomor WhatsApp storefront berhasil diperbarui.');
   } else if (key === 'availability') {
     const hours = document.getElementById('admin-storefront-hours')?.value.trim();
@@ -2632,10 +2777,10 @@ export async function saveAdminStorefrontSetting(key) {
     }
     await saveSharedSettings((s) => ({ ...s, store: { ...s.store, hours, isOpen } }));
     updateStorefrontStatus();
+    storefrontDirtyDomains.availability = false;
+    storefrontBaselines.availability = null;
     showToast('Ketersediaan toko berhasil disimpan.');
   }
-  storefrontDraftDirty = false;
-  storefrontDraftBaseline = null;
   refreshAdminDashboard();
   } catch (error) { showToast(error.message); }
 }
@@ -2754,6 +2899,8 @@ export function focusMobileSearch() {
 }
 
 export function initEventBindings() {
+  if (initEventBindings._bound) return;
+  initEventBindings._bound = true;
   // Category tabs
   document.querySelectorAll('.category-tabs .tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -2831,8 +2978,22 @@ export function initEventBindings() {
     });
   });
 
+  // Track per-card storefront drafts so saving or polling never clobbers the other card
+  const markStorefrontDirtyByTarget = (target) => {
+    const id = target?.id;
+    if (id === 'admin-storefront-whatsapp') storefrontDirtyDomains.merchantWhatsApp = true;
+    else if (id === 'admin-storefront-hours' || id === 'admin-storefront-is-open') storefrontDirtyDomains.availability = true;
+  };
+  document.addEventListener('input', (e) => markStorefrontDirtyByTarget(e?.target));
+  document.addEventListener('change', (e) => markStorefrontDirtyByTarget(e?.target));
+
   // Delegated dynamic actions (safe from apostrophes/quotes in IDs, variant labels, or QR payloads)
   document.addEventListener('click', (e) => {
+    const dropzone = e.target && typeof e.target.closest === 'function' ? e.target.closest('#admin-qris-dropzone') : null;
+    if (dropzone && !e.target.closest('button, input')) {
+      triggerQRISUpload();
+      return;
+    }
     const waLink = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-store-whatsapp]') : null;
     if (waLink && waLink.getAttribute('aria-disabled') === 'true') {
       e.preventDefault();
@@ -4037,7 +4198,8 @@ function initApp() {
       syncInventory().catch(() => {});
     }
   }, 2000);
-  const syncCloudState = ({ inventory = false } = {}) => {
+  let cloudTick = 0;
+  const syncCloudState = ({ inventory = false, orders = false } = {}) => {
     if (inventory) syncInventory().catch(() => {});
     syncSettingsWithCloud().then((updated) => {
       if (updated && state.activeCheckoutOrderId) {
@@ -4045,23 +4207,26 @@ function initApp() {
         if (order) renderCheckoutView(order);
       }
     }).catch(() => {});
-    syncOrdersWithCloud().catch(() => {});
+    if (orders && hasInventoryAdminToken()) {
+      syncOrdersWithCloud().catch(() => {});
+    }
   };
 
   if (typeof document !== 'undefined') {
     document.addEventListener?.('visibilitychange', () => {
-      if (document.visibilityState === 'visible') syncCloudState({ inventory: true });
+      if (document.visibilityState === 'visible') syncCloudState({ inventory: true, orders: true });
     });
   }
 
-  // Initial sync and rapid foreground polling (4s) so admin QRIS changes propagate immediately across visitors
-  syncCloudState();
+  // Initial sync and foreground settings sync; legacy orders sync on startup/focus/12s when admin is active
+  syncCloudState({ orders: true });
   if (typeof window !== 'undefined') {
     setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      syncCloudState();
+      cloudTick++;
+      syncCloudState({ orders: cloudTick % 3 === 0 });
     }, 4000);
-    window.addEventListener('focus', () => syncCloudState({ inventory: true }));
+    window.addEventListener('focus', () => syncCloudState({ inventory: true, orders: true }));
   }
 
   if (typeof window !== 'undefined' && typeof requestAnimationFrame === 'function') {

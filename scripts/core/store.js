@@ -151,12 +151,20 @@ export function isRealtimeSupported() {
 // Products
 
 let inventoryStock = null;
+function sameInventorySnapshot(a, b) {
+  if (!a || !b || a.revision !== b.revision) return false;
+  const keysA = Object.keys(a.products);
+  const keysB = Object.keys(b.products);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((key) => Object.hasOwn(b.products, key) && a.products[key] === b.products[key]);
+}
 export const getInventoryStock = () => inventoryStock ? structuredClone(inventoryStock) : null;
 export function setInventoryStock(snapshot) {
   if (!snapshot || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0
     || !snapshot.products || typeof snapshot.products !== 'object' || Array.isArray(snapshot.products)
     || Object.values(snapshot.products).some(stock => stock !== null && (!Number.isSafeInteger(stock) || stock < 0 || stock > 1e9))) return false;
   if (inventoryStock && snapshot.revision < inventoryStock.revision) return false;
+  if (inventoryStock && sameInventorySnapshot(inventoryStock, snapshot)) return true;
   inventoryStock = structuredClone(snapshot);
   announce('products', { type: 'inventory-stock', snapshot: structuredClone(inventoryStock) });
   return true;
@@ -250,7 +258,9 @@ export function getOrders() {
 const adminOrders = new Map();
 onAdminLogout(() => { adminOrders.clear(); announce('orders', { type: 'admin-logout' }); });
 export const getAdminOrders = () => hasInventoryAdminToken()
-  ? [...new Map([...getOrders(), ...adminOrders.values()].map(o => [o.id, o])).values()] : [];
+  ? [...new Map([...getOrders(), ...adminOrders.values()].map(o => [o.id, o])).values()]
+      .sort((a, b) => (Number(b.createdAt || 0) - Number(a.createdAt || 0)) || String(b.id || '').localeCompare(String(a.id || '')))
+  : [];
 export const getAdminOrder = id => getAdminOrders().find(o => o.id === id) || null;
 export function acceptsOrder(current, next) {
   if (!Object.values(STATUS).includes(next?.status)) return false;
@@ -263,12 +273,16 @@ export function acceptsOrder(current, next) {
   if (rank(current.status) > rank(next.status) && next.status !== STATUS.CANCELLED) return false;
   return b !== a || next.status === current.status || rank(next.status) > rank(current.status) || next.status === STATUS.CANCELLED || (current.status === STATUS.AWAITING && next.status === STATUS.EXPIRED);
 }
-export function saveAdminOrder(order) {
+export function saveAdminOrder(order, { silent = false } = {}) {
   const current = adminOrders.get(order.id);
   if (!acceptsOrder(current, order)) return current || null;
+  if (current && JSON.stringify(current) === JSON.stringify(order)) return current;
   adminOrders.set(order.id, structuredClone(order));
-  announce('orders', { id: order.id, type: 'admin-inventory' });
+  if (!silent) announce('orders', { id: order.id, type: 'admin-inventory' });
   return order;
+}
+export function notifyOrdersBatch(detail = { type: 'admin-inventory' }) {
+  announce('orders', detail);
 }
 
 export function getOrder(id) {
@@ -281,11 +295,12 @@ export function saveOrder(order, detail = {}) {
   const index = list.findIndex((o) => o.id === order.id);
   if (!acceptsOrder(list[index], order)) return list[index] || null;
   if (!detail.fromCloud) rememberMyOrder(order.id);
-  if (!ownedIds().has(order.id)) return detail.fromCloud ? saveAdminOrder(order) : null;
+  if (!ownedIds().has(order.id)) return detail.fromCloud ? saveAdminOrder(order, { silent: Boolean(detail.silent) }) : null;
+  if (index >= 0 && detail.fromCloud && JSON.stringify(list[index]) === JSON.stringify(order)) return list[index];
   if (index >= 0) list[index] = order;
   else list.unshift(order);
   write(KEYS.orders, list);
-  announce('orders', { id: order.id, status: order.status, ...detail });
+  if (!detail.silent) announce('orders', { id: order.id, status: order.status, ...detail });
   if (!detail.fromCloud) pushOrderToCloud(order);
   return order;
 }

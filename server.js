@@ -80,7 +80,7 @@ function publicPath(pathname) {
   if (!pathname.startsWith('/') || /[\\\\\u0000-\u001f\u007f%:]/.test(pathname)
     || parts.some(part => !part || part.startsWith('.'))) return null;
   if (!PUBLIC_FILES.has(pathname)
-    && (!Object.hasOwn(PUBLIC_ROOTS, parts[0]) || !PUBLIC_ROOTS[parts[0]].has(path.extname(pathname)))) return null;
+    && (!Object.hasOwn(PUBLIC_ROOTS, parts[0]) || !PUBLIC_ROOTS[parts[0]].has(path.extname(pathname).toLowerCase()))) return null;
   const candidate = path.resolve(ROOT, ...parts);
   try {
     const realPath = fs.realpathSync(candidate);

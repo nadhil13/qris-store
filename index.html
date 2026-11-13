@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
-  <link rel="stylesheet" href="styles/main.css?v=20261113-v27">
+  <link rel="stylesheet" href="styles/main.css?v=20261114-v28">
   <script>
     if ('serviceWorker' in navigator) {
       const hadController = Boolean(navigator.serviceWorker.controller);
@@ -1128,7 +1128,7 @@
           <div id="admin-product-form-box" class="admin-product-form-box" style="display: none;">
             <div
               style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-hairline); padding-bottom: 8px;">
-              <strong style="font-size: 0.88rem; color: var(--brand-forest);">Tambah Produk Baru ke Toko</strong>
+              <strong id="admin-product-form-title" style="font-size: 0.88rem; color: var(--brand-forest);">Tambah Produk Baru ke Toko</strong>
               <button type="button" onclick="window.toggleAddProductForm(false)" aria-label="Tutup formulir produk"
                 style="background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--ink-tertiary); min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;">&times;</button>
             </div>
@@ -1152,8 +1152,8 @@
                 </div>
                 <div class="admin-field-group">
                   <label class="admin-field-label" for="new-prod-price">Harga (Rp) *</label>
-                  <input type="number" id="new-prod-price" class="customer-input-field" placeholder="35000" min="1000"
-                    step="500" required />
+                  <input type="number" id="new-prod-price" class="customer-input-field" placeholder="35000" min="1"
+                    max="1000000000" step="1" required />
                 </div>
                 <div class="admin-field-group">
                   <label class="admin-field-label" for="new-prod-tag">Label / Badge</label>
@@ -1169,6 +1169,11 @@
                   <label class="admin-field-label" for="new-prod-desc">Deskripsi Singkat</label>
                   <input type="text" id="new-prod-desc" class="customer-input-field"
                     placeholder="Deskripsi bahan, rasa, atau spesifikasi produk..." />
+                </div>
+                <div class="admin-field-group" style="grid-column: 1 / -1;">
+                  <label class="admin-field-label" for="new-prod-story">Cerita Produk / Detail Asal (Opsional)</label>
+                  <textarea id="new-prod-story" class="customer-input-field" rows="2"
+                    placeholder="Cerita asal bahan, proses pembuatan, atau saran penyajian..."></textarea>
                 </div>
               </div>
               <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;">
@@ -1246,10 +1251,9 @@
           <div class="admin-section-heading">
             <div>
               <span class="admin-section-kicker">Pembayaran</span>
-              <h3 id="admin-payments-title">Konfigurasi QRIS toko</h3>
-              <p>Kelola konfigurasi pembayaran dari panel QRIS yang sudah tersedia. Upload statis dan manager payload akan ditambahkan di ruang ini.</p>
+              <h3 id="admin-payments-title">Kelola QRIS Toko</h3>
+              <p>Memuat panel upload poster QRIS, string EMVCo, dan log webhook merchant...</p>
             </div>
-            <button type="button" class="btn-primary" onclick="window.switchAdminSection('payments')">Buka pengaturan QRIS</button>
           </div>
         </section>
 
@@ -1397,7 +1401,7 @@
   <script src="scripts/vendor/jsqr.js"></script>
   <script src="scripts/vendor/gsap.min.js"></script>
   <script src="scripts/vendor/ScrollTrigger.min.js"></script>
-  <script type="module" src="scripts/app.js?v=20261113-v27"></script>
+  <script type="module" src="scripts/app.js?v=20261114-v28"></script>
 </body>
 
 </html>

@@ -36,9 +36,9 @@ local function run()
   local time=redis.call('TIME')
   local now=tonumber(time[1])*1000+math.floor(tonumber(time[2])/1000)
   local settingsRaw=redis.call('GET',KEYS[2])
-  if not settingsRaw then return fail('CATALOG_UNAVAILABLE',503) end
-  local settings=decode(settingsRaw)
+  local settings=settingsRaw and decode(settingsRaw) or {}
   local products=settings.products
+  if products==nil or products==cjson.null then products=input.seedProducts end
   if type(products)~='table' or #products>2000 then return fail('CATALOG_UNAVAILABLE',503) end
   local catalog={}
   for _,p in ipairs(products) do

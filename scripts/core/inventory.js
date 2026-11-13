@@ -1,4 +1,4 @@
-import { saveOrder, saveAdminOrder, rememberMyOrder, forgetMyOrder, setInventoryStock, getOrders } from './store.js';
+import { saveOrder, saveAdminOrder, notifyOrdersBatch, getAdminOrders, rememberMyOrder, forgetMyOrder, setInventoryStock, getOrders } from './store.js';
 
 const KEY = 'an.inventory.reservations.v1';
 const INVENTORY_ERROR_MESSAGES = {
@@ -74,12 +74,12 @@ async function request(action, { body, query = {}, admin = false } = {}) {
   } else if (result.stock) setInventoryStock(result.stock);
   return result;
 }
-function accept(order) {
-  if (!order?.id || !['awaiting_payment','paid','processing','ready','completed','expired','cancelled'].includes(order.status) || !Array.isArray(order.items) || !order.totals) throw Error('Respons pesanan tidak valid. Coba lagi.');
+function accept(order, { silent = false } = {}) {
+  if (!order?.id || !['awaiting_payment', 'paid', 'processing', 'ready', 'completed', 'expired', 'cancelled'].includes(order.status) || !Array.isArray(order.items) || !order.totals) throw Error('Respons pesanan tidak valid. Coba lagi.');
   const owned = getReservations().some(r => r.payload.id === order.id);
   if (owned) rememberMyOrder(order.id);
   const next = { ...order, inventory: true };
-  return owned ? saveOrder(next, { fromCloud: true, type: 'inventory' }) : saveAdminOrder(next);
+  return owned ? saveOrder(next, { fromCloud: true, type: 'inventory', silent }) : saveAdminOrder(next, { silent });
 }
 export async function reserveInventory(input) {
   if (reserving) throw Error('Reservasi sedang diproses.');
@@ -125,7 +125,7 @@ export async function adjustInventoryStock(productId, stock, expectedRevision) {
   try {
     return await request('adjust', { admin: true, body: { action: 'adjust', productId, stock, expectedRevision } });
   } catch (error) {
-    if (error.message === 'REVISION_CONFLICT') await refreshInventoryStock().catch(() => {});
+    if (error.message === 'REVISION_CONFLICT') await refreshInventoryStock().catch(() => { });
     throw error;
   }
 }
@@ -144,7 +144,15 @@ export async function refreshInventoryOrder(id) {
 export async function listInventoryOrders() {
   const result = await request('list', { admin: true });
   if (!Array.isArray(result.orders)) throw Error('Respons daftar pesanan tidak valid.');
-  return result.orders.map(accept);
+  const orderSignature = () => getAdminOrders()
+    .map((o) => `${o.id}:${o.status}:${o.updatedAt || 0}:${o.revision ?? ''}`)
+    .join('|');
+  const before = orderSignature();
+  const saved = result.orders.map((order) => accept(order, { silent: true }));
+  if (orderSignature() !== before) {
+    notifyOrdersBatch({ type: 'admin-inventory' });
+  }
+  return saved;
 }
 export async function transitionInventoryOrder(action, id, detail = {}) {
   const result = await request(action, { admin: true, body: { action, id, ...detail } });

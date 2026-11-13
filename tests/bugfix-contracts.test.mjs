@@ -179,10 +179,18 @@ test('P0 #2 & P1 #4 (local server): node server.js without KV supports checkout 
     const initialStock = stockRes.body.stock.products['prod-01'];
     assert.ok(initialStock >= 2);
 
-    // Save custom flat settings payload to /api/settings (memory mode) and confirm local inventory picks up updated QRIS payload
+    // Unauthenticated POST /api/settings must fail closed even in local dev mode
     const qrisPayload = '00020101021126610014COM.GO-JEK.WWW01189360091430501410280210G0501410280303UMI51440014ID.CO.QRIS.WWW0215ID10265330868010303UMI5204899953033605802ID5925Toko Terpusat Belanja, Di6013JAKARTA BARAT61051182062070703A0163048201';
+    const unauthSettings = await sendReq('/api/settings', {
+      method: 'POST',
+      body: { updatedAt: Date.now(), payload: qrisPayload, store: { name: 'Intruder', isOpen: true } }
+    });
+    assert.equal(unauthSettings.status, 401);
+
+    // Save custom flat settings payload to /api/settings (memory mode) with admin auth and confirm local inventory picks up updated QRIS payload
     const settingsRes = await sendReq('/api/settings', {
       method: 'POST',
+      headers: { authorization: 'Bearer local-admin-test' },
       body: { updatedAt: Date.now(), payload: qrisPayload, store: { name: 'Toko Lokal', isOpen: true } }
     });
     assert.equal(settingsRes.status, 200);

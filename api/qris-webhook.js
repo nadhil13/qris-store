@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { INVENTORY_SCRIPT } from './lib/inventory-script.js';
-import { authorizeInventoryAdmin } from './inventory.js';
+import { authorizeInventoryAdmin, INVENTORY_SEED_PRODUCTS } from './inventory.js';
 
 const MAX_WEBHOOK_BODY = 16 * 1024;
 const VALID_ID = /^[A-Za-z0-9_-]{3,80}$/;
@@ -56,17 +56,62 @@ export function parseIndonesianAmount(payload) {
   const text = payload.replace(/[\u0000-\u001F]+/g, ' ').trim();
   if (!text) return null;
 
-  const currencyMatch = text.match(/(?:Rp\.?|IDR)\s*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)(?:[.,][0-9]{1,2})?/i);
-  if (currencyMatch) {
-    return cleanAmountNumber(currencyMatch[1]);
+  const POSITIVE_CUES = /\b(?:diterima|terima|masuk|sebesar|nominal|sejumlah|senilai|pembayaran|transaksi|tagihan|dibayar|bayar|transfer)\b/gi;
+  const NEGATIVE_CUES = /\b(?:saldo|sisa|cashback|promo|diskon|potongan|biaya|admin|fee|poin|bonus|hemat|voucher|kupon|maksimal|minimal|limit)\b/gi;
+
+  const lastMatchOffset = (segment, regex) => {
+    regex.lastIndex = 0;
+    let lastEnd = -1;
+    let m;
+    while ((m = regex.exec(segment)) !== null) {
+      lastEnd = m.index + m[0].length;
+    }
+    return lastEnd;
+  };
+
+  const scoreCandidate = (startIndex, kindWeight) => {
+    const rawPrefix = text.slice(Math.max(0, startIndex - 64), startIndex);
+    const clauseParts = rawPrefix.split(/[.!?\n,;:|]+/);
+    const clausePrefix = clauseParts[clauseParts.length - 1] || rawPrefix;
+    const lowerClause = clausePrefix.toLowerCase();
+    const posIdx = lastMatchOffset(lowerClause, POSITIVE_CUES);
+    const negIdx = lastMatchOffset(lowerClause, NEGATIVE_CUES);
+    let score = kindWeight;
+    if (negIdx > posIdx) {
+      score -= 30;
+    } else if (posIdx > negIdx) {
+      score += 30;
+    } else {
+      const lowerBroad = rawPrefix.toLowerCase();
+      const broadPos = lastMatchOffset(lowerBroad, POSITIVE_CUES);
+      const broadNeg = lastMatchOffset(lowerBroad, NEGATIVE_CUES);
+      if (broadNeg > broadPos) score -= 15;
+      else if (broadPos > broadNeg) score += 15;
+    }
+    return score;
+  };
+
+  const candidates = [];
+  const currencyRegex = /(?:Rp\.?|IDR)\s*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)(?:[.,][0-9]{1,2})?/gi;
+  let match;
+  while ((match = currencyRegex.exec(text)) !== null) {
+    const amount = cleanAmountNumber(match[1]);
+    if (amount) {
+      candidates.push({ amount, score: scoreCandidate(match.index, 5), index: match.index });
+    }
   }
 
-  const keywordMatch = text.match(/(?:sebesar|nominal|sejumlah|senilai|total|diterima|terima|masuk|pembayaran|transaksi)\s+(?:Rp\.?\s*)?([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{4,})(?:[.,][0-9]{1,2})?/i);
-  if (keywordMatch) {
-    return cleanAmountNumber(keywordMatch[1]);
+  const keywordRegex = /(?:sebesar|nominal|sejumlah|senilai|total|diterima|terima|masuk|pembayaran|transaksi|tagihan)\s+(?:Rp\.?\s*)?([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{4,})(?:[.,][0-9]{1,2})?/gi;
+  while ((match = keywordRegex.exec(text)) !== null) {
+    const amount = cleanAmountNumber(match[1]);
+    if (amount) {
+      candidates.push({ amount, score: scoreCandidate(match.index, 2), index: match.index });
+    }
   }
 
-  return null;
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => (b.score - a.score) || (a.index - b.index));
+  return candidates[0].amount;
 }
 
 async function kvCommand(kv, command) {
@@ -110,7 +155,7 @@ async function recordWebhookEvent(kv, entry, useMemory = false) {
       WEBHOOK_LOG_KEY,
       JSON.stringify(safe)
     ]);
-  } catch {}
+  } catch { }
 }
 
 async function readWebhookEvents(kv, useMemory = false) {
@@ -306,7 +351,7 @@ export default async function handler(req, res, { localExecutor } = {}) {
       result = localExecutor(commandInput);
     } else {
       if (!kv) return send(503, { ok: false, code: 'STORAGE_UNAVAILABLE' });
-      const envelope = await kvCommand(kv, ['EVAL', INVENTORY_SCRIPT, 2, 'atelier_inventory_v1', 'atelier_settings', JSON.stringify(commandInput)]);
+      const envelope = await kvCommand(kv, ['EVAL', INVENTORY_SCRIPT, 2, 'atelier_inventory_v1', 'atelier_settings', JSON.stringify({ ...commandInput, seedProducts: INVENTORY_SEED_PRODUCTS })]);
       if (envelope.error || typeof envelope.result !== 'string') throw new Error('KV command failure');
       result = JSON.parse(envelope.result);
     }

@@ -103,7 +103,10 @@ export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
     if (!last || fresh.status !== last.status || fresh.updatedAt !== last.updatedAt) {
       const previous = last;
       last = fresh;
+      if (last.status !== STATUS.AWAITING) stopAll();
       onUpdate && onUpdate(fresh, previous);
+    } else if (last.status !== STATUS.AWAITING) {
+      stopAll();
     }
   };
 
@@ -113,17 +116,23 @@ export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
 
   const tick = setInterval(() => {
     if (stopped || !last) return;
-    if (last.status === STATUS.AWAITING) {
-      if (remainingMs(last) <= 0) {
-        sweepExpiredOrders();
-        push();
-      }
-      onTick && onTick(remainingMs(last), last);
+    if (last.status !== STATUS.AWAITING) {
+      stopAll();
+      return;
     }
+    if (remainingMs(last) <= 0) {
+      sweepExpiredOrders();
+      push();
+    }
+    onTick && onTick(remainingMs(last), last);
   }, 1000);
 
   const poll = setInterval(async () => {
     if (stopped || polling || !last) return;
+    if (last.status !== STATUS.AWAITING) {
+      stopAll();
+      return;
+    }
     polling = true;
     try {
       if (isInventoryOrder(last)) {
@@ -131,7 +140,6 @@ export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
         push();
         return;
       }
-      if (last.status !== STATUS.AWAITING) return;
       const result = await provider.check(last);
       if (result && result.paid) confirmPayment(orderId, { by: provider.id, reference: result.reference || '' });
     } catch (err) {

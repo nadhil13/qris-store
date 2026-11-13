@@ -1,7 +1,7 @@
 {
-  "name": "Atelier Nusantara: Butik Belanja Multi-Kategori",
+  "name": "Atelier Nusantara: Toko Online Multi-Kategori",
   "short_name": "Atelier Nusantara",
-  "description": "Butik kurasi belanja multi-kategori: makanan gourmet, kopi artisan, kriya nusantara, mode, dan gadget dengan pembayaran QRIS dinamis GoPay.",
+  "description": "Toko online multi-kategori: makanan, minuman, kriya nusantara, mode, gadget meja, dan produk digital dengan pembayaran QRIS dinamis.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#F8F5F0",

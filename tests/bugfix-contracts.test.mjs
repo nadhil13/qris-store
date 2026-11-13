@@ -518,3 +518,206 @@ test('P2 #1-#4 runtime behaviors: admin modal, tracker states, countdown sync, m
     globalThis.setInterval = nativeSetInterval;
   }
 });
+
+test('Section B & C: visual craft, non-blocking fonts, copy honesty, comment hygiene & card/admin DOM', async () => {
+  const [cssSource, designSource, htmlSource, manifestSource, serverSource, appSource] = await Promise.all([
+    read('styles/main.css'),
+    read('DESIGN.md'),
+    read('index.html'),
+    read('manifest.json'),
+    read('server.js'),
+    read('scripts/app.js')
+  ]);
+
+  // B.1 Glassmorphism dose cap: at most 1 blur declaration (.site-header only)
+  const blurMatches = cssSource.match(/(?:-webkit-)?backdrop-filter:\s*blur\(/g) || [];
+  assert.ok(blurMatches.length <= 2, `Expected backdrop-filter blur only on .site-header, found ${blurMatches.length}`);
+  assert.match(cssSource, /\.site-header\s*\{[^}]*backdrop-filter:\s*blur\(/);
+  for (const selector of ['.ritual-shell', '.showcase-tag', '.toolbar-wrapper', '.badge-category', '.drawer-backdrop', '.modal-backdrop', '.toast-toaster', '.order-tracker-dock', '.mobile-app-bar']) {
+    const escaped = selector.replace('.', '\\.');
+    const block = cssSource.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1] || '';
+    assert.doesNotMatch(block, /backdrop-filter:\s*blur\(/, `${selector} must not use backdrop-filter blur`);
+  }
+
+  // B.2 No decorative radial glow blobs or neon pulse keyframes
+  assert.doesNotMatch(cssSource, /\.ritual-shell::before|\.ritual-shell::after|\.cta-shell::before|\.showcase-card::after/);
+  assert.doesNotMatch(cssSource, /@keyframes\s+pulse-beacon|#22C55E/i);
+
+  // B.3 & B.4 Card meta row replaces photo overlay badges; search radius unified
+  assert.match(cssSource, /\.card-meta-row\s*\{/);
+  assert.doesNotMatch(cssSource, /\.card-badge-wrap\b/);
+  const searchBox = cssSource.match(/\.search-box\s*\{([^}]*)\}/)?.[1] || '';
+  const searchInput = cssSource.match(/\.search-input\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(searchBox, /background:\s*transparent/);
+  assert.match(searchInput, /border-radius:\s*10px/);
+
+  // B.6 Visual cohesion on CTA & payment info sections (matte warm paper canvas)
+  const finalCta = cssSource.match(/\.final-cta\s*\{([^}]*)\}/)?.[1] || '';
+  const ctaShell = cssSource.match(/\.cta-shell\s*\{([^}]*)\}/)?.[1] || '';
+  const luxuryRitual = cssSource.match(/\.luxury-ritual\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(finalCta, /background:\s*var\(--bg-canvas\)/);
+  assert.doesNotMatch(ctaShell, /linear-gradient/);
+  assert.match(luxuryRitual, /background:\s*var\(--bg-canvas\)/);
+
+  // C.1 Copy honesty: no butik/kurasi hype, no false "realtime" claim in admin QRIS intro, manifest generic, demo WA labeled
+  assert.doesNotMatch(htmlSource, /\bButik\b|\bkurasi\b/i);
+  assert.doesNotMatch(manifestSource, /\bButik\b|\bkurasi\b|GoPay/i);
+  assert.doesNotMatch(appSource, /Pelanggan Butik|secara <strong>realtime<\/strong>/i);
+  assert.match(htmlSource, /6281234567890/);
+  assert.match(htmlSource, /contoh demo/i);
+
+  // C.2 Comment & log hygiene (keep functional comments, strip template tags & ==== banners)
+  assert.doesNotMatch(htmlSource, /Scroll-craft hero section|\(Feature B\)|\(feature E\)|UI mobility R-/i);
+  assert.doesNotMatch(cssSource, /\(R-32, R-39, Impeccable\)/);
+  assert.doesNotMatch(serverSource, /={10,}/);
+
+  // C.3 Non-blocking Google Fonts & offline system fallbacks mirrored in DESIGN.md
+  assert.doesNotMatch(cssSource, /@import\s+url\(['"]https:\/\/fonts\.googleapis\.com/);
+  assert.match(htmlSource, /fonts\.googleapis\.com\/css2[\s\S]{0,300}media="print"[^>]*onload="this\.media='all'"/);
+  assert.match(cssSource, /--font-sans:[^;]*Segoe UI/);
+  assert.match(cssSource, /--font-mono:[^;]*ui-monospace[^;]*Consolas/);
+  assert.equal(
+    extractRootBlock(cssSource).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim(),
+    extractRootBlock(designSource).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ').trim()
+  );
+
+  // B.3 & B.5 Runtime DOM behavior: clean card photography + smooth admin payments polling
+  const nativeSetInterval = globalThis.setInterval;
+  globalThis.setInterval = (...args) => {
+    const timer = nativeSetInterval(...args);
+    timer.unref?.();
+    return timer;
+  };
+  const elements = new Map();
+  const makeEl = (id) => ({
+    id,
+    value: '',
+    defaultValue: '',
+    textContent: '',
+    _html: '',
+    href: '',
+    hidden: false,
+    checked: false,
+    attrs: {},
+    style: {},
+    dataset: {},
+    classes: new Set(),
+    parentElement: null,
+    get innerHTML() { return this._html; },
+    set innerHTML(v) { this._html = v; },
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    getAttribute(k) { return this.attrs[k] ?? null; },
+    removeAttribute(k) { delete this.attrs[k]; },
+    addEventListener() {},
+    removeEventListener() {},
+    scrollIntoView() {},
+    focus() {},
+    matches: () => false,
+    contains: () => false,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    classList: {
+      add: (c) => elements.get(id)?.classes.add(c),
+      remove: (c) => elements.get(id)?.classes.delete(c),
+      contains: (c) => elements.get(id)?.classes.has(c) ?? false
+    }
+  });
+  const getEl = (id) => {
+    if (!elements.has(id)) {
+      const el = makeEl(id);
+      el.parentElement = globalThis.document?.body || null;
+      elements.set(id, el);
+    }
+    return elements.get(id);
+  };
+  globalThis.document = {
+    body: { children: [], style: {}, querySelector: () => null, querySelectorAll: () => [], classList: { add() {}, remove() {} } },
+    activeElement: null,
+    addEventListener() {},
+    removeEventListener() {},
+    getElementById: getEl,
+    querySelector: () => null,
+    querySelectorAll: () => []
+  };
+  const storage = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => storage.get(k) ?? null,
+    setItem: (k, v) => storage.set(k, String(v)),
+    removeItem: (k) => storage.delete(k)
+  };
+  globalThis.window = {
+    document: globalThis.document,
+    localStorage: globalThis.localStorage,
+    location: { protocol: 'https:', search: '', hash: '' },
+    addEventListener() {},
+    removeEventListener() {}
+  };
+  globalThis.requestAnimationFrame = () => {};
+
+  try {
+    const store = await import('../scripts/core/store.js');
+    const app = await import(`../scripts/app.js?bc=${Date.now()}`);
+
+    // B.3 Card layout keeps category/tag out of .card-media into .card-meta-row
+    app.renderCatalog();
+    const gridHtml = getEl('product-grid').innerHTML;
+    assert.doesNotMatch(gridHtml, /card-badge-wrap/);
+    assert.match(gridHtml, /<div class="card-media">[\s\S]*?<img [^>]*>[\s\S]*?<\/div>\s*<div class="card-body">\s*<div class="card-meta-row">/);
+
+    // B.5 Admin payments section uses h3/h4 (not h4/h5), skips unnecessary re-renders on unchanged poll, preserves #admin-qris-scan-status
+    const paySec = getEl('admin-section-payments');
+    const insideBtn = getEl('admin-inside-payments-control');
+    paySec.contains = (target) => target === insideBtn;
+    const seedScanStatus = getEl('admin-qris-scan-status');
+    seedScanStatus.style.display = 'block';
+    seedScanStatus.innerHTML = 'Status scan tersimpan';
+
+    let innerWrites = 0;
+    let backingHtml = '';
+    Object.defineProperty(paySec, 'innerHTML', {
+      get: () => backingHtml,
+      set: (v) => {
+        innerWrites += 1;
+        backingHtml = v;
+        const freshScan = makeEl('admin-qris-scan-status');
+        freshScan.style.display = 'none';
+        elements.set('admin-qris-scan-status', freshScan);
+      }
+    });
+
+    app.refreshAdminDashboard();
+    assert.equal(innerWrites, 1);
+    assert.match(backingHtml, /<h3 id="admin-payments-title">/);
+    assert.doesNotMatch(backingHtml, /<h4 id="admin-payments-title">|<h5\b/i);
+    assert.doesNotMatch(backingHtml, /secara <strong>realtime<\/strong>/i);
+    assert.equal(getEl('admin-qris-scan-status').style.display, 'block');
+    assert.equal(getEl('admin-qris-scan-status').innerHTML, 'Status scan tersimpan');
+
+    // Unchanged settings poll should not clobber #admin-section-payments DOM
+    app.refreshAdminDashboard();
+    assert.equal(innerWrites, 1, 'Polling with unchanged QRIS settings must not replace #admin-section-payments innerHTML');
+
+    // Focus inside #admin-section-payments skips re-render even when QRIS settings change
+    const curSettings = store.getSettings();
+    store.saveSettings({
+      ...curSettings,
+      qris: {
+        ...curSettings.qris,
+        history: [{ payload: store.DEMO_STATIC_QRIS, replacedAt: 1700000000000 }]
+      }
+    });
+    globalThis.document.activeElement = insideBtn;
+    app.refreshAdminDashboard();
+    assert.equal(innerWrites, 1, 'Focus inside #admin-section-payments must defer re-render');
+
+    // Once focus leaves, re-render updates history buttons and still preserves #admin-qris-scan-status feedback
+    globalThis.document.activeElement = null;
+    app.refreshAdminDashboard();
+    assert.equal(innerWrites, 2);
+    assert.match(backingHtml, /Pulihkan #1/);
+    assert.equal(getEl('admin-qris-scan-status').style.display, 'block');
+    assert.equal(getEl('admin-qris-scan-status').innerHTML, 'Status scan tersimpan');
+  } finally {
+    globalThis.setInterval = nativeSetInterval;
+  }
+});

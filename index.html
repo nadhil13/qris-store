@@ -4,9 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Atelier Nusantara: Butik Belanja Multi-Kategori | Makanan, Barang, Mode & Kriya</title>
+  <title>Atelier Nusantara: Toko Online Multi-Kategori | Makanan, Barang, Mode & Kriya</title>
   <meta name="description"
     content="Toko online makanan, minuman, kriya, fashion, gadget meja, dan produk digital. Stok terlihat langsung, pembayaran lewat QRIS dengan nominal terisi otomatis, atau pesan lewat WhatsApp.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
   <link rel="stylesheet" href="styles/main.css?v=20261111-v10">
   <script>
     if ('serviceWorker' in navigator) {
@@ -97,7 +101,7 @@
   </header>
 
   <main id="main-content" tabindex="-1">
-    <!-- Scroll-craft hero section -->
+    <!-- Hero section -->
     <section class="hero-section" id="hero">
       <div class="container hero-grid">
         <div class="hero-editorial">
@@ -341,7 +345,7 @@
     </div>
 
     <div class="drawer-footer">
-      <!-- Customer Information & Shipping Selector (Feature B) -->
+      <!-- Customer Information & Shipping Selector -->
       <div class="cart-customer-section">
         <div class="cart-section-title">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -788,7 +792,7 @@
     </div>
   </div>
 
-  <!-- Store admin dashboard modal (feature E) -->
+  <!-- Store admin dashboard modal -->
   <div class="modal-backdrop" id="admin-dashboard-modal-backdrop" inert>
     <div class="admin-dashboard-modal admin-workspace-shell" id="admin-workspace-shell" role="dialog" aria-modal="true" aria-labelledby="modal-admin-title">
       <div class="bottom-sheet-grabber" aria-hidden="true"></div>
@@ -1065,7 +1069,8 @@
               <h4 id="admin-store-contact-title">Nomor WhatsApp penerima pesanan</h4>
               <p>Nomor ini dipakai saat pelanggan mengirim ringkasan pesanan ke toko.</p>
               <label class="admin-field-label" for="admin-storefront-whatsapp">Nomor WhatsApp</label>
-              <input type="tel" id="admin-storefront-whatsapp" class="customer-input-field" placeholder="62812..." />
+              <input type="tel" id="admin-storefront-whatsapp" class="customer-input-field" placeholder="62812..." aria-describedby="admin-storefront-whatsapp-note" />
+              <small id="admin-storefront-whatsapp-note" style="display:block; margin-top:-4px; margin-bottom:10px; font-size:0.78rem; color:var(--ink-secondary); line-height:1.45;">Default bawaan memakai nomor contoh demo (6281234567890). Ganti dengan nomor WhatsApp toko Anda.</small>
               <button type="button" class="btn-primary" onclick="window.saveAdminStorefrontSetting('merchantWhatsApp')">Simpan kontak</button>
             </section>
             <section class="admin-settings-card" aria-labelledby="admin-store-hours-title">
@@ -1133,7 +1138,7 @@
     <span id="toast-text">Pemberitahuan</span>
   </div>
 
-  <!-- Native mobile bottom navigation dock (UI mobility R-03, R-35) -->
+  <!-- Mobile bottom navigation -->
   <nav class="mobile-app-bar" aria-label="Navigasi Utama Ponsel">
     <a href="#katalog" class="mobile-nav-item active" id="mob-nav-katalog" onclick="window.switchMobileTab('katalog')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -45,8 +45,8 @@ Current `:root` values:
   --status-danger-bg: #fde8e8;
 
   --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Consolas, monospace;
 
   --space-unit: 8px;
   --container-max: 1280px;
@@ -79,7 +79,7 @@ radius, primary/secondary buttons use `10px`, and admin table containers use
 
 Playfair Display is used for editorial headings and product titles; Plus Jakarta
 Sans for body text, controls and navigation; JetBrains Mono for prices and numeric
-details. Google Fonts is imported with `display=swap`. Root size is `16px` and
+details. Google Fonts is loaded non-blockingly with `display=swap` and system fallbacks. Root size is `16px` and
 body line height is `1.6`.
 
 The hero heading uses `clamp(2.7rem, 5vw, 4.8rem)`, line height `0.98` and tracking

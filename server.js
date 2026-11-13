@@ -192,13 +192,11 @@ const server = http.createServer(handleRequest);
 const isMainEntry = Boolean(process.argv[1]) && path.resolve(process.argv[1]).toLowerCase() === __filename.toLowerCase();
 if (isMainEntry) {
   server.listen(PORT, '0.0.0.0', () => {
-    console.log('====================================================');
     console.log('Server Atelier Nusantara Berjalan!');
     console.log(`Buka Storefront  : http://localhost:${PORT}/`);
     console.log(`Buka Panel Admin : http://localhost:${PORT}/?admin=1`);
     if (isLocalDevWithoutKV()) {
       console.log('Mode lokal       : penyimpanan in-memory aktif tanpa Redis/KV');
     }
-    console.log('====================================================');
   });
 }

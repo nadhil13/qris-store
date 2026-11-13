@@ -373,12 +373,12 @@ export function renderCatalog() {
         <div class="card-media">
           ${!available ? '<span class="badge-sold-out">Stok Habis</span>' : ''}
           <img src="${escapeHTML(item.image)}" alt="${escapeHTML(item.name)}" width="380" height="240" loading="lazy" style="aspect-ratio: 16/10; object-fit: cover;" />
-          <div class="card-badge-wrap">
+        </div>
+        <div class="card-body">
+          <div class="card-meta-row">
             <span class="badge-pill badge-category" data-cat="${escapeHTML(item.category)}">${escapeHTML(getCategoryLabel(item.category))}</span>
             ${item.tags && item.tags[0] ? `<span class="badge-pill badge-tag">${escapeHTML(item.tags[0])}</span>` : ''}
           </div>
-        </div>
-        <div class="card-body">
           <button type="button" class="card-title-btn" data-action="quick-view" data-product-id="${escapeHTML(item.id)}" aria-label="Lihat detail ${escapeHTML(item.name)}">
             <h3 class="card-title">${escapeHTML(item.name)}</h3>
           </button>
@@ -1273,7 +1273,7 @@ export function sendOrderToWhatsApp() {
   let msg = `*SALINAN TAGIHAN QRIS: ATELIER NUSANTARA*\n`;
   msg += `----------------------------------------\n`;
   msg += `No. Invoice: ${order.invoice}\n`;
-  msg += `Pemesan: ${order.customer.name || 'Pelanggan Butik'}\n`;
+  msg += `Pemesan: ${order.customer.name || 'Pelanggan'}\n`;
   msg += `Total Tagihan: ${formatIDR(order.totals.total)}\n`;
   msg += `Status: Menunggu Pembayaran (Batas 10 Menit)\n`;
   let payload;
@@ -1554,9 +1554,15 @@ export function refreshAdminDashboard() {
 
   renderAdminOrderTable();
   renderAdminProductsTable();
+  const paymentSection = document.getElementById('admin-section-payments');
   const customQrisInput = document.getElementById('admin-custom-qris-input');
-  const hasQrisDraft = customQrisInput && customQrisInput.value !== customQrisInput.defaultValue;
-  if (!hasQrisDraft && (!customQrisInput || document.activeElement !== customQrisInput)) {
+  const hasQrisDraft = Boolean(customQrisInput && customQrisInput.value !== customQrisInput.defaultValue);
+  const focusInPayments = Boolean(
+    paymentSection
+    && document.activeElement
+    && (document.activeElement === paymentSection || paymentSection.contains?.(document.activeElement))
+  );
+  if (!hasQrisDraft && !focusInPayments) {
     renderAdminPaymentsSection();
   }
 }
@@ -1853,11 +1859,38 @@ export async function resetProductsToDefault() {
   showToast('Katalog produk di-reset ke default.');
 }
 
-function renderAdminPaymentsSection() {
+function snapshotQrisScanStatus() {
+  const el = document.getElementById('admin-qris-scan-status');
+  if (!el || el.style?.display === 'none' || !el.innerHTML) return null;
+  return {
+    display: el.style.display || 'block',
+    background: el.style.background || '',
+    color: el.style.color || '',
+    border: el.style.border || '',
+    html: el.innerHTML
+  };
+}
+
+function clearQrisScanStatus() {
+  const el = document.getElementById('admin-qris-scan-status');
+  if (!el) return;
+  el.style.display = 'none';
+  el.innerHTML = '';
+}
+
+function renderAdminPaymentsSection({ force = false } = {}) {
   const section = document.getElementById('admin-section-payments');
   if (!section) return;
   const settings = getSettings();
   const activePayload = settings.qris.payload || DEMO_STATIC_QRIS;
+  const nextSignature = JSON.stringify({
+    payload: activePayload,
+    history: (settings.qris.history || []).map((h) => h.payload),
+    storeName: settings.store.name || ''
+  });
+  if (!force && section.innerHTML && section.dataset?.qrisSignature === nextSignature) return;
+
+  const prevScanStatus = snapshotQrisScanStatus();
   const desc = describeQRIS(activePayload);
   const val = validateQRIS(activePayload);
 
@@ -1865,8 +1898,8 @@ function renderAdminPaymentsSection() {
     <div class="admin-section-heading">
       <div>
         <span class="admin-section-kicker">Konfigurasi Pembayaran Toko</span>
-        <h4 id="admin-payments-title">Kelola QRIS Toko (Upload Foto / Statis ke Dinamis)</h4>
-        <p>Unggah foto atau poster QRIS merchant Anda (GoPay, BCA, Mandiri, ShopeePay, DANA, dsb). Sistem otomatis memindai QR, memverifikasi checksum, dan mengubahnya menjadi QRIS Dinamis yang mengunci nominal tagihan otomatis di scanner pembeli secara <strong>realtime</strong>.</p>
+        <h3 id="admin-payments-title">Kelola QRIS Toko (Upload Foto / Statis ke Dinamis)</h3>
+        <p>Unggah foto atau poster QRIS merchant Anda (GoPay, BCA, Mandiri, ShopeePay, DANA, dsb). Sistem otomatis memindai QR, memverifikasi checksum, dan mengubahnya menjadi QRIS Dinamis yang mengunci nominal tagihan otomatis di scanner pembeli.</p>
       </div>
     </div>
 
@@ -1874,7 +1907,7 @@ function renderAdminPaymentsSection() {
       <!-- Active QRIS Status Card -->
       <section class="admin-settings-card">
         <span class="admin-section-kicker">QRIS Aktif Toko Saat Ini</span>
-        <h5 style="margin-bottom:4px;">${escapeHTML(desc.merchantName || settings.store.name)}</h5>
+        <h4 style="margin-bottom:4px;">${escapeHTML(desc.merchantName || settings.store.name)}</h4>
         <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-secondary); margin:6px 0 14px; line-height:1.6;">
           NMID: <strong>${escapeHTML(desc.nmid || 'ID1026533086801')}</strong><br>
           Kota: <strong>${escapeHTML(desc.city || 'JAKARTA BARAT')}</strong><br>
@@ -1893,7 +1926,7 @@ function renderAdminPaymentsSection() {
       <!-- Update QRIS Card -->
       <section class="admin-settings-card">
         <span class="admin-section-kicker">Perbarui QRIS Toko</span>
-        <h5>1. Upload Foto / Poster QRIS Baru</h5>
+        <h4>1. Upload Foto / Poster QRIS Baru</h4>
         <p style="font-size:0.78rem; color:var(--ink-secondary); margin-bottom:12px;">
           Punya poster atau screenshot QRIS dari m-Banking / aplikasi merchant? Upload langsung fotonya di sini:
         </p>
@@ -1916,7 +1949,7 @@ function renderAdminPaymentsSection() {
 
         <!-- Manual String Option -->
         <div style="border-top:1px dashed var(--border-hairline); padding-top:12px; margin-top:8px;">
-          <h5 style="font-size:0.85rem;">2. Atau Tempel String EMVCo QRIS Manual</h5>
+          <h4 style="font-size:0.85rem;">2. Atau Tempel String EMVCo QRIS Manual</h4>
           <p style="font-size:0.75rem; color:var(--ink-secondary); margin-bottom:6px;">Jika Anda memiliki salinan teks string QRIS (diawali <code>000201...</code>):</p>
           <textarea id="admin-custom-qris-input" class="config-textarea" rows="3" placeholder="000201010211...">${escapeHTML(activePayload)}</textarea>
           <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
@@ -1938,6 +1971,17 @@ function renderAdminPaymentsSection() {
       </section>
     </div>
   `;
+  if (section.dataset) section.dataset.qrisSignature = nextSignature;
+  if (prevScanStatus) {
+    const nextStatusEl = document.getElementById('admin-qris-scan-status');
+    if (nextStatusEl) {
+      nextStatusEl.style.display = prevScanStatus.display;
+      nextStatusEl.style.background = prevScanStatus.background;
+      nextStatusEl.style.color = prevScanStatus.color;
+      nextStatusEl.style.border = prevScanStatus.border;
+      nextStatusEl.innerHTML = prevScanStatus.html;
+    }
+  }
 }
 
 export function triggerQRISUpload() {
@@ -2009,7 +2053,14 @@ export async function processQRISFile(file) {
       return;
     }
 
-    // Success: replace QRIS in store and broadcast to all open storefronts
+    // Success: preserve status feedback across subscriber re-render and save QRIS
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.background = 'var(--status-success-bg)';
+      statusEl.style.color = 'var(--status-success)';
+      statusEl.style.border = '1px solid #B7E4C7';
+      statusEl.innerHTML = `QRIS <strong>${escapeHTML(val.info?.merchantName || 'Toko')}</strong> valid (CRC OK) dan disimpan.`;
+    }
     await replaceQRIS(val.payload, val.info || {});
     sfx.playSuccess();
     refreshAdminDashboard();
@@ -2035,6 +2086,7 @@ export async function adminApplyCustomQRIS() {
     await showDialog(`String QRIS tidak valid:\n${val.errors.join('\n')}`);
     return;
   }
+  clearQrisScanStatus();
   try { await replaceQRIS(val.payload, val.info || {}); }
   catch (error) { showToast(error.message); return; }
   sfx.playSuccess();
@@ -2045,6 +2097,7 @@ export async function adminApplyCustomQRIS() {
 export async function adminRestoreQRIS(payload) {
   const val = validateQRIS(payload);
   if (!val.ok) return;
+  clearQrisScanStatus();
   try { await replaceQRIS(val.payload, val.info || {}); }
   catch (error) { showToast(error.message); return; }
   sfx.playSuccess();
@@ -2053,6 +2106,7 @@ export async function adminRestoreQRIS(payload) {
 }
 
 export async function adminResetQRISDefault() {
+  clearQrisScanStatus();
   try { await replaceQRIS(DEMO_STATIC_QRIS, { merchantName: 'Atelier Nusantara' }); }
   catch (error) { showToast(error.message); return; }
   sfx.playSuccess();

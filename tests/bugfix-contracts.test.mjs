@@ -721,3 +721,163 @@ test('Section B & C: visual craft, non-blocking fonts, copy honesty, comment hyg
     globalThis.setInterval = nativeSetInterval;
   }
 });
+
+test('Footer redesign: semantic dark editorial grid, collapsible #privasi, 44px focus/mobile clearance, and live status sync', async () => {
+  const [htmlSource, cssSource, appSource] = await Promise.all([
+    read('index.html'),
+    read('styles/main.css'),
+    read('scripts/app.js')
+  ]);
+
+  // HTML structure contracts
+  assert.doesNotMatch(htmlSource, /<footer\s+style=/);
+  assert.match(htmlSource, /<footer class="site-footer">/);
+  assert.doesNotMatch(htmlSource, /\u2014/);
+  assert.match(htmlSource, /id="footer-status-label"/);
+  assert.match(htmlSource, /id="footer-status-dot"/);
+  assert.match(htmlSource, /<a href="#katalog" class="footer-link">/);
+  assert.match(htmlSource, /<a href="#filosofi" class="footer-link">/);
+  assert.match(htmlSource, /<a href="#pembayaran-info" class="footer-link">/);
+  assert.match(htmlSource, /<button type="button" class="footer-link footer-action" onclick="window\.openCartDrawer\(\)">/);
+  assert.match(htmlSource, /<button type="button" class="footer-link footer-action" onclick="window\.openOrderTrackerModal\(\)">/);
+  assert.match(htmlSource, /id="footer-whatsapp-link"[^>]*data-store-whatsapp/);
+  assert.match(
+    htmlSource,
+    /<button type="button" class="footer-meta-btn" id="footer-privacy-trigger" aria-expanded="false" aria-controls="privasi" onclick="window\.toggleFooterPrivacy\(\)">/
+  );
+  assert.match(
+    htmlSource,
+    /<section class="footer-privacy-panel" id="privasi" aria-labelledby="privasi-title" tabindex="-1" hidden>/
+  );
+  assert.match(htmlSource, /onclick="window\.closeCartDrawer\(\);\s*window\.toggleFooterPrivacy\?\.\(true\)"/);
+  assert.match(htmlSource, /<a href="\?admin=1" class="footer-staff-link">Akses penjual<\/a>/);
+
+  // CSS editorial dark contrast, touch targets, and mobile safe-area clearance
+  assert.match(cssSource, /\.site-footer\s*\{[\s\S]*?background:\s*#1D1713;/);
+  assert.match(cssSource, /\.site-footer\s+:focus-visible\s*\{[\s\S]*?outline:\s*2px solid #E8A587\s*!important;/);
+  assert.match(cssSource, /\.footer-privacy-panel\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
+  assert.match(cssSource, /\.footer-link[\s\S]*?min-height:\s*44px;/);
+  assert.match(cssSource, /\.footer-meta-btn[\s\S]*?min-height:\s*44px;/);
+  assert.match(cssSource, /calc\(96px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(appSource, /window\.toggleFooterPrivacy\s*=\s*toggleFooterPrivacy/);
+
+  // Runtime DOM test for toggleFooterPrivacy & updateStorefrontStatus footer sync
+  const nativeSetInterval = globalThis.setInterval;
+  globalThis.setInterval = (...args) => {
+    const timer = nativeSetInterval(...args);
+    timer.unref?.();
+    return timer;
+  };
+
+  const elements = new Map();
+  let focusedId = '';
+  let scrolledId = '';
+  const makeEl = (id) => ({
+    id,
+    value: '',
+    textContent: '',
+    innerHTML: '',
+    href: '',
+    target: '',
+    rel: '',
+    hidden: id === 'privasi',
+    attrs: id === 'footer-privacy-trigger' ? { 'aria-expanded': 'false' } : {},
+    style: {},
+    dataset: {},
+    classes: new Set(),
+    parentElement: null,
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    getAttribute(k) { return this.attrs[k] ?? null; },
+    removeAttribute(k) { delete this.attrs[k]; },
+    addEventListener() {},
+    removeEventListener() {},
+    scrollIntoView() { scrolledId = id; },
+    focus() { focusedId = id; },
+    matches: () => false,
+    contains: () => false,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    classList: {
+      add: (c) => elements.get(id)?.classes.add(c),
+      remove: (c) => elements.get(id)?.classes.delete(c),
+      contains: (c) => elements.get(id)?.classes.has(c) ?? false
+    }
+  });
+  const getEl = (id) => {
+    if (!elements.has(id)) {
+      const el = makeEl(id);
+      el.parentElement = globalThis.document?.body || null;
+      elements.set(id, el);
+    }
+    return elements.get(id);
+  };
+
+  const footerWaLink = getEl('footer-whatsapp-link');
+  globalThis.document = {
+    body: { children: [], style: {}, querySelector: () => null, querySelectorAll: () => [], classList: { add() {}, remove() {} } },
+    activeElement: null,
+    addEventListener() {},
+    removeEventListener() {},
+    getElementById: getEl,
+    querySelector: () => null,
+    querySelectorAll: (sel) => (sel === '[data-store-whatsapp]' ? [footerWaLink] : [])
+  };
+  const storage = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => storage.get(k) ?? null,
+    setItem: (k, v) => storage.set(k, String(v)),
+    removeItem: (k) => storage.delete(k)
+  };
+  globalThis.window = {
+    document: globalThis.document,
+    localStorage: globalThis.localStorage,
+    location: { protocol: 'https:', search: '', hash: '' },
+    addEventListener() {},
+    removeEventListener() {}
+  };
+  globalThis.requestAnimationFrame = () => {};
+
+  try {
+    const store = await import('../scripts/core/store.js');
+    const app = await import(`../scripts/app.js?footer=${Date.now()}`);
+
+    const privasi = getEl('privasi');
+    const trigger = getEl('footer-privacy-trigger');
+    assert.equal(privasi.hidden, true);
+
+    assert.equal(app.toggleFooterPrivacy(), true);
+    assert.equal(privasi.hidden, false);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+
+    assert.equal(app.toggleFooterPrivacy(), false);
+    assert.equal(privasi.hidden, true);
+    assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+
+    assert.equal(app.toggleFooterPrivacy(true), true);
+    assert.equal(privasi.hidden, false);
+    assert.equal(scrolledId, 'privasi');
+    assert.equal(focusedId, 'privasi');
+
+    const prev = store.getSettings();
+    store.saveSettings({
+      ...prev,
+      store: { ...prev.store, isOpen: false, hours: 'Senin - Jumat, 09.00 - 17.00', whatsapp: '' }
+    });
+    app.updateStorefrontStatus();
+    assert.equal(getEl('footer-status-label').textContent, 'Tutup · Senin - Jumat, 09.00 - 17.00');
+    assert.equal(getEl('footer-status-dot').hidden, true);
+    assert.equal(getEl('footer-whatsapp-label').textContent, 'WhatsApp belum diatur');
+
+    store.saveSettings({
+      ...prev,
+      store: { ...prev.store, isOpen: true, hours: 'Setiap hari, 08.00 - 20.00', whatsapp: '6281122334455' }
+    });
+    app.updateStorefrontStatus();
+    assert.equal(getEl('footer-status-label').textContent, 'Buka · Setiap hari, 08.00 - 20.00');
+    assert.equal(getEl('footer-status-dot').hidden, false);
+    assert.equal(getEl('footer-whatsapp-label').textContent, 'WhatsApp Toko');
+    assert.equal(footerWaLink.href, 'https://wa.me/6281122334455');
+  } finally {
+    globalThis.setInterval = nativeSetInterval;
+  }
+});

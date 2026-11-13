@@ -113,14 +113,23 @@ export { getCategoryLabel };
 export const STORAGE_KEY_CUSTOM_PRODUCTS = STORAGE_KEYS.products;
 export const STORAGE_KEY_ADMIN_SESSION = 'an.admin.session.v3';
 
-function updateStorefrontStatus() {
+export function updateStorefrontStatus() {
   const { store } = getSettings();
+  const statusPrefix = store.isOpen === false ? 'Tutup' : 'Buka';
+  const hoursLabel = store.hours || 'Jam operasional belum diatur';
   const label = document.getElementById('store-status-label');
-  if (label) label.textContent = `${store.isOpen === false ? 'Tutup' : 'Buka'} (${store.hours || 'Jam operasional belum diatur'})`;
+  if (label) label.textContent = `${statusPrefix} (${hoursLabel})`;
   const dot = document.getElementById('store-status-dot');
   if (dot) dot.hidden = store.isOpen === false;
 
+  const footerLabel = document.getElementById('footer-status-label');
+  if (footerLabel) footerLabel.textContent = `${statusPrefix} · ${hoursLabel}`;
+  const footerDot = document.getElementById('footer-status-dot');
+  if (footerDot) footerDot.hidden = store.isOpen === false;
+
   const waNum = configuredWhatsApp(store.whatsapp);
+  const footerWaLabel = document.getElementById('footer-whatsapp-label');
+  if (footerWaLabel) footerWaLabel.textContent = waNum ? 'WhatsApp Toko' : 'WhatsApp belum diatur';
   document.querySelectorAll('[data-store-whatsapp]').forEach((el) => {
     if (waNum) {
       el.href = `https://wa.me/${waNum}`;
@@ -135,6 +144,20 @@ function updateStorefrontStatus() {
       el.setAttribute('aria-disabled', 'true');
     }
   });
+}
+
+export function toggleFooterPrivacy(forceOpen) {
+  const panel = document.getElementById('privasi');
+  const trigger = document.getElementById('footer-privacy-trigger');
+  if (!panel) return false;
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : panel.hidden;
+  panel.hidden = !shouldOpen;
+  if (trigger) trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen && forceOpen === true) {
+    panel.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    panel.focus?.({ preventScroll: true });
+  }
+  return shouldOpen;
 }
 
 function configuredWhatsApp(value) {
@@ -2486,6 +2509,12 @@ function initApp() {
   updateOrderTrackerDockUI();
   initEventBindings();
   initRealtimeSync();
+  if (typeof window !== 'undefined') {
+    if (window.location?.hash === '#privasi') toggleFooterPrivacy(true);
+    window.addEventListener?.('hashchange', () => {
+      if (window.location?.hash === '#privasi') toggleFooterPrivacy(true);
+    });
+  }
   syncInventory().catch(() => {});
   setInterval(() => syncInventory().catch(() => {}), 5000);
   window.addEventListener('focus', () => syncInventory().catch(() => {}));
@@ -2586,6 +2615,7 @@ if (typeof window !== 'undefined') {
   window.updateCustomerInfo = updateCustomerInfo;
   window.switchMobileTab = switchMobileTab;
   window.focusMobileSearch = focusMobileSearch;
+  window.toggleFooterPrivacy = toggleFooterPrivacy;
   window.adminApplyCustomQRIS = adminApplyCustomQRIS;
   window.adminRestoreQRIS = adminRestoreQRIS;
   window.adminResetQRISDefault = adminResetQRISDefault;

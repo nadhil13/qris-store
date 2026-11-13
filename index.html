@@ -367,7 +367,7 @@
         </div>
         <p class="checkout-privacy-note" id="checkout-privacy-note">
           Nama, nomor, dan alamat dikirim ke server toko untuk membuat pesanan dan menahan stok, lalu dipakai penjual untuk menghubungi dan mengantar pesanan Anda.
-          <a href="#privasi" onclick="window.closeCartDrawer()">Baca cara data disimpan</a>
+          <a href="#privasi" onclick="window.closeCartDrawer(); window.toggleFooterPrivacy?.(true)">Baca cara data disimpan</a>
         </p>
 
         <div style="margin-top: 10px;">
@@ -1171,27 +1171,77 @@
   </nav>
 
   <!-- Footer -->
-  <footer
-    style="background: var(--bg-card); border-top: 1px solid var(--border-hairline); padding: 48px 0 32px; margin-top: 40px;">
-    <div class="container"
-      style="display: flex; flex-direction: column; gap: 24px; align-items: center; text-align: center;">
-      <div style="font-family: var(--font-serif); font-size: 1.4rem; font-weight: 700; color: var(--ink-primary);">
-        Atelier Nusantara</div>
-      <p style="font-size: 0.88rem; color: var(--ink-tertiary); max-width: 500px;">
-        Makanan, minuman, kriya, fashion, gadget meja, dan produk digital. Bayar dengan QRIS atau pesan lewat WhatsApp.
-      </p>
-      <section class="privacy-section" id="privasi" aria-labelledby="privasi-title" tabindex="-1">
-        <h2 id="privasi-title">Privasi data pesanan</h2>
-        <ul>
-          <li>Nama, nomor WhatsApp, alamat, isi keranjang, dan total tagihan disimpan di server toko (database Redis/KV) sebagai catatan pesanan. Penjual memakainya untuk konfirmasi pembayaran dan pengiriman.</li>
-          <li>Keranjang dan daftar pesanan Anda juga disimpan di browser ini (localStorage). Hapus data situs di browser untuk menghapus salinan lokal.</li>
-          <li>Jika memilih WhatsApp, ringkasan pesanan dan data Anda dikirim ke WhatsApp dan tunduk pada kebijakan WhatsApp.</li>
-          <li>Untuk meminta penghapusan data pesanan di server, hubungi penjual lewat WhatsApp toko.</li>
-        </ul>
+  <footer class="site-footer">
+    <div class="container footer-shell">
+      <div class="footer-top">
+        <div class="footer-brand-col">
+          <div class="footer-brand">Atelier Nusantara</div>
+          <p class="footer-tagline">
+            Makanan, minuman, kriya, fashion, gadget meja, dan produk digital dalam satu etalase. Bayar dengan QRIS nominal otomatis atau pesan lewat WhatsApp.
+          </p>
+          <div class="footer-status" id="footer-status-wrap">
+            <span class="footer-status-dot" id="footer-status-dot" aria-hidden="true"></span>
+            <span id="footer-status-label">Memeriksa jam operasional...</span>
+          </div>
+        </div>
+
+        <nav class="footer-nav-grid" aria-label="Navigasi footer">
+          <div class="footer-nav-col">
+            <h2 class="footer-col-title">Etalase</h2>
+            <ul class="footer-nav-list">
+              <li><a href="#katalog" class="footer-link">Katalog</a></li>
+              <li><a href="#filosofi" class="footer-link">Filosofi</a></li>
+              <li><a href="#pembayaran-info" class="footer-link">Cara Pembayaran</a></li>
+            </ul>
+          </div>
+          <div class="footer-nav-col">
+            <h2 class="footer-col-title">Layanan</h2>
+            <ul class="footer-nav-list">
+              <li><button type="button" class="footer-link footer-action" onclick="window.openCartDrawer()">Keranjang Belanja</button></li>
+              <li><button type="button" class="footer-link footer-action" onclick="window.openOrderTrackerModal()">Lacak Pesanan</button></li>
+              <li>
+                <a href="#pembayaran-info" class="footer-link" id="footer-whatsapp-link" data-store-whatsapp>
+                  <span id="footer-whatsapp-label">WhatsApp Toko</span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </nav>
+      </div>
+
+      <section class="footer-privacy-panel" id="privasi" aria-labelledby="privasi-title" tabindex="-1" hidden>
+        <div class="footer-privacy-head">
+          <h2 id="privasi-title">Privasi data pesanan</h2>
+          <button type="button" class="footer-privacy-close"
+            onclick="window.toggleFooterPrivacy(false); document.getElementById('footer-privacy-trigger')?.focus()">Tutup</button>
+        </div>
+        <div class="footer-privacy-grid">
+          <div class="footer-privacy-item">
+            <h3>Catatan server toko</h3>
+            <p>Nama, nomor WhatsApp, alamat, isi keranjang, dan total tagihan disimpan di server toko (database Redis/KV) sebagai catatan pesanan untuk konfirmasi pembayaran dan pengiriman.</p>
+          </div>
+          <div class="footer-privacy-item">
+            <h3>Penyimpanan browser lokal</h3>
+            <p>Keranjang dan daftar pesanan Anda juga disimpan di browser ini (localStorage). Hapus data situs di browser untuk menghapus salinan lokal.</p>
+          </div>
+          <div class="footer-privacy-item">
+            <h3>Pesan lewat WhatsApp</h3>
+            <p>Jika memilih WhatsApp, ringkasan pesanan dan data Anda dikirim ke WhatsApp dan tunduk pada kebijakan WhatsApp.</p>
+          </div>
+          <div class="footer-privacy-item">
+            <h3>Permintaan penghapusan</h3>
+            <p>Untuk meminta penghapusan data pesanan di server, hubungi penjual lewat WhatsApp toko.</p>
+          </div>
+        </div>
       </section>
-      <div class="footer-meta">
-        <span>&copy; 2026 Atelier Nusantara. Hak Cipta Dilindungi.</span>
-        <a href="?admin=1" class="footer-staff-link">Akses penjual</a>
+
+      <div class="footer-bottom">
+        <span class="footer-copyright">&copy; 2026 Atelier Nusantara. Hak Cipta Dilindungi.</span>
+        <div class="footer-meta-links">
+          <button type="button" class="footer-meta-btn" id="footer-privacy-trigger" aria-expanded="false" aria-controls="privasi" onclick="window.toggleFooterPrivacy()">Privasi data pesanan</button>
+          <span class="footer-meta-sep" aria-hidden="true">/</span>
+          <a href="?admin=1" class="footer-staff-link">Akses penjual</a>
+        </div>
       </div>
     </div>
   </footer>

@@ -3117,6 +3117,7 @@ let gsapReady = false;
 let lastCatalogFilterKey = '';
 let lastCatalogCount = -1;
 let catalogVelocityTimer = null;
+let catalogBatchTriggers = [];
 let scrollRefreshQueued = false;
 let reducedMotionQueryBound = false;
 const kineticElements = new Set();
@@ -3159,15 +3160,46 @@ function syncCategoryTabSlider(immediate = false) {
   }
 }
 
+function clearCatalogBatchTriggers() {
+  catalogBatchTriggers.forEach((st) => st?.kill?.());
+  catalogBatchTriggers = [];
+}
+
+function bindCatalogCardBatch(gsap, ScrollTrigger, grid) {
+  clearCatalogBatchTriggers();
+  const cards = getVisibleProductCards(grid);
+  if (!cards.length || typeof ScrollTrigger?.batch !== 'function') return;
+  const created = ScrollTrigger.batch(cards, {
+    start: 'top 93%',
+    end: 'bottom 7%',
+    onEnter: (batch) => {
+      gsap.fromTo(
+        batch,
+        { y: 42, scale: 0.93, rotationX: 6 },
+        { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 0.52, stagger: 0.055, ease: 'power3.out', clearProps: 'transform', overwrite: 'auto' }
+      );
+    },
+    onEnterBack: (batch) => {
+      gsap.fromTo(
+        batch,
+        { y: -36, scale: 0.94, rotationX: -5 },
+        { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 0.5, stagger: 0.055, ease: 'power3.out', clearProps: 'transform', overwrite: 'auto' }
+      );
+    }
+  });
+  if (Array.isArray(created)) catalogBatchTriggers = created;
+}
+
 function animateCatalogCards(grid) {
   if (!gsapReady || isReducedMotion() || typeof window === 'undefined' || typeof window.gsap === 'undefined') return;
   const cards = getVisibleProductCards(grid);
   if (!cards.length) return;
   window.gsap.fromTo(
     cards,
-    { y: 18, scale: 0.985 },
-    { y: 0, opacity: 1, scale: 1, duration: 0.42, stagger: { amount: 0.24, from: 'start' }, ease: 'power3.out', clearProps: 'transform,opacity', overwrite: 'auto' }
+    { y: 36, scale: 0.94, rotationX: 5 },
+    { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 0.48, stagger: { amount: 0.28, from: 'start' }, ease: 'power3.out', clearProps: 'transform,opacity', overwrite: 'auto' }
   );
+  bindCatalogCardBatch(window.gsap, window.ScrollTrigger, grid);
 }
 
 function splitKineticWords(el) {
@@ -3244,6 +3276,7 @@ function cleanupGsapMotion() {
     clearTimeout(catalogVelocityTimer);
     catalogVelocityTimer = null;
   }
+  clearCatalogBatchTriggers();
   activeGsapContext?.revert?.();
   activeGsapContext = null;
   gsapReady = false;
@@ -3256,20 +3289,23 @@ function animateWordReveal(gsap, selector, scrollTriggerConfig, vars = {}) {
   if (!el) return;
   const words = splitKineticWords(el);
   if (!words.length) return;
+  const isScrub = Boolean(scrollTriggerConfig && scrollTriggerConfig.scrub !== undefined && scrollTriggerConfig.scrub !== false);
   const triggerCfg = scrollTriggerConfig
-    ? { once: true, toggleActions: 'play none none none', ...scrollTriggerConfig }
+    ? (isScrub
+        ? scrollTriggerConfig
+        : { toggleActions: 'play none play none', ...scrollTriggerConfig })
     : undefined;
   gsap.fromTo(
     words,
-    { yPercent: 105, opacity: 1, rotateZ: 1.1 },
+    { yPercent: isScrub ? 94 : 104, opacity: 1, rotateZ: isScrub ? 2.2 : 1.5 },
     {
       yPercent: 0,
       opacity: 1,
       rotateZ: 0,
       duration: vars.duration ?? 0.62,
-      stagger: vars.stagger ?? 0.028,
-      ease: vars.ease ?? 'power3.out',
-      clearProps: 'transform',
+      stagger: vars.stagger ?? (isScrub ? 0.045 : 0.032),
+      ease: isScrub ? 'none' : (vars.ease ?? 'power3.out'),
+      clearProps: isScrub ? undefined : 'transform',
       scrollTrigger: triggerCfg
     }
   );
@@ -3290,6 +3326,8 @@ function setupHeroAntigravityField(gsap, ScrollTrigger, cleanups) {
   let pointerX = -9999;
   let pointerY = -9999;
   let scrollBoost = 0;
+  let scrollDirection = 1;
+  let heroScrollProgress = 0;
 
   const resize = () => {
     const rect = hero.getBoundingClientRect?.() || { width: 1200, height: 680 };
@@ -3302,18 +3340,34 @@ function setupHeroAntigravityField(gsap, ScrollTrigger, cleanups) {
   };
   resize();
 
-  const particleCount = width < 768 ? 16 : 28;
+  const palette = [
+    '45, 72, 56',    // Matcha / Forest Sage
+    '163, 72, 37',   // Terracotta
+    '194, 134, 62',  // Warm Ochre
+    '29, 23, 19'     // Deep Espresso Ink
+  ];
+  const particleCount = width < 768 ? 36 : 68;
   const particles = Array.from({ length: particleCount }, (_, idx) => {
-    const isWarm = idx % 3 === 0;
+    const ringTier = idx % 4;
+    const baseRadius = (Math.min(width, height) * (0.24 + ringTier * 0.14)) + ((idx * 17) % 38);
+    const angle = (idx / particleCount) * Math.PI * 2 + ringTier * 0.45;
+    const isCapsule = idx % 5 !== 0;
+    const color = palette[idx % palette.length];
     return {
-      x: ((idx * 137.5) % 100) * 0.01 * width,
-      y: ((idx * 73.1) % 100) * 0.01 * height,
-      vx: ((idx % 2 === 0 ? 1 : -1) * (0.08 + (idx % 4) * 0.04)),
-      vy: -(0.16 + (idx % 5) * 0.06),
-      r: 1.5 + (idx % 4) * 0.55,
-      phase: idx * 0.7,
-      color: isWarm ? '163, 72, 37' : '45, 72, 56',
-      alpha: isWarm ? 0.24 : 0.28
+      angle,
+      radius: baseRadius,
+      angularVel: (0.0014 + (idx % 4) * 0.00045) * (ringTier % 2 === 0 ? 1 : -1),
+      ox: 0,
+      oy: 0,
+      vx: 0,
+      vy: 0,
+      len: isCapsule ? 10 + (idx % 4) * 4.5 : 3.2,
+      thick: isCapsule ? 2.4 + (idx % 3) * 0.5 : 3.2,
+      isCapsule,
+      tiltOffset: (idx % 7) * 0.22 - 0.65,
+      phase: idx * 0.55,
+      color,
+      alpha: color === '29, 23, 19' ? 0.24 : (color === '163, 72, 37' ? 0.44 : 0.4)
     };
   });
 
@@ -3337,8 +3391,11 @@ function setupHeroAntigravityField(gsap, ScrollTrigger, cleanups) {
     start: 'top top',
     end: 'bottom top',
     onUpdate: (self) => {
-      const vel = Math.abs(self.getVelocity?.() || 0);
-      scrollBoost = Math.min(2.2, vel / 900);
+      const rawVel = self.getVelocity?.() || 0;
+      const vel = Math.abs(rawVel);
+      scrollDirection = rawVel >= 0 ? 1 : -1;
+      scrollBoost = Math.min(3.4, vel / 520);
+      heroScrollProgress = Math.max(0, Math.min(1, self.progress ?? 0));
     }
   });
 
@@ -3346,52 +3403,78 @@ function setupHeroAntigravityField(gsap, ScrollTrigger, cleanups) {
   if (typeof window.IntersectionObserver === 'function') {
     io = new window.IntersectionObserver((entries) => {
       active = Boolean(entries[0]?.isIntersecting);
-    }, { threshold: 0.04 });
+    }, { threshold: 0.02 });
     io.observe(hero);
   }
 
   const tick = (_time, deltaRatio = 1) => {
     if (!active) return;
-    const step = Math.min(2.5, Math.max(0.4, deltaRatio));
+    const step = Math.min(2.4, Math.max(0.4, deltaRatio));
     ctx.clearRect(0, 0, width, height);
-    scrollBoost *= 0.92;
+    scrollBoost *= 0.91;
+
+    const originX = width * (width < 768 ? 0.52 : 0.56);
+    const originY = height * 0.48;
+    const radialSpread = 1 + heroScrollProgress * 0.48 + scrollBoost * 0.05;
 
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
-      p.phase += 0.018 * step;
-      const sway = Math.sin(p.phase) * 0.14;
-      const dx = p.x - pointerX;
-      const dy = p.y - pointerY;
+      p.phase += 0.022 * step;
+      p.angle += p.angularVel * (1 + scrollBoost * 1.9 * scrollDirection) * step;
+
+      const wobble = Math.sin(p.phase) * 9;
+      const r = p.radius * radialSpread + wobble;
+      const anchorX = originX + Math.cos(p.angle) * r * 1.18;
+      const anchorY = originY + Math.sin(p.angle) * r * 0.78;
+
+      const currX = anchorX + p.ox;
+      const currY = anchorY + p.oy;
+      const dx = currX - pointerX;
+      const dy = currY - pointerY;
       const distSq = dx * dx + dy * dy;
 
-      if (distSq > 4 && distSq < 135 * 135) {
+      if (distSq > 4 && distSq < 175 * 175) {
         const dist = Math.sqrt(distSq);
-        const force = (1 - dist / 135) * 0.55;
+        const force = (1 - dist / 175) * 1.65;
         p.vx += (dx / dist) * force * step;
         p.vy += (dy / dist) * force * step;
 
         ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
+        ctx.moveTo(currX, currY);
         ctx.lineTo(pointerX, pointerY);
-        ctx.strokeStyle = `rgba(${p.color}, ${(1 - dist / 135) * 0.14})`;
+        ctx.strokeStyle = `rgba(${p.color}, ${(1 - dist / 175) * 0.16})`;
         ctx.lineWidth = 0.85;
         ctx.stroke();
       }
 
-      p.vx = p.vx * 0.96 + sway * 0.06;
-      p.vy = p.vy * 0.96 - (0.015 + scrollBoost * 0.04);
-      p.x += p.vx * step;
-      p.y += p.vy * step;
+      p.vx = (p.vx - p.ox * 0.032 * step) * 0.88;
+      p.vy = (p.vy - p.oy * 0.032 * step) * 0.88;
+      p.ox += p.vx * step;
+      p.oy += p.vy * step;
 
-      if (p.y < -16) { p.y = height + 16; p.vy = -(0.16 + (i % 5) * 0.06); }
-      if (p.y > height + 20) p.y = -12;
-      if (p.x < -16) p.x = width + 12;
-      if (p.x > width + 16) p.x = -12;
+      const drawX = anchorX + p.ox;
+      const drawY = anchorY + p.oy;
+      if (drawX < -30 || drawX > width + 30 || drawY < -30 || drawY > height + 30) continue;
 
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.color}, ${p.alpha})`;
-      ctx.fill();
+      if (p.isCapsule) {
+        const tangent = p.angle + Math.PI / 2 + p.tiltOffset;
+        ctx.save();
+        ctx.translate(drawX, drawY);
+        ctx.rotate(tangent);
+        ctx.beginPath();
+        ctx.moveTo(-p.len * 0.5, 0);
+        ctx.lineTo(p.len * 0.5, 0);
+        ctx.strokeStyle = `rgba(${p.color}, ${p.alpha})`;
+        ctx.lineWidth = p.thick;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, p.len, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${p.color}, ${p.alpha + 0.08})`;
+        ctx.fill();
+      }
     }
   };
 
@@ -3521,72 +3604,65 @@ function setupHeroChoreography(gsap, isDesktop) {
   if (headlineWords.length) {
     entrance.fromTo(
       headlineWords,
-      { yPercent: 104, opacity: 1, rotateZ: 1.2 },
-      { yPercent: 0, opacity: 1, rotateZ: 0, duration: 0.68, stagger: 0.032, clearProps: 'transform' }
+      { yPercent: 108, opacity: 1, rotateZ: 2.2 },
+      { yPercent: 0, opacity: 1, rotateZ: 0, duration: 0.72, stagger: 0.036, clearProps: 'transform' }
     );
   } else {
-    entrance.from('.hero-headline', { y: 20, duration: 0.65, clearProps: 'transform' });
+    entrance.from('.hero-headline', { y: 28, duration: 0.65, clearProps: 'transform' });
   }
+  entrance.fromTo('.hero-kicker', { y: 18 }, { y: 0, opacity: 1, duration: 0.45, clearProps: 'transform' }, '-=0.52');
   if (descEl) {
-    entrance.fromTo(descEl, { y: 12 }, { y: 0, opacity: 1, duration: 0.45, clearProps: 'transform' }, '-=0.4');
+    entrance.fromTo(descEl, { y: 20 }, { y: 0, opacity: 1, duration: 0.48, clearProps: 'transform' }, '-=0.45');
   }
   entrance
-    .fromTo('.hero-actions', { y: 12 }, { y: 0, opacity: 1, duration: 0.42, clearProps: 'transform' }, '-=0.32')
-    .fromTo('.hero-visual', { y: 20, scale: 0.98 }, { y: 0, scale: 1, opacity: 1, duration: 0.65, clearProps: 'transform' }, '-=0.48');
+    .fromTo('.hero-actions', { y: 22, scale: 0.96 }, { y: 0, scale: 1, opacity: 1, duration: 0.46, clearProps: 'transform' }, '-=0.38')
+    .fromTo('.hero-visual', { y: 44, scale: 0.93, rotationX: isDesktop ? 5 : 0 }, { y: 0, scale: 1, rotationX: 0, opacity: 1, duration: 0.72, clearProps: 'transform' }, '-=0.54');
 
   const heroScroll = gsap.timeline({
     scrollTrigger: {
       trigger: '.hero-section',
       start: 'top top',
       end: 'bottom top',
-      scrub: 0.55
+      scrub: 0.65
     }
   });
-  heroScroll.to('.hero-editorial', { yPercent: -5, ease: 'none' }, 0);
+  heroScroll
+    .to('.hero-editorial', { y: isDesktop ? -68 : -24, ease: 'none' }, 0)
+    .to('.hero-kicker', { y: isDesktop ? -22 : -8, ease: 'none' }, 0)
+    .to('.hero-actions', { y: isDesktop ? 22 : 8, ease: 'none' }, 0);
   if (isDesktop) {
     heroScroll
-      .to('.showcase-card', { yPercent: -14, rotation: -1.4, ease: 'none' }, 0)
-      .to('.showcase-tag', { y: -22, ease: 'none' }, 0)
-      .to('.showcase-img-wrap img', { yPercent: 6, scale: 1.07, ease: 'none' }, 0);
+      .to('.hero-visual', { y: -96, scale: 0.92, rotationX: 4, rotationY: -5, ease: 'none' }, 0)
+      .to('.showcase-card', { yPercent: -12, rotation: -3.6, ease: 'none' }, 0)
+      .to('.showcase-tag', { y: -44, x: 14, ease: 'none' }, 0)
+      .to('.showcase-img-wrap img', { yPercent: 12, scale: 1.15, ease: 'none' }, 0);
   } else {
-    heroScroll.to('.hero-visual', { yPercent: -5, ease: 'none' }, 0);
+    heroScroll.to('.hero-visual', { y: -26, scale: 0.96, ease: 'none' }, 0);
   }
 }
 
 function setupCatalogChoreography(gsap, ScrollTrigger) {
   animateWordReveal(gsap, '.catalog-title', {
     trigger: '.catalog-title',
-    start: 'top 92%',
-    once: true
+    start: 'top 95%',
+    end: 'top 66%',
+    scrub: 0.55
   });
 
   const grid = document.getElementById('product-grid');
-  const cards = getVisibleProductCards(grid);
-  if (cards.length) {
-    ScrollTrigger.batch?.(cards, {
-      start: 'top 94%',
-      once: true,
-      onEnter: (batch) => {
-        gsap.fromTo(
-          batch,
-          { y: 18, scale: 0.985 },
-          { y: 0, opacity: 1, scale: 1, duration: 0.42, stagger: 0.04, ease: 'power3.out', clearProps: 'transform', overwrite: 'auto' }
-        );
-      }
-    });
-  }
+  bindCatalogCardBatch(gsap, ScrollTrigger, grid);
 
   if (grid && typeof gsap.quickTo === 'function') {
-    const skewGridTo = gsap.quickTo(grid, 'skewY', { duration: 0.35, ease: 'power3.out' });
+    const skewGridTo = gsap.quickTo(grid, 'skewY', { duration: 0.36, ease: 'power3.out' });
     ScrollTrigger.create({
       trigger: '#product-grid',
       start: 'top bottom',
       end: 'bottom top',
       onUpdate: (self) => {
-        const clamped = Math.max(-0.75, Math.min(0.75, (self.getVelocity?.() || 0) / 1400));
+        const clamped = Math.max(-2.4, Math.min(2.4, (self.getVelocity?.() || 0) / 550));
         skewGridTo(clamped);
         if (catalogVelocityTimer) clearTimeout(catalogVelocityTimer);
-        catalogVelocityTimer = setTimeout(() => skewGridTo(0), 110);
+        catalogVelocityTimer = setTimeout(() => skewGridTo(0), 120);
       },
       onLeave: () => skewGridTo(0),
       onLeaveBack: () => skewGridTo(0)
@@ -3597,33 +3673,35 @@ function setupCatalogChoreography(gsap, ScrollTrigger) {
 function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanups) {
   animateWordReveal(gsap, '.story-copy h2', {
     trigger: '.story-copy h2',
-    start: 'top 92%',
-    once: true
+    start: 'top 95%',
+    end: 'top 64%',
+    scrub: 0.55
   });
 
-  const storyEntrance = gsap.timeline({
+  const storyArrival = gsap.timeline({
     scrollTrigger: {
       trigger: '.luxury-story',
-      start: 'top 86%',
-      once: true
+      start: 'top 94%',
+      end: 'top 42%',
+      scrub: 0.65
     }
   });
-  storyEntrance
-    .fromTo('.story-copy', { x: isDesktop ? -22 : 0, y: isDesktop ? 0 : 14 }, { x: 0, y: 0, opacity: 1, duration: 0.55, ease: 'power3.out', clearProps: 'transform' }, 0)
-    .fromTo('.story-visual', { x: isDesktop ? 22 : 0, y: 14 }, { x: 0, y: 0, opacity: 1, duration: 0.58, ease: 'power3.out', clearProps: 'transform' }, 0.04)
-    .fromTo('.story-metrics > div', { y: 12 }, { y: 0, opacity: 1, duration: 0.42, stagger: 0.08, ease: 'power2.out', clearProps: 'transform' }, 0.08);
+  storyArrival
+    .fromTo('.story-copy', { x: isDesktop ? -44 : 0, y: isDesktop ? 16 : 24, opacity: 1 }, { x: 0, y: 0, opacity: 1, ease: 'none' }, 0)
+    .fromTo('.story-visual', { x: isDesktop ? 48 : 0, y: 36, scale: 0.94, rotationY: isDesktop ? -6 : 0, opacity: 1 }, { x: 0, y: 0, scale: 1, rotationY: 0, opacity: 1, ease: 'none' }, 0)
+    .fromTo('.story-metrics > div', { y: 28, scale: 0.96, opacity: 1 }, { y: 0, scale: 1, opacity: 1, stagger: 0.08, ease: 'none' }, 0.05)
+    .fromTo('.story-rail-item', { x: isDesktop ? -26 : 0, y: 18, opacity: 1 }, { x: 0, y: 0, opacity: 1, stagger: 0.06, ease: 'none' }, 0.08);
 
   const storyParallax = gsap.timeline({
     scrollTrigger: {
       trigger: '.luxury-story',
-      start: 'top 95%',
-      end: 'bottom 15%',
-      scrub: 0.55
+      start: 'top bottom',
+      end: 'bottom top',
+      scrub: 0.65
     }
   });
-  storyParallax.fromTo('.story-metrics > div', { y: 8 }, { y: -6, ease: 'none', stagger: 0.04 }, 0);
   if (document.querySelector?.('.story-photo-wrap img')) {
-    storyParallax.fromTo('.story-photo-wrap img', { yPercent: -6, scale: 1.07 }, { yPercent: 6, scale: 1, ease: 'none' }, 0);
+    storyParallax.fromTo('.story-photo-wrap img', { yPercent: -11, scale: 1.16 }, { yPercent: 11, scale: 1, ease: 'none' }, 0);
   }
 
   const pinStage = document.querySelector?.('.story-stage-pin');
@@ -3631,8 +3709,8 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
   const canPinStoryStage = Boolean(
     isDesktop &&
     pinStage &&
-    typeof window?.innerHeight === 'number' && window.innerHeight >= 740 &&
-    typeof window?.innerWidth === 'number' && window.innerWidth >= 960
+    typeof window?.innerHeight === 'number' && window.innerHeight >= 540 &&
+    typeof window?.innerWidth === 'number' && window.innerWidth >= 900
   );
 
   if (canPinStoryStage && typeof applyStoryStepFn === 'function') {
@@ -3640,10 +3718,11 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
       scrollTrigger: {
         trigger: '.story-stage-pin',
         start: 'center center',
-        end: '+=640',
+        end: '+=720',
         pin: true,
         pinSpacing: true,
-        scrub: 0.45,
+        anticipatePin: 1,
+        scrub: 0.5,
         onUpdate: (self) => {
           if (Date.now() < manualStoryOverrideUntil) return;
           const p = self.progress ?? 0;
@@ -3657,27 +3736,40 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     if (railFill) {
       pinnedTl.fromTo(railFill, { scaleY: 0.333 }, { scaleY: 1, ease: 'none' }, 0);
     }
+    if (document.querySelector?.('.story-dossier')) {
+      pinnedTl.fromTo(
+        '.story-dossier',
+        { rotationY: -4, rotationX: 2.5, y: 16 },
+        { rotationY: 3.5, rotationX: -1.8, y: -16, ease: 'none' },
+        0
+      );
+    }
   } else if (isDesktop && document.querySelector?.('.story-dossier')) {
-    storyParallax.fromTo('.story-dossier', { y: 12 }, { y: -12, ease: 'none' }, 0);
+    storyParallax.fromTo('.story-dossier', { y: 36, rotationY: -4 }, { y: -36, rotationY: 4, ease: 'none' }, 0);
   }
 
   document.querySelectorAll?.('[data-count-to]')?.forEach((counterEl) => {
     const target = Number(counterEl.dataset?.countTo);
     if (!Number.isFinite(target) || target <= 0) return;
     const holder = { value: 1 };
-    gsap.to(holder, {
-      value: target,
-      duration: 0.75,
-      ease: 'power2.out',
-      scrollTrigger: {
-        trigger: '.story-metrics',
-        start: 'top 92%',
-        once: true
-      },
-      onUpdate: () => {
-        counterEl.textContent = String(Math.max(1, Math.round(holder.value)));
+    gsap.fromTo(
+      holder,
+      { value: 1 },
+      {
+        value: target,
+        duration: 0.78,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: '.story-metrics',
+          start: 'top 92%',
+          end: 'bottom 8%',
+          toggleActions: 'play none play none'
+        },
+        onUpdate: () => {
+          counterEl.textContent = String(Math.max(1, Math.round(holder.value)));
+        }
       }
-    });
+    );
     cleanups?.push?.(() => {
       counterEl.textContent = String(target);
     });
@@ -3685,39 +3777,44 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
 
   animateWordReveal(gsap, '.ritual-copy h2', {
     trigger: '.ritual-copy h2',
-    start: 'top 92%',
-    once: true
+    start: 'top 95%',
+    end: 'top 64%',
+    scrub: 0.55
   });
   gsap.fromTo(
     '.ritual-shell',
-    { y: 18 },
+    { y: 68, scale: 0.91, rotationX: isDesktop ? 5 : 2, opacity: 1 },
     {
       y: 0,
+      scale: 1,
+      rotationX: 0,
       opacity: 1,
       ease: 'none',
       scrollTrigger: {
         trigger: '.ritual-shell',
-        start: 'top 94%',
-        end: 'top 62%',
-        scrub: 0.5
+        start: 'top 96%',
+        end: 'top 46%',
+        scrub: 0.65
       }
     }
   );
   if (document.querySelector?.('.ritual-ticket')) {
     gsap.fromTo(
       '.ritual-ticket',
-      { y: 16, scale: 0.985 },
+      { y: 74, x: isDesktop ? 32 : 0, scale: 0.9, rotationY: isDesktop ? -10 : 0, rotationX: isDesktop ? 6 : 0, opacity: 1 },
       {
         y: 0,
+        x: 0,
         scale: 1,
+        rotationY: 0,
+        rotationX: 0,
         opacity: 1,
-        duration: 0.5,
-        ease: 'power3.out',
-        clearProps: 'transform',
+        ease: 'none',
         scrollTrigger: {
           trigger: '.ritual-shell',
-          start: 'top 86%',
-          once: true
+          start: 'top 95%',
+          end: 'top 46%',
+          scrub: 0.65
         }
       }
     );
@@ -3725,81 +3822,102 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
   if (document.querySelector?.('.ritual-qr-scanline')) {
     gsap.fromTo(
       '.ritual-qr-scanline',
-      { y: 0, opacity: 0.5 },
+      { y: 0, opacity: 0.55 },
       {
         y: 52,
-        opacity: 0.9,
+        opacity: 0.95,
         duration: 1.25,
-        repeat: 1,
+        repeat: -1,
         yoyo: true,
         ease: 'sine.inOut',
         scrollTrigger: {
           trigger: '.ritual-shell',
-          start: 'top 84%',
-          once: true
+          start: 'top 92%',
+          end: 'bottom 8%',
+          toggleActions: 'play pause resume pause'
         }
       }
     );
   }
   gsap.fromTo(
     '.ritual-badge',
-    { y: 12 },
+    { y: 40, scale: 0.88, rotationZ: -3, opacity: 1 },
     {
       y: 0,
+      scale: 1,
+      rotationZ: 0,
       opacity: 1,
-      duration: 0.42,
-      stagger: 0.07,
-      ease: 'power3.out',
-      clearProps: 'transform',
+      stagger: 0.08,
+      ease: 'none',
       scrollTrigger: {
         trigger: '.ritual-shell',
-        start: 'top 88%',
-        once: true
+        start: 'top 94%',
+        end: 'top 54%',
+        scrub: 0.55
       }
     }
   );
 
   gsap.fromTo(
     '.cta-shell',
-    { scale: 0.985, y: 18 },
+    { scale: 0.86, y: 76, rotationX: isDesktop ? 7 : 3, opacity: 1 },
     {
       scale: 1,
       y: 0,
+      rotationX: 0,
       opacity: 1,
       ease: 'none',
       scrollTrigger: {
         trigger: '.cta-shell',
-        start: 'top 96%',
-        end: 'top 64%',
-        scrub: 0.5
+        start: 'top 98%',
+        end: 'top 50%',
+        scrub: 0.65
       }
     }
   );
   animateWordReveal(gsap, '.cta-copy h2', {
     trigger: '.cta-copy h2',
-    start: 'top 94%',
-    once: true
+    start: 'top 95%',
+    end: 'top 66%',
+    scrub: 0.55
   });
+  gsap.fromTo(
+    '.cta-actions',
+    { y: 36, scale: 0.95, opacity: 1 },
+    {
+      y: 0,
+      scale: 1,
+      opacity: 1,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.cta-shell',
+        start: 'top 95%',
+        end: 'top 60%',
+        scrub: 0.55
+      }
+    }
+  );
 
   animateWordReveal(gsap, '.footer-brand', {
     trigger: '.site-footer',
     start: 'top 98%',
-    once: true
+    end: 'bottom bottom',
+    scrub: 0.45
   });
   gsap.fromTo(
     ['.footer-brand-col', '.footer-nav-col', '.footer-bottom'],
-    { y: 14 },
+    { y: 42, scale: 0.96, opacity: 1 },
     {
       y: 0,
+      scale: 1,
       opacity: 1,
-      duration: 0.46,
-      stagger: 0.06,
-      ease: 'power2.out',
-      clearProps: 'transform',
+      stagger: 0.08,
+      ease: 'none',
       scrollTrigger: {
         trigger: '.site-footer',
         start: 'top 98%',
-        once: true
+        end: 'bottom bottom',
+        scrub: 0.45
       }
     }
   );
@@ -3824,6 +3942,7 @@ export function initGSAPAnimations() {
 
   const ScrollTrigger = window.ScrollTrigger;
   gsap.registerPlugin(ScrollTrigger);
+  ScrollTrigger.config?.({ ignoreMobileResize: true });
   gsapReady = true;
   lastCatalogFilterKey = `${state.activeCategory}|${state.sortBy}|${state.searchQuery}`;
   document.body?.classList?.add?.('gsap-motion-active');
@@ -3848,6 +3967,12 @@ export function initGSAPAnimations() {
       const isDesktop = Boolean(window.matchMedia?.('(min-width: 769px)')?.matches);
       runResponsiveSections(isDesktop);
     }
+
+    const onWindowLoad = () => {
+      if (gsapReady) scheduleScrollTriggerRefresh();
+    };
+    window.addEventListener?.('load', onWindowLoad);
+    cleanups.push(() => window.removeEventListener?.('load', onWindowLoad));
 
     if (typeof document !== 'undefined' && document.fonts?.ready?.then) {
       document.fonts.ready.then(() => {

@@ -36,6 +36,10 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
   assert.match(css, /\.scroll-progress-fill\s*\{/);
   assert.match(css, /\.kt-clip\s*\{[\s\S]*?overflow:\s*hidden;/);
   assert.match(css, /\.site-header\.is-scrolled\s*\{/);
+  assert.match(css, /body\.gsap-motion-active\s+\.hero-section/);
+  assert.match(app, /ScrollTrigger\.batch\([\s\S]*onEnterBack:/);
+  assert.match(app, /window\.innerHeight\s*>=\s*540/);
+  assert.match(app, /anticipatePin:\s*1/);
 
   const prevGlobals = {
     window: globalThis.window,
@@ -299,6 +303,8 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
     assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.luxury-story' && c.scrub));
     assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.cta-shell' && c.scrub));
     assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.ritual-shell' && c.scrub));
+    assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.site-footer' && c.scrub));
+    assert.ok(scrollTriggerConfigs.some((c) => typeof c.onEnterBack === 'function'));
     assert.equal(
       timelineToCalls.some((c) => c.target === '.hero-editorial' && typeof c.vars?.opacity === 'number' && c.vars.opacity < 1),
       false,

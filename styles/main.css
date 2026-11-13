@@ -82,6 +82,11 @@ html {
   overflow-x: clip;
 }
 
+/* Let GSAP ScrollTrigger scrub & pin without fighting CSS smooth-scroll interpolation */
+html:has(body.gsap-motion-active) {
+  scroll-behavior: auto;
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg-canvas);
@@ -401,7 +406,7 @@ a {
   height: 100%;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.88;
+  opacity: 1;
 }
 
 .hero-grid {
@@ -5329,14 +5334,64 @@ a {
   display: inline-block;
 }
 
+body.gsap-motion-active .hero-section,
+body.gsap-motion-active .product-grid,
+body.gsap-motion-active .luxury-story,
+body.gsap-motion-active .luxury-ritual,
+body.gsap-motion-active .final-cta {
+  perspective: 1200px;
+}
+
 body.gsap-motion-active .showcase-card,
 body.gsap-motion-active .story-dossier,
-body.gsap-motion-active .ritual-ticket {
+body.gsap-motion-active .ritual-ticket,
+body.gsap-motion-active .ritual-shell,
+body.gsap-motion-active .cta-shell {
   transform-style: preserve-3d;
+}
+
+body.gsap-motion-active .hero-editorial,
+body.gsap-motion-active .hero-visual,
+body.gsap-motion-active .showcase-card,
+body.gsap-motion-active .showcase-tag,
+body.gsap-motion-active .story-dossier,
+body.gsap-motion-active .ritual-shell,
+body.gsap-motion-active .ritual-ticket,
+body.gsap-motion-active .cta-shell,
+body.gsap-motion-active .product-grid {
+  will-change: transform;
+}
+
+body.gsap-motion-active .product-card,
+body.gsap-motion-active .hero-actions .btn-primary,
+body.gsap-motion-active .cta-actions .btn-primary,
+body.gsap-motion-active .story-rail-item {
+  transition: border-color var(--trans-fast), background-color var(--trans-fast), box-shadow var(--trans-normal), color var(--trans-fast);
 }
 
 body.gsap-motion-active .ritual-badge {
   transition: box-shadow var(--trans-normal), border-color var(--trans-fast), background-color var(--trans-fast);
+}
+
+@media (min-width: 900px) and (max-height: 760px) {
+  .luxury-story {
+    padding-block: 54px;
+  }
+
+  .story-metrics {
+    margin-top: 22px;
+    padding-top: 18px;
+    gap: 14px;
+  }
+
+  .story-timeline-rail {
+    margin-top: 18px;
+  }
+
+  .story-rail-item {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

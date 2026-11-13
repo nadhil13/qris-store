@@ -405,9 +405,9 @@ test('Cache-busting config: vercel.json disables stale HTML/JS/CSS/SW caching an
     const cc = rules.get(source)?.find((x) => x.key === 'Cache-Control')?.value || '';
     assert.match(cc, /no-store/, `${source} must disable stale edge/browser caching`);
   }
-  assert.match(html, /styles\/main\.css\?v=20261113-v25/);
-  assert.match(html, /scripts\/app\.js\?v=20261113-v25/);
+  assert.match(html, /styles\/main\.css\?v=20261113-v26/);
+  assert.match(html, /scripts\/app\.js\?v=20261113-v26/);
   assert.match(html, /controllerchange/);
-  assert.match(sw, /atelier-nusantara-cache-v25/);
+  assert.match(sw, /atelier-nusantara-cache-v26/);
 });
 

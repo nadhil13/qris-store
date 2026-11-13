@@ -153,6 +153,10 @@ export function toggleFooterPrivacy(forceOpen) {
   const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : panel.hidden;
   panel.hidden = !shouldOpen;
   if (trigger) trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen && typeof window !== 'undefined' && window.gsap && !isReducedMotion()) {
+    window.gsap.fromTo(panel, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.34, ease: 'power2.out', clearProps: 'transform,opacity' });
+  }
+  scheduleScrollTriggerRefresh();
   if (shouldOpen && forceOpen === true) {
     panel.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
     panel.focus?.({ preventScroll: true });
@@ -373,6 +377,12 @@ export function renderCatalog() {
     countEl.textContent = `Menampilkan ${list.length} produk & karya pilihan`;
   }
 
+  const filterKey = `${state.activeCategory}|${state.sortBy}|${state.searchQuery}`;
+  const filterChanged = gsapReady && filterKey !== lastCatalogFilterKey;
+  const countChanged = gsapReady && list.length !== lastCatalogCount;
+  lastCatalogFilterKey = filterKey;
+  lastCatalogCount = list.length;
+
   if (list.length === 0) {
     grid.innerHTML = `
       <div class="empty-state">
@@ -381,6 +391,7 @@ export function renderCatalog() {
         <p>Coba gunakan kata kunci lain atau pilih kategori koleksi di atas.</p>
       </div>
     `;
+    if (countChanged) scheduleScrollTriggerRefresh();
     return;
   }
 
@@ -438,6 +449,13 @@ export function renderCatalog() {
       </article>
     `;
   }).join('');
+
+  if (filterChanged) {
+    animateCatalogCards(grid);
+    scheduleScrollTriggerRefresh();
+  } else if (countChanged) {
+    scheduleScrollTriggerRefresh();
+  }
 }
 
 export function openQuickView(productId) {
@@ -2279,7 +2297,7 @@ export function focusMobileSearch() {
   }
 }
 
-function initEventBindings() {
+export function initEventBindings() {
   // Category tabs
   document.querySelectorAll('.category-tabs .tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -2455,51 +2473,491 @@ function initRealtimeSync() {
   }, 10000);
 }
 
-export function initGSAPAnimations() {
-  if (typeof window.gsap === 'undefined') return;
-  const gsap = window.gsap;
-  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-  if (reduced) return;
+let activeGsapContext = null;
+let gsapReady = false;
+let lastCatalogFilterKey = '';
+let lastCatalogCount = -1;
+let catalogVelocityTimer = null;
+let scrollRefreshQueued = false;
+let reducedMotionQueryBound = false;
+const kineticElements = new Set();
 
-  const entrance = gsap.timeline({ defaults: { ease: 'power2.out' } });
-  entrance
-    .from('.hero-headline', { y: 28, opacity: 0, duration: 0.85 })
-    .from('.hero-description', { y: 16, opacity: 0, duration: 0.65 }, '-=0.5')
-    .from('.hero-actions', { y: 12, opacity: 0, duration: 0.55 }, '-=0.4')
-    .from('.hero-visual', { y: 36, opacity: 0, duration: 1 }, '-=0.85');
+function isReducedMotion() {
+  return Boolean(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+}
 
-  if (typeof window.ScrollTrigger === 'undefined') return;
-  gsap.registerPlugin(window.ScrollTrigger);
-  const largeScreen = window.matchMedia?.('(min-width: 769px)')?.matches;
-  if (largeScreen) {
-    gsap.to('.showcase-img-wrap img', {
-      yPercent: -8,
+function scheduleScrollTriggerRefresh() {
+  if (scrollRefreshQueued || typeof window === 'undefined' || typeof window.ScrollTrigger?.refresh !== 'function') return;
+  scrollRefreshQueued = true;
+  const run = () => {
+    scrollRefreshQueued = false;
+    window.ScrollTrigger?.refresh?.();
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  else run();
+}
+
+function getVisibleProductCards(grid) {
+  const fromGrid = grid?.querySelectorAll?.('.product-card');
+  const list = fromGrid?.length ? fromGrid : document.querySelectorAll?.('.product-card');
+  return list ? Array.from(list) : [];
+}
+
+function animateCatalogCards(grid) {
+  if (!gsapReady || isReducedMotion() || typeof window === 'undefined' || typeof window.gsap === 'undefined') return;
+  const cards = getVisibleProductCards(grid);
+  if (!cards.length) return;
+  window.gsap.fromTo(
+    cards,
+    { y: 20, opacity: 0.12, scale: 0.98 },
+    { y: 0, opacity: 1, scale: 1, duration: 0.45, stagger: { amount: 0.28, from: 'start' }, ease: 'power3.out', clearProps: 'transform,opacity', overwrite: 'auto' }
+  );
+}
+
+function splitKineticWords(el) {
+  if (!el || typeof document?.createElement !== 'function' || typeof Node === 'undefined') return [];
+  if (el.dataset.kineticReady === '1') {
+    return Array.from(el.querySelectorAll?.('.kt-word') || []);
+  }
+  const plainText = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!plainText) return [];
+
+  const snapshot = Array.from(el.childNodes || []).map((child) => child.cloneNode(true));
+  el._kineticSnapshot = snapshot;
+  el._kineticPrevAriaLabel = el.getAttribute?.('aria-label') ?? null;
+  el.setAttribute?.('aria-label', plainText);
+
+  const transformNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const frag = [];
+      const parts = String(node.textContent || '').split(/(\s+)/);
+      for (const part of parts) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) {
+          frag.push(document.createTextNode(part));
+        } else {
+          const clip = document.createElement('span');
+          clip.className = 'kt-clip';
+          clip.setAttribute('aria-hidden', 'true');
+          const word = document.createElement('span');
+          word.className = 'kt-word';
+          word.textContent = part;
+          clip.appendChild(word);
+          frag.push(clip);
+        }
+      }
+      return frag;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const clone = node.cloneNode(false);
+      clone.setAttribute?.('aria-hidden', 'true');
+      Array.from(node.childNodes || []).forEach((grandChild) => {
+        transformNode(grandChild).forEach((out) => clone.appendChild(out));
+      });
+      return [clone];
+    }
+    return [node.cloneNode(true)];
+  };
+
+  const rebuilt = [];
+  snapshot.forEach((child) => {
+    transformNode(child).forEach((out) => rebuilt.push(out));
+  });
+  el.replaceChildren?.(...rebuilt);
+  el.dataset.kineticReady = '1';
+  kineticElements.add(el);
+  return Array.from(el.querySelectorAll?.('.kt-word') || []);
+}
+
+function revertAllKineticWords() {
+  kineticElements.forEach((el) => {
+    if (Array.isArray(el._kineticSnapshot) && typeof el.replaceChildren === 'function') {
+      el.replaceChildren(...el._kineticSnapshot);
+      delete el._kineticSnapshot;
+    }
+    if (el._kineticPrevAriaLabel === null) el.removeAttribute?.('aria-label');
+    else if (el._kineticPrevAriaLabel !== undefined) el.setAttribute?.('aria-label', el._kineticPrevAriaLabel);
+    delete el._kineticPrevAriaLabel;
+    delete el.dataset.kineticReady;
+  });
+  kineticElements.clear();
+}
+
+function cleanupGsapMotion() {
+  if (catalogVelocityTimer) {
+    clearTimeout(catalogVelocityTimer);
+    catalogVelocityTimer = null;
+  }
+  activeGsapContext?.revert?.();
+  activeGsapContext = null;
+  gsapReady = false;
+  revertAllKineticWords();
+  document.body?.classList?.remove?.('gsap-motion-active');
+}
+
+function animateWordReveal(gsap, selector, scrollTriggerConfig, vars = {}) {
+  const el = document.querySelector?.(selector);
+  if (!el) return;
+  const words = splitKineticWords(el);
+  if (!words.length) return;
+  gsap.fromTo(
+    words,
+    { yPercent: 112, opacity: 0.14, rotateZ: 1.4 },
+    {
+      yPercent: 0,
+      opacity: 1,
+      rotateZ: 0,
+      duration: vars.duration ?? 0.66,
+      stagger: vars.stagger ?? 0.03,
+      ease: vars.ease ?? 'power3.out',
+      scrollTrigger: scrollTriggerConfig
+    }
+  );
+}
+
+function bindPointerInteractions(gsap) {
+  const finePointer = Boolean(window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches);
+  if (!finePointer) return [];
+  const cleanups = [];
+
+  const showcase = document.querySelector?.('.showcase-card');
+  if (showcase && typeof showcase.getBoundingClientRect === 'function') {
+    gsap.set?.(showcase, { transformPerspective: 900 });
+    const rxTo = gsap.quickTo(showcase, 'rotationX', { duration: 0.45, ease: 'power3.out' });
+    const ryTo = gsap.quickTo(showcase, 'rotationY', { duration: 0.45, ease: 'power3.out' });
+    const onMove = (e) => {
+      const rect = showcase.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const nx = (e.clientX - rect.left) / rect.width - 0.5;
+      const ny = (e.clientY - rect.top) / rect.height - 0.5;
+      rxTo(-ny * 5);
+      ryTo(nx * 5);
+    };
+    const onLeave = () => {
+      rxTo(0);
+      ryTo(0);
+    };
+    showcase.addEventListener('pointermove', onMove);
+    showcase.addEventListener('pointerleave', onLeave);
+    cleanups.push(() => {
+      showcase.removeEventListener('pointermove', onMove);
+      showcase.removeEventListener('pointerleave', onLeave);
+    });
+  }
+
+  document.querySelectorAll?.('.hero-actions .btn-primary, .cta-actions .btn-primary, .showcase-btn')?.forEach((btn) => {
+    if (typeof btn.getBoundingClientRect !== 'function') return;
+    const xTo = gsap.quickTo(btn, 'x', { duration: 0.35, ease: 'power3.out' });
+    const yTo = gsap.quickTo(btn, 'y', { duration: 0.35, ease: 'power3.out' });
+    const onMove = (e) => {
+      const rect = btn.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      xTo(((e.clientX - rect.left) / rect.width - 0.5) * 9);
+      yTo(((e.clientY - rect.top) / rect.height - 0.5) * 9);
+    };
+    const onLeave = () => {
+      gsap.to(btn, { x: 0, y: 0, duration: 0.55, ease: 'elastic.out(1, 0.48)', overwrite: 'auto' });
+    };
+    btn.addEventListener('pointermove', onMove);
+    btn.addEventListener('pointerleave', onLeave);
+    cleanups.push(() => {
+      btn.removeEventListener('pointermove', onMove);
+      btn.removeEventListener('pointerleave', onLeave);
+    });
+  });
+
+  return cleanups;
+}
+
+function setupGlobalScrollChrome(gsap, ScrollTrigger) {
+  const progressBar = document.getElementById('scroll-progress-bar');
+  if (progressBar) {
+    gsap.to(progressBar, {
+      scaleX: 1,
       ease: 'none',
       scrollTrigger: {
-        trigger: '.hero-section',
+        trigger: document.documentElement,
         start: 'top top',
-        end: 'bottom top',
-        scrub: 0.8
+        end: 'bottom bottom',
+        scrub: true
       }
     });
   }
 
-  const reveal = (selector, options = {}) => {
-    const element = document.querySelector(selector);
-    if (!element) return;
-    gsap.from(element, {
-      y: options.y ?? 22,
-      x: options.x ?? 0,
-      opacity: 0,
-      duration: options.duration ?? 0.8,
-      ease: 'power2.out',
-      scrollTrigger: { trigger: element, start: 'top 88%', once: true }
+  const header = document.getElementById('site-header');
+  if (header) {
+    ScrollTrigger.create({
+      start: 28,
+      end: 'max',
+      onUpdate: (self) => header.classList?.toggle?.('is-scrolled', (self.scroll?.() || 0) > 28)
     });
-  };
-  reveal('.story-copy', { x: -24, y: 0 });
-  reveal('.story-visual', { x: 24, y: 0, duration: 0.95 });
-  reveal('.cta-copy', { y: 28 });
-  reveal('.ritual-copy', { y: 20 });
+  }
+
+  const navLinks = Array.from(document.querySelectorAll?.('.nav-links .nav-link') || []);
+  if (navLinks.length) {
+    const syncNav = (id) => {
+      navLinks.forEach((link) => link.classList?.toggle?.('active', link.getAttribute?.('href') === `#${id}`));
+    };
+    ['katalog', 'filosofi', 'pembayaran-info'].forEach((sectionId) => {
+      const targetEl = document.getElementById(sectionId);
+      if (!targetEl) return;
+      ScrollTrigger.create({
+        trigger: `#${sectionId}`,
+        start: 'top 42%',
+        end: 'bottom 42%',
+        onToggle: (self) => {
+          if (self.isActive) syncNav(sectionId);
+        }
+      });
+    });
+  }
+}
+
+function setupHeroChoreography(gsap, isDesktop) {
+  const headlineWords = splitKineticWords(document.querySelector?.('.hero-headline'));
+  const descWords = splitKineticWords(document.querySelector?.('.hero-description'));
+
+  const entrance = gsap.timeline({ defaults: { ease: 'power3.out' } });
+  if (headlineWords.length) {
+    entrance.fromTo(headlineWords, { yPercent: 112, opacity: 0.12, rotateZ: 1.5 }, { yPercent: 0, opacity: 1, rotateZ: 0, duration: 0.72, stagger: 0.036 });
+  } else {
+    entrance.from('.hero-headline', { y: 28, opacity: 0, duration: 0.75 });
+  }
+  if (descWords.length) {
+    entrance.fromTo(descWords, { yPercent: 75, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.52, stagger: 0.01 }, '-=0.45');
+  } else {
+    entrance.from('.hero-description', { y: 16, opacity: 0, duration: 0.55 }, '-=0.45');
+  }
+  entrance
+    .from('.hero-actions', { y: 16, opacity: 0, duration: 0.5, clearProps: 'transform,opacity' }, '-=0.35')
+    .from('.hero-visual', { y: 32, opacity: 0, scale: 0.97, duration: 0.78, clearProps: 'transform,opacity' }, '-=0.62');
+
+  const heroScroll = gsap.timeline({
+    scrollTrigger: {
+      trigger: '.hero-section',
+      start: 'top top',
+      end: 'bottom top',
+      scrub: 0.65
+    }
+  });
+  heroScroll.to('.hero-editorial', { yPercent: -10, opacity: 0.35, ease: 'none' }, 0);
+  if (isDesktop) {
+    heroScroll
+      .to('.showcase-card', { yPercent: -14, rotation: -1.3, ease: 'none' }, 0)
+      .to('.showcase-tag', { y: -22, ease: 'none' }, 0)
+      .to('.showcase-img-wrap img', { yPercent: 6, scale: 1.07, ease: 'none' }, 0);
+  } else {
+    heroScroll.to('.hero-visual', { yPercent: -6, ease: 'none' }, 0);
+  }
+}
+
+function setupCatalogChoreography(gsap, ScrollTrigger) {
+  animateWordReveal(gsap, '.catalog-title', {
+    trigger: '.catalog-title',
+    start: 'top 92%',
+    toggleActions: 'play none none reverse'
+  });
+
+  const grid = document.getElementById('product-grid');
+  const cards = getVisibleProductCards(grid);
+  if (cards.length) {
+    ScrollTrigger.batch?.(cards, {
+      start: 'top 92%',
+      end: 'bottom 8%',
+      onEnter: (batch) => {
+        gsap.fromTo(
+          batch,
+          { y: 22, opacity: 0.18, scale: 0.975 },
+          { y: 0, opacity: 1, scale: 1, duration: 0.45, stagger: 0.05, ease: 'power3.out', clearProps: 'transform,opacity', overwrite: 'auto' }
+        );
+      },
+      onEnterBack: (batch) => {
+        gsap.fromTo(
+          batch,
+          { y: -16, scale: 0.985 },
+          { y: 0, scale: 1, duration: 0.4, stagger: 0.04, ease: 'power3.out', clearProps: 'transform', overwrite: 'auto' }
+        );
+      }
+    });
+  }
+
+  if (grid && typeof gsap.quickTo === 'function') {
+    const skewGridTo = gsap.quickTo(grid, 'skewY', { duration: 0.35, ease: 'power3.out' });
+    ScrollTrigger.create({
+      trigger: '#product-grid',
+      start: 'top bottom',
+      end: 'bottom top',
+      onUpdate: (self) => {
+        const clamped = Math.max(-0.75, Math.min(0.75, (self.getVelocity?.() || 0) / 1400));
+        skewGridTo(clamped);
+        if (catalogVelocityTimer) clearTimeout(catalogVelocityTimer);
+        catalogVelocityTimer = setTimeout(() => skewGridTo(0), 110);
+      },
+      onLeave: () => skewGridTo(0),
+      onLeaveBack: () => skewGridTo(0)
+    });
+  }
+}
+
+function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanups) {
+  animateWordReveal(gsap, '.story-copy h2', {
+    trigger: '.story-copy h2',
+    start: 'top 90%',
+    end: 'top 52%',
+    scrub: 0.65
+  });
+
+  const storyTl = gsap.timeline({
+    scrollTrigger: {
+      trigger: '.luxury-story',
+      start: 'top 90%',
+      end: 'center 52%',
+      scrub: 0.78
+    }
+  });
+  storyTl
+    .from('.story-copy', { x: isDesktop ? -34 : 0, y: isDesktop ? 0 : 22, opacity: 0.25, ease: 'none' }, 0)
+    .from('.story-visual', { x: isDesktop ? 34 : 0, y: 24, opacity: 0.25, ease: 'none' }, 0)
+    .from('.story-metrics > div', { y: 20, opacity: 0.2, stagger: 0.12, ease: 'none' }, 0.12);
+
+  document.querySelectorAll?.('[data-count-to]')?.forEach((counterEl) => {
+    const target = Number(counterEl.dataset?.countTo);
+    if (!Number.isFinite(target) || target <= 0) return;
+    const holder = { value: 0 };
+    gsap.to(holder, {
+      value: target,
+      duration: 0.9,
+      ease: 'power2.out',
+      scrollTrigger: {
+        trigger: '.story-metrics',
+        start: 'top 92%',
+        toggleActions: 'play none none reverse'
+      },
+      onUpdate: () => {
+        counterEl.textContent = String(Math.round(holder.value));
+      }
+    });
+    cleanups?.push?.(() => {
+      counterEl.textContent = String(target);
+    });
+  });
+
+  gsap.fromTo(
+    '.cta-shell',
+    { scale: 0.94, y: 22 },
+    {
+      scale: 1,
+      y: 0,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.cta-shell',
+        start: 'top 92%',
+        end: 'center 54%',
+        scrub: 0.75
+      }
+    }
+  );
+  animateWordReveal(gsap, '.cta-copy h2', {
+    trigger: '.cta-copy h2',
+    start: 'top 90%',
+    toggleActions: 'play none none reverse'
+  });
+
+  animateWordReveal(gsap, '.ritual-copy h2', {
+    trigger: '.ritual-copy h2',
+    start: 'top 90%',
+    toggleActions: 'play none none reverse'
+  });
+  gsap.fromTo(
+    '.ritual-badge',
+    {
+      y: 26,
+      x: (idx) => (isDesktop ? (1 - idx) * 32 : 0),
+      rotate: (idx) => (isDesktop ? (idx - 1) * 5.5 : 0),
+      scale: 0.94,
+      opacity: 0.28
+    },
+    {
+      y: 0,
+      x: 0,
+      rotate: 0,
+      scale: 1,
+      opacity: 1,
+      stagger: 0.08,
+      ease: 'power2.out',
+      scrollTrigger: {
+        trigger: '.ritual-shell',
+        start: 'top 90%',
+        end: 'center 54%',
+        scrub: 0.75
+      }
+    }
+  );
+
+  animateWordReveal(gsap, '.footer-brand', {
+    trigger: '.site-footer',
+    start: 'top 95%',
+    toggleActions: 'play none none reverse'
+  });
+  gsap.fromTo(
+    ['.footer-brand-col', '.footer-nav-col', '.footer-bottom'],
+    { y: 18, opacity: 0.25 },
+    {
+      y: 0,
+      opacity: 1,
+      duration: 0.55,
+      stagger: 0.08,
+      ease: 'power2.out',
+      scrollTrigger: {
+        trigger: '.site-footer',
+        start: 'top 95%',
+        toggleActions: 'play none none reverse'
+      }
+    }
+  );
+
+  void ScrollTrigger;
+}
+
+export function initGSAPAnimations() {
+  cleanupGsapMotion();
+  if (typeof window === 'undefined' || typeof window.gsap === 'undefined') return;
+  const gsap = window.gsap;
+  const reducedQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  if (!reducedMotionQueryBound && reducedQuery?.addEventListener) {
+    reducedMotionQueryBound = true;
+    reducedQuery.addEventListener('change', () => initGSAPAnimations());
+  }
+  if (reducedQuery?.matches) return;
+  if (typeof window.ScrollTrigger === 'undefined') return;
+
+  const ScrollTrigger = window.ScrollTrigger;
+  gsap.registerPlugin(ScrollTrigger);
+  gsapReady = true;
+  lastCatalogFilterKey = `${state.activeCategory}|${state.sortBy}|${state.searchQuery}`;
+  document.body?.classList?.add?.('gsap-motion-active');
+
+  activeGsapContext = gsap.context(() => {
+    const mm = typeof gsap.matchMedia === 'function' ? gsap.matchMedia() : null;
+    setupGlobalScrollChrome(gsap, ScrollTrigger);
+    setupCatalogChoreography(gsap, ScrollTrigger);
+    const cleanups = bindPointerInteractions(gsap);
+
+    const runResponsiveSections = (isDesktop) => {
+      setupHeroChoreography(gsap, isDesktop);
+      setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanups);
+    };
+
+    if (mm) {
+      mm.add('(min-width: 769px)', () => runResponsiveSections(true));
+      mm.add('(max-width: 768px)', () => runResponsiveSections(false));
+    } else {
+      const isDesktop = Boolean(window.matchMedia?.('(min-width: 769px)')?.matches);
+      runResponsiveSections(isDesktop);
+    }
+
+    return () => cleanups.forEach((fn) => fn());
+  });
 }
 
 function initApp() {

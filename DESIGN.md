@@ -4,7 +4,7 @@ Warm paper surfaces, dark ink, forest-green actions, terracotta prices and
 editorial serif headings define the storefront. The admin workspace shares
 this palette with denser tables and a full-viewport shell.
 
-**Dial:** ENERGY 2 / RHYTHM 2 / MOTION 2.
+**Dial:** ENERGY 2 / RHYTHM 3 / MOTION 3.
 
 This reference records `styles/main.css` and `scripts/app.js`, not planned features.
 
@@ -109,20 +109,13 @@ The hero heading uses `clamp(2.7rem, 5vw, 4.8rem)`, line height `0.98` and track
 
 ## Motion and interaction
 
-`initGSAPAnimations()` leaves the page static if GSAP is unavailable or reduced
-motion is requested. Otherwise a short timeline brings in the headline,
-description, actions and product photograph in sequence. On screens wider than
-`768px`, ScrollTrigger shifts only the photograph within its clipped frame by
-`8%` while the hero scrolls. Story copy and its preview enter from opposite
-sides; the closing invitation and payment explanation enter vertically. The
-sticky catalog toolbar, product grid, checkout controls and admin workspace do
-not receive scroll reveals, so navigation and transactions remain available.
+`initGSAPAnimations()` leaves the page completely static if GSAP or ScrollTrigger is unavailable or `prefers-reduced-motion: reduce` is active (reverting cleanly on preference change). Otherwise a modular GSAP 3.12.5 + ScrollTrigger + `gsap.matchMedia()` choreography drives distinct motion per section:
 
-The hero retains the warm paper palette and uses a restrained forest-tinted
-frame shadow. On narrow screens the background returns to flat paper, the
-frame shadow tightens, and the scroll-driven image movement is omitted. No new
-visual assets or product claims are introduced. CSS does not hide content
-before animation initializes.
+- Global shell: top `#scroll-progress-bar` scrubs `scaleX(0 -> 1)` across the full document, `#site-header` toggles `.is-scrolled`, and desktop `.nav-links` sync active state across `#katalog`, `#filosofi`, and `#pembayaran-info`.
+- Kinetic typography: display headings and lead hero copy split into clipped `.kt-clip > .kt-word` masks (`aria-label` preserved on parent, nested inline tags such as `<em>` retained without double-wrapping).
+- Hero (`#hero`): initial timeline unmasks `.hero-headline` and reveals `.showcase-card`; bidirectional scroll `scrub` separates `.hero-editorial`, `.showcase-card`, `.showcase-tag`, and `.showcase-img-wrap img` on distinct depth planes; fine pointers add micro 3D tilt on `.showcase-card` and magnetic pull on primary CTAs.
+- Catalog (`#katalog`): container `.catalog-section` and `.toolbar-wrapper` remain static and interactive at all times; initial load and filter/category/search changes animate `.product-card` entries with `clearProps`, apply reversible scroll-velocity skew (`skewY`) across `#product-grid` without hiding cards, and avoid re-animating unchanged background inventory polls while refreshing ScrollTrigger bounds when the grid count changes.
+- Story (`#filosofi`), CTA (`.final-cta`), Payment (`#pembayaran-info`), and Footer (`footer.site-footer`): each section uses a distinct bidirectional ScrollTrigger timeline (`scrub` opposing planes + `[data-count-to]` numbers in `.luxury-story`, `.cta-shell` container expansion, fanned `.ritual-badge` deck in `.luxury-ritual`, and staggered `.site-footer` anchor arrival). CSS excludes conflicting `transition: transform` on GSAP-driven surfaces via `body.gsap-motion-active` and omits off-axis horizontal travel on narrow mobile viewports (`<= 768px`).
 
 Reduced-motion CSS sets animation and transition durations to `0.01ms`, limits
 animation iterations to one and disables smooth scrolling. Admin row/link

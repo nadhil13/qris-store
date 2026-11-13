@@ -159,6 +159,26 @@ a {
   padding-right: clamp(16px, 4vw, 32px);
 }
 
+.scroll-progress-track {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 120;
+  pointer-events: none;
+  background: transparent;
+}
+
+.scroll-progress-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, var(--accent-terracotta) 0%, var(--accent-matcha) 100%);
+  will-change: transform;
+}
+
 .site-header {
   position: sticky;
   top: 0;
@@ -168,7 +188,13 @@ a {
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(29, 23, 19, 0.1);
   height: var(--header-height);
-  transition: transform var(--trans-normal), background var(--trans-normal);
+  transition: transform var(--trans-normal), background var(--trans-normal), box-shadow var(--trans-normal), border-color var(--trans-fast);
+}
+
+.site-header.is-scrolled {
+  background: rgba(245, 239, 231, 0.98);
+  border-bottom-color: rgba(29, 23, 19, 0.16);
+  box-shadow: 0 8px 24px rgba(29, 23, 19, 0.06);
 }
 
 .nav-inner {
@@ -4643,7 +4669,45 @@ a {
   }
 }
 
+/* GSAP Kinetic Typography & Scroll Motion Surfaces */
+.luxury-story,
+.final-cta,
+.luxury-ritual,
+.site-footer {
+  overflow-x: clip;
+}
+
+.kt-clip {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
+.kt-word {
+  display: inline-block;
+  will-change: transform;
+}
+
+body.gsap-motion-active .showcase-card {
+  transform-style: preserve-3d;
+}
+
+body.gsap-motion-active .ritual-badge {
+  transition: box-shadow var(--trans-normal), border-color var(--trans-fast);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .scroll-progress-track {
+    display: none;
+  }
+
+  .kt-word {
+    transform: none !important;
+    opacity: 1 !important;
+  }
+
   *,
   *::before,
   *::after {

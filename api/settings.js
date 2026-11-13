@@ -77,6 +77,11 @@ local record = {
   payload = nextPayload,
   merchantName = nextMerchant,
   updatedAt = nextUpdatedAt,
+  qris = {
+    payload = nextPayload,
+    merchantName = nextMerchant,
+    updatedAt = nextUpdatedAt
+  },
   store = nextStore,
   catalogUpdatedAt = nextCatalogUpdatedAt,
   productsJson = productsJson
@@ -154,6 +159,10 @@ function normalizeStoredRecord(raw) {
     catalogUpdatedAt,
     products
   };
+}
+
+export function getInMemorySettings() {
+  return normalizeStoredRecord(inMemorySettings);
 }
 
 async function readFromCloud(kv) {

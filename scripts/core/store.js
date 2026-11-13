@@ -388,10 +388,15 @@ export function mergeRemoteOrders(remoteList) {
 // Pulls the shared order list. `online` is false when the endpoint could not
 // be reached, so the admin screen can say the data is local only.
 export async function syncOrdersWithCloud() {
-  if (!canReachNetwork()) return { online: false, added: [], changed: [] };
+  if (!canReachNetwork() || !hasInventoryAdminToken()) return { online: false, added: [], changed: [] };
   let remote = null;
   try {
-    const res = await fetch(ORDERS_ENDPOINT, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    const res = await fetch(ORDERS_ENDPOINT, {
+      headers: inventoryAdminHeaders(),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(4000)
+    });
+    rejectUnauthorized(res);
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.orders)) remote = data.orders;

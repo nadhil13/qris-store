@@ -158,7 +158,9 @@ export default async function handler(req, res) {
 
   const kv = getKVClient();
   const storage = kv ? 'kv' : 'memory';
-  const production = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  const production = process.env.NODE_ENV === 'production'
+    || process.env.VERCEL_ENV === 'production'
+    || process.env.VERCEL_ENV === 'preview';
 
   if ((production || kv) && (req.method === 'GET' || req.method === 'POST')) {
     if (!kv) {

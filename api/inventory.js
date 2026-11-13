@@ -11,7 +11,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const integer = (value, max = 1e9) => Number.isSafeInteger(value) && value >= 0 && value <= max;
 const text = (value, max, required = false) => typeof value === 'string' && value.length <= max && (!required || value.trim().length > 0);
-const commerce = {
+export const INVENTORY_COMMERCE = {
   shipping: [
     { id: 'instant', name: 'Kurir instan', price: 15000, eta: '1-2 jam' },
     { id: 'regular', name: 'Kurir reguler', price: 10000, eta: '1-2 hari' },
@@ -38,7 +38,7 @@ function normalize(body) {
       return { productId:line.productId, variant:line.variant ?? '', qty:line.qty, note:(line.note ?? '').trim() };
     }).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b),'en'));
     const normalized = { action, id:body.id, items, customer:{ name:body.customer.name.trim(), phone:body.customer.phone.trim(), address:(body.customer.address ?? '').trim() }, shippingId:body.shippingId, voucherCode:(body.voucherCode ?? '').trim().toUpperCase(), paymentMethod:body.paymentMethod ?? 'qris' };
-    return { ...normalized, capabilityHash:hash(body.capability), fingerprint:hash(JSON.stringify(normalized)), commerce };
+    return { ...normalized, capabilityHash:hash(body.capability), fingerprint:hash(JSON.stringify(normalized)), commerce: INVENTORY_COMMERCE };
   }
   if (['confirm','cancel','advance'].includes(action)) {
     exactKeys(body,['action','id','expectedStatus','reference','note']);
@@ -57,12 +57,36 @@ function normalize(body) {
 // Dashboard-pasted env values often carry quotes, spaces or a trailing newline.
 const normalizeSecret = value => String(value ?? '').trim().replace(/^(['"])([\s\S]*)\1$/, '$2').trim();
 
-function authorize(req) {
+export function authorizeInventoryAdmin(req) {
   const secret = normalizeSecret(process.env.INVENTORY_ADMIN_TOKEN);
   if (!secret) return 503;
   const header = req.headers?.authorization;
   if (typeof header !== 'string' || !header.startsWith('Bearer ')) return 401;
   return timingSafeEqual(Buffer.from(hash(header.slice(7).trim())),Buffer.from(hash(secret))) ? 0 : 401;
+}
+
+export function parseInventoryInput(req) {
+  if (req.method === 'GET') {
+    const query = req.query || Object.fromEntries(new URL(req.url || '/','http://localhost').searchParams);
+    const action = query.action || 'stock';
+    if (!['stock','order','list'].includes(action)) invalid();
+    if (action === 'list') {
+      const status = authorizeInventoryAdmin(req);
+      if (status) return { ok: false, status, body: { ok: false, code: status === 401 ? 'UNAUTHORIZED' : 'ADMIN_UNAVAILABLE' } };
+    }
+    if (action === 'order' && (!validId(query.id) || !validCapability(query.capability))) invalid();
+    return { ok: true, input: { action, ...(action === 'order' ? { id: query.id, capabilityHash: hash(query.capability) } : {}) } };
+  }
+  let body = req.body;
+  let serialized;
+  try { serialized = typeof body === 'string' ? body : JSON.stringify(body); } catch { invalid(); }
+  if (Buffer.byteLength(serialized || '') > MAX_BODY) return { ok: false, status: 413, body: { ok: false, code: 'PAYLOAD_TOO_LARGE' } };
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { invalid(); } }
+  if (['confirm','cancel','advance','adjust'].includes(body?.action)) {
+    const status = authorizeInventoryAdmin(req);
+    if (status) return { ok: false, status, body: { ok: false, code: status === 401 ? 'UNAUTHORIZED' : 'ADMIN_UNAVAILABLE' } };
+  }
+  return { ok: true, input: normalize(body) };
 }
 
 export default async function handler(req,res) {
@@ -72,23 +96,9 @@ export default async function handler(req,res) {
   if (!['GET','POST','OPTIONS'].includes(req.method)) return send(405,{ok:false,code:'METHOD_NOT_ALLOWED'});
   if (req.method === 'OPTIONS') { res.setHeader('Allow','GET, POST, OPTIONS'); return res.status(204).end(); }
   try {
-    let input;
-    if (req.method === 'GET') {
-      const query = req.query || Object.fromEntries(new URL(req.url || '/','http://localhost').searchParams);
-      const action = query.action || 'stock';
-      if (!['stock','order','list'].includes(action)) invalid();
-      if (action === 'list') { const status=authorize(req); if(status) return send(status,{ok:false,code:status===401?'UNAUTHORIZED':'ADMIN_UNAVAILABLE'}); }
-      if (action === 'order' && (!validId(query.id) || !validCapability(query.capability))) invalid();
-      input = { action, ...(action === 'order' ? {id:query.id,capabilityHash:hash(query.capability)} : {}) };
-    } else {
-      let body=req.body;
-      let serialized;
-      try { serialized=typeof body==='string'?body:JSON.stringify(body); } catch { invalid(); }
-      if (Buffer.byteLength(serialized || '') > MAX_BODY) return send(413,{ok:false,code:'PAYLOAD_TOO_LARGE'});
-      if (typeof body==='string') { try { body=JSON.parse(body); } catch { invalid(); } }
-      if (['confirm','cancel','advance','adjust'].includes(body?.action)) { const status=authorize(req); if(status) return send(status,{ok:false,code:status===401?'UNAUTHORIZED':'ADMIN_UNAVAILABLE'}); }
-      input=normalize(body);
-    }
+    const parsed = parseInventoryInput(req);
+    if (!parsed.ok) return send(parsed.status, parsed.body);
+    const { input } = parsed;
     const url=process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN ? process.env.KV_REST_API_URL : process.env.UPSTASH_REDIS_REST_URL;
     const token=process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN ? process.env.KV_REST_API_TOKEN : process.env.UPSTASH_REDIS_REST_TOKEN;
     if (!url || !token) return send(503,{ok:false,code:'STORAGE_UNAVAILABLE'});

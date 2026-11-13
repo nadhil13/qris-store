@@ -41,6 +41,8 @@ Current `:root` values:
   --status-success-bg: #edf5ef;
   --status-pending: #8a5a12;
   --status-pending-bg: #faf0dc;
+  --status-danger: #991b1b;
+  --status-danger-bg: #fde8e8;
 
   --font-serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
   --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -54,6 +56,7 @@ Current `:root` values:
   --shadow-card: 0 14px 32px rgba(29, 23, 19, 0.08);
   --shadow-float: 0 24px 54px rgba(29, 23, 19, 0.14);
   --shadow-overlay: 0 38px 80px rgba(29, 23, 19, 0.22);
+  --shadow-modal: 0 28px 64px rgba(29, 23, 19, 0.22);
 
   --radius-sm: 6px;
   --radius-md: 12px;
@@ -70,8 +73,7 @@ Current `:root` values:
 `--brand-forest` is an alias used by admin markup. Component values are not all
 tokenized: catalog surfaces use `#fbf8f3`, product cards use white with a `12px`
 radius, primary/secondary buttons use `10px`, and admin table containers use
-`8px`. Existing modal declarations reference `--shadow-modal`, which is not
-defined in `:root`; it is not a supported token.
+`8px`. Modal declarations reference `--shadow-modal`.
 
 ## Typography
 

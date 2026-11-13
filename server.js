@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import settingsHandler from './api/settings.js';
 import ordersHandler from './api/orders.js';
-import inventoryHandler from './api/inventory.js';
+import inventoryHandler, { authorizeInventoryAdmin } from './api/inventory.js';
+import { createLocalInventoryEngine } from './api/lib/local-inventory.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,7 +106,23 @@ function adaptServerless(req, res, body) {
   return { req, res };
 }
 
-const server = http.createServer(async (req, res) => {
+const localInventoryHandler = createLocalInventoryEngine();
+
+function isKVConfigured() {
+  return Boolean(
+    (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+    || (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  );
+}
+
+function isLocalDevWithoutKV() {
+  return !isKVConfigured()
+    && process.env.NODE_ENV !== 'production'
+    && process.env.VERCEL_ENV !== 'production'
+    && process.env.VERCEL_ENV !== 'preview';
+}
+
+export async function handleRequest(req, res) {
   try {
     let pathname;
     try {
@@ -115,10 +132,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // API Routes
     if (pathname === '/api/inventory' || pathname === '/api/inventory/') {
       adaptServerless(req, res, await parseBody(req));
-      await inventoryHandler(req, res);
+      await (isLocalDevWithoutKV() ? localInventoryHandler(req, res) : inventoryHandler(req, res));
       return;
     }
     if (pathname === '/api/settings' || pathname === '/api/settings/') {
@@ -130,6 +146,14 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/orders' || pathname === '/api/orders/') {
       const body = await parseBody(req);
       adaptServerless(req, res, body);
+      if (req.method === 'GET') {
+        const authStatus = authorizeInventoryAdmin(req);
+        if (authStatus) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+          res.status(authStatus).json({ ok: false, code: authStatus === 401 ? 'UNAUTHORIZED' : 'ADMIN_UNAVAILABLE' });
+          return;
+        }
+      }
       await ordersHandler(req, res);
       return;
     }
@@ -161,12 +185,20 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('500 Internal Server Error');
   }
-});
+}
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('====================================================');
-  console.log(`🚀 Server Atelier Nusantara Berjalan!`);
-  console.log(`👉 Buka Storefront  : http://localhost:${PORT}/`);
-  console.log(`👉 Buka Panel Admin : http://localhost:${PORT}/?admin=1`);
-  console.log('====================================================');
-});
+const server = http.createServer(handleRequest);
+
+const isMainEntry = Boolean(process.argv[1]) && path.resolve(process.argv[1]).toLowerCase() === __filename.toLowerCase();
+if (isMainEntry) {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log('====================================================');
+    console.log('Server Atelier Nusantara Berjalan!');
+    console.log(`Buka Storefront  : http://localhost:${PORT}/`);
+    console.log(`Buka Panel Admin : http://localhost:${PORT}/?admin=1`);
+    if (isLocalDevWithoutKV()) {
+      console.log('Mode lokal       : penyimpanan in-memory aktif tanpa Redis/KV');
+    }
+    console.log('====================================================');
+  });
+}

@@ -27,7 +27,9 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch(() => {});
+      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
+        console.warn('Service Worker precache gagal:', err);
+      });
     })
   );
 });
@@ -51,8 +53,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // 1. NEVER cache API requests or external data APIs
-  if (url.pathname.startsWith('/api/') || url.hostname.includes('api.restful-api.dev')) {
+  // 1. NEVER cache API requests
+  if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(event.request));
     return;
   }

@@ -169,7 +169,11 @@ local function run()
       local shippingCost=subtotal>0 and shipping.price or 0
       local totals={itemCount=itemCount,subtotal=subtotal,discount=discount,shippingCost=shippingCost,packaging=packaging,total=math.max(0,subtotal-discount+shippingCost+packaging),digitalOnly=digitalOnly}
       local payload=''
-      if type(settings.qris)=='table' and type(settings.qris.payload)=='string' then payload=settings.qris.payload end
+      if type(settings.qris)=='table' then
+        if type(settings.qris.payload)=='string' then payload=settings.qris.payload end
+      elseif type(settings.payload)=='string' then
+        payload=settings.payload
+      end
       local order={id=input.id,invoice='AN' .. tostring(now) .. '-' .. tostring(state.sequence+1),createdAt=now,updatedAt=now,expiresAt=now+600000,status='awaiting_payment',items=items,totals=totals,voucherCode=input.voucherCode,customer=input.customer,shipping=shipping,payment={method=input.paymentMethod,payload=payload,paidAt=cjson.null,confirmedBy=cjson.null},timeline={{status='awaiting_payment',at=now,by='pelanggan'}}}
       for id,qty in pairs(quantities) do if state.stock[id]~=cjson.null then state.stock[id]=state.stock[id]-qty end end
       state.sequence=state.sequence+1

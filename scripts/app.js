@@ -112,9 +112,6 @@ export { getCategoryLabel };
 
 export const STORAGE_KEY_CUSTOM_PRODUCTS = STORAGE_KEYS.products;
 export const STORAGE_KEY_ADMIN_SESSION = 'an.admin.session.v3';
-export const ADMIN_USERNAME = 'admin';
-export const ADMIN_PASSWORD = 'admin123';
-export const VALID_ADMIN_PASSWORDS = ['admin123', 'atelier2026', 'admin'];
 
 function updateStorefrontStatus() {
   const { store } = getSettings();
@@ -125,8 +122,18 @@ function updateStorefrontStatus() {
 
   const waNum = configuredWhatsApp(store.whatsapp);
   document.querySelectorAll('[data-store-whatsapp]').forEach((el) => {
-    el.href = waNum ? `https://wa.me/${waNum}` : '#contact';
-    el.setAttribute('aria-disabled', String(!waNum));
+    if (waNum) {
+      el.href = `https://wa.me/${waNum}`;
+      el.target = '_blank';
+      el.rel = 'noreferrer noopener';
+      el.setAttribute('aria-disabled', 'false');
+    } else {
+      el.href = '#pembayaran-info';
+      el.target = '';
+      el.removeAttribute?.('target');
+      el.removeAttribute?.('rel');
+      el.setAttribute('aria-disabled', 'true');
+    }
   });
 }
 
@@ -383,7 +390,7 @@ export function renderCatalog() {
             </div>
             <div class="card-action-slot">
               ${!available ? `
-                <button type="button" class="btn-add" disabled style="background:#E5E7EB; color:#9CA3AF; cursor:not-allowed;" title="Stok sedang habis">
+                <button type="button" class="btn-add" disabled title="Stok sedang habis">
                   Habis
                 </button>
               ` : totalInCart > 0 && item.variants && item.variants.length > 1 ? `
@@ -636,7 +643,7 @@ function renderShippingOptions(settings, totals) {
   if (grid.dataset.signature === signature) return;
   grid.dataset.signature = signature;
   grid.innerHTML = settings.shipping.map((s) => `
-    <button type="button" class="shipping-option-card ${s.id === state.activeShippingId ? 'active' : ''}" data-action="select-shipping" data-shipping-id="${escapeHTML(s.id)}"
+    <button type="button" class="shipping-method-card ${s.id === state.activeShippingId ? 'active' : ''}" data-action="select-shipping" data-shipping-id="${escapeHTML(s.id)}"
       aria-pressed="${s.id === state.activeShippingId}">
       <span class="shipping-name">${escapeHTML(s.name)}</span>
       <span class="shipping-price">${Number(s.price) > 0 ? formatIDR(s.price) : 'Gratis'}</span>
@@ -714,7 +721,7 @@ export function updateCartUI() {
           ${item.variant ? `<span class="cart-variant-tag">${escapeHTML(item.variant)}</span>` : ''}
           <span class="cart-item-price">${formatIDR(item.unitPrice)}</span>
         </div>
-        <button type="button" class="btn-note" data-action="prompt-note" data-line-key="${escapeHTML(item.key)}" aria-label="Tambah catatan khusus">
+        <button type="button" class="cart-item-note" data-action="prompt-note" data-line-key="${escapeHTML(item.key)}" aria-label="Tambah catatan khusus">
           ${item.note ? `Catatan: ${escapeHTML(item.note)}` : '+ Catatan khusus'}
         </button>
       </div>
@@ -729,6 +736,7 @@ export function updateCartUI() {
 
 export function openCartDrawer() {
   sfx.playClick();
+  setActiveMobileNav('mob-nav-cart');
   const drawer = document.getElementById('cart-drawer');
   const backdrop = document.getElementById('drawer-backdrop');
   overlays().open(drawer, closeCartDrawer);
@@ -740,6 +748,7 @@ export function closeCartDrawer() {
   const backdrop = document.getElementById('drawer-backdrop');
   overlays().close(drawer);
   if (backdrop) backdrop.classList.remove('open');
+  setActiveMobileNav('mob-nav-katalog');
 }
 
 let checkoutPending = false;
@@ -850,14 +859,15 @@ function renderCheckoutView(order) {
   const merchantEl = document.getElementById('qris-merchant-display');
   const nmidEl = document.getElementById('qris-nmid-display');
   const vaEl = document.getElementById('va-code-number');
-  const btnCopyVa = document.getElementById('btn-copy-va');
   const banner = document.getElementById('payment-expired-banner');
   const polling = document.querySelector('.polling-indicator');
   const clockEl = document.getElementById('payment-countdown-clock');
+  const msLeft = remainingMs(order);
+  const expired = msLeft <= 0 || order.status === STATUS.EXPIRED;
 
-  if (banner) banner.style.display = 'none';
-  if (polling) polling.style.display = 'flex';
-  if (clockEl) clockEl.textContent = '10:00';
+  if (banner) banner.style.display = expired ? 'block' : 'none';
+  if (polling) polling.style.display = expired ? 'none' : 'flex';
+  if (clockEl) clockEl.textContent = expired ? '00:00 (Hangus)' : formatCountdown(msLeft);
 
   if (amountEl) amountEl.textContent = formatIDR(order.totals.total);
   if (invoiceEl) invoiceEl.textContent = order.invoice;
@@ -865,10 +875,6 @@ function renderCheckoutView(order) {
   if (nmidEl) nmidEl.textContent = [desc.nmid ? `NMID: ${desc.nmid}` : '', desc.city].filter(Boolean).join(' · ');
   if (vaEl) {
     vaEl.textContent = 'Toko ini belum mengaktifkan integrasi penyedia Virtual Account perbankan.';
-  }
-  if (btnCopyVa) {
-    btnCopyVa.hidden = true;
-    btnCopyVa.dataset.copy = '';
   }
 
   switchQRISDisplayMode(state.currentQRISDisplayMode || 'dynamic', order);
@@ -1338,26 +1344,48 @@ export async function openOrderTrackerModal() {
 
   if (invoiceEl) invoiceEl.textContent = active.invoice;
   if (timelineEl) {
-    const steps = trackerSteps(active);
-    const flowStatus = [STATUS.PAID, STATUS.PROCESSING, STATUS.READY, STATUS.COMPLETED];
-    const currentIndex = flowStatus.indexOf(active.status);
-
-    timelineEl.innerHTML = steps.map((st, idx) => {
-      let stateClass = '';
-      if (idx < currentIndex) stateClass = 'step-done';
-      else if (idx === currentIndex) stateClass = 'step-active';
-      else stateClass = 'step-waiting';
-
-      return `
-        <div class="timeline-step ${stateClass}">
-          <div class="timeline-marker">${idx + 1}</div>
+    if (active.status === STATUS.CANCELLED || active.status === STATUS.EXPIRED) {
+      const label = statusLabel(active.status, active);
+      const detail = active.status === STATUS.EXPIRED
+        ? 'Batas waktu reservasi atau pembayaran berakhir dan stok telah dikembalikan.'
+        : 'Pesanan ini dibatalkan. Buat pesanan baru jika masih membutuhkan item.';
+      timelineEl.innerHTML = `
+        <div class="timeline-step step-danger">
+          <div class="timeline-marker">!</div>
           <div class="timeline-body">
-            <strong>${escapeHTML(st.label)}</strong>
-            <small style="color:var(--ink-secondary);">${idx <= currentIndex ? 'Sedang berlangsung / selesai' : 'Menunggu antrean'}</small>
+            <strong>${escapeHTML(label)}</strong>
+            <small style="color:var(--ink-secondary);">${escapeHTML(detail)}</small>
           </div>
         </div>
       `;
-    }).join('');
+    } else {
+      const steps = trackerSteps(active);
+      const flowStatus = [STATUS.PAID, STATUS.PROCESSING, STATUS.READY, STATUS.COMPLETED];
+      const currentIndex = flowStatus.indexOf(active.status);
+      const allDone = active.status === STATUS.COMPLETED;
+
+      timelineEl.innerHTML = steps.map((st, idx) => {
+        let stateClass = 'step-waiting';
+        let stateDesc = 'Menunggu antrean';
+        if (allDone || idx < currentIndex) {
+          stateClass = 'step-done';
+          stateDesc = 'Selesai';
+        } else if (idx === currentIndex) {
+          stateClass = 'step-active';
+          stateDesc = 'Sedang berlangsung';
+        }
+
+        return `
+          <div class="timeline-step ${stateClass}">
+            <div class="timeline-marker">${idx + 1}</div>
+            <div class="timeline-body">
+              <strong>${escapeHTML(st.label)}</strong>
+              <small style="color:var(--ink-secondary);">${stateDesc}</small>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   }
 
   overlays().open(modal, closeOrderTrackerModal);
@@ -1398,7 +1426,7 @@ export function openAdminLoginModal() {
     password.setAttribute('autocomplete', 'off');
     password.setAttribute('aria-label', 'Token admin backend');
   }
-  if (errorEl) { errorEl.textContent = 'Masukkan token admin backend, bukan password demo.'; errorEl.style.display = 'block'; }
+  if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
   overlays().open(modal, closeAdminLoginModal, { initialFocus: password });
 }
 
@@ -1557,6 +1585,10 @@ function renderAdminOrderTable() {
       actionBtn = `<button type="button" class="btn-admin-action" style="background:var(--brand-forest); color:#fff;" data-action="admin-confirm-payment" data-order-id="${escapeHTML(o.id)}">Konfirmasi Lunas</button>`;
     } else if (!isComplete) {
       actionBtn = `<button type="button" class="btn-admin-action" data-action="admin-advance-order" data-invoice="${escapeHTML(o.invoice)}">Majukan status</button>`;
+    } else if (o.status === STATUS.CANCELLED) {
+      actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Dibatalkan</span>`;
+    } else if (o.status === STATUS.EXPIRED) {
+      actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Kedaluwarsa</span>`;
     } else {
       actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Selesai</span>`;
     }
@@ -1657,7 +1689,7 @@ function renderAdminProductsTable() {
       <td style="font-size:0.78rem;">${escapeHTML(getCategoryLabel(p.category))}</td>
       <td style="font-family:var(--font-mono); font-weight:700;">${formatIDR(p.price)}</td>
       <td>
-        <span class="status-badge-step ${p.isAvailable !== false ? 'status-paid' : 'status-cancelled'}">
+        <span class="status-badge-step ${p.isAvailable !== false ? 'done' : 'muted'}">
           ${p.isAvailable !== false ? 'Tersedia' : 'Habis'}
         </span>
       </td>
@@ -2134,12 +2166,34 @@ export function triggerPaymentAlert(order) {
   }
 }
 
-export function switchMobileTab(target) {
+function setActiveMobileNav(activeId) {
+  document.querySelectorAll('.mobile-app-bar .mobile-nav-item').forEach((item) => {
+    item.classList.remove('active');
+    if (item.id === activeId) {
+      item.classList.add('active');
+      item.setAttribute('aria-current', 'page');
+    } else {
+      item.removeAttribute?.('aria-current');
+    }
+  });
+}
+
+export function switchMobileTab(target = 'katalog') {
+  if (target === 'search') {
+    focusMobileSearch();
+    return;
+  }
+  if (target === 'cart') {
+    openCartDrawer();
+    return;
+  }
+  setActiveMobileNav('mob-nav-katalog');
   const catalogEl = document.getElementById('katalog');
   if (catalogEl) catalogEl.scrollIntoView({ behavior: 'smooth' });
 }
 
 export function focusMobileSearch() {
+  setActiveMobileNav('mob-nav-search');
   const catalogEl = document.getElementById('katalog');
   if (catalogEl) catalogEl.scrollIntoView({ behavior: 'smooth' });
   const searchInput = document.getElementById('search-input');
@@ -2223,6 +2277,12 @@ function initEventBindings() {
 
   // Delegated dynamic actions (safe from apostrophes/quotes in IDs, variant labels, or QR payloads)
   document.addEventListener('click', (e) => {
+    const waLink = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-store-whatsapp]') : null;
+    if (waLink && waLink.getAttribute('aria-disabled') === 'true') {
+      e.preventDefault();
+      showToast('Nomor WhatsApp toko belum tersedia. Silakan gunakan pembayaran QRIS.');
+      return;
+    }
     const trigger = e.target && typeof e.target.closest === 'function' ? e.target.closest('[data-action]') : null;
     if (!trigger) return;
     const action = trigger.dataset.action;

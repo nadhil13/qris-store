@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atelier-nusantara-cache-v24';
+const CACHE_NAME = 'atelier-nusantara-cache-v25';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

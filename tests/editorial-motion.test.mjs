@@ -12,6 +12,15 @@ test('editorial motion respects reduced motion and keeps catalog controls visibl
   assert.doesNotMatch(app, /gsap\.from\(sec,\s*\{[\s\S]*?scrollTrigger:/);
   assert.match(html, /class="catalog-section reveal-section"/);
   assert.doesNotMatch(app, /gsap\.from\(['"]\.catalog-section/);
+  assert.doesNotMatch(app, /heroScroll\.to\(['"]\.hero-editorial['"],\s*\{[^}]*opacity\s*:/);
+  const wordRevealBody = app.match(/function animateWordReveal\([^)]*\)\s*\{[\s\S]*?\n\}/)?.[0] || '';
+  assert.ok(wordRevealBody.length > 0, 'animateWordReveal helper must exist');
+  assert.doesNotMatch(wordRevealBody, /opacity:\s*0\./);
+  assert.match(html, /id="hero-field-canvas"/);
+  assert.match(html, /id="tab-active-slider"/);
+  assert.match(html, /class="story-timeline-rail"/);
+  assert.match(html, /class="ritual-preset-row"/);
+  assert.match(html, /class="ritual-faq"/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
@@ -86,8 +95,8 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
         if (deep) node.childNodes.forEach((c) => copy.appendChild(c.cloneNode(true)));
         return copy;
       },
-      addEventListener() {},
-      removeEventListener() {},
+      addEventListener() { },
+      removeEventListener() { },
       matches: () => false,
       contains: () => false,
       querySelector(sel) { return node.querySelectorAll(sel)[0] || null; },
@@ -143,7 +152,7 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
     const tabMakanan = makeNode(1, 'button'); tabMakanan.dataset.category = 'makanan';
     tabMakanan._handlers = {};
     tabMakanan.addEventListener = (ev, fn) => { tabMakanan._handlers[ev] = fn; };
-    tabSemua.addEventListener = () => {};
+    tabSemua.addEventListener = () => { };
 
     const bySelector = {
       '.category-tabs .tab-btn': [tabSemua, tabMakanan],
@@ -199,8 +208,8 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
       getElementById: (id) => byId[id] || null,
       querySelector: (sel) => (bySelector[sel] && bySelector[sel][0]) || null,
       querySelectorAll: (sel) => bySelector[sel] || [],
-      addEventListener() {},
-      removeEventListener() {}
+      addEventListener() { },
+      removeEventListener() { }
     };
     const storage = new Map();
     globalThis.localStorage = {
@@ -211,24 +220,29 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
 
     const stats = { contextCalls: 0, revertCalls: 0, timelines: 0, scrollTriggers: 0, refreshes: 0, fromToCalls: 0, toCalls: 0 };
     const scrollTriggerConfigs = [];
+    const timelineToCalls = [];
     const makeTimeline = () => {
       stats.timelines += 1;
       const tl = {
         from() { return tl; },
         fromTo(_t, _f, vars) { if (vars?.scrollTrigger) scrollTriggerConfigs.push(vars.scrollTrigger); return tl; },
-        to(_t, vars) { if (vars?.scrollTrigger) scrollTriggerConfigs.push(vars.scrollTrigger); return tl; }
+        to(target, vars) {
+          timelineToCalls.push({ target, vars });
+          if (vars?.scrollTrigger) scrollTriggerConfigs.push(vars.scrollTrigger);
+          return tl;
+        }
       };
       return tl;
     };
     let reducedFlag = true;
     const mockScrollTrigger = {
-      create(cfg) { stats.scrollTriggers += 1; scrollTriggerConfigs.push(cfg); return { kill() {} }; },
+      create(cfg) { stats.scrollTriggers += 1; scrollTriggerConfigs.push(cfg); return { kill() { } }; },
       batch(_targets, cfg) { stats.scrollTriggers += 1; scrollTriggerConfigs.push(cfg); return []; },
       getAll() { return []; },
       refresh() { stats.refreshes += 1; }
     };
     const mockGsap = {
-      registerPlugin() {},
+      registerPlugin() { },
       context(fn) {
         stats.contextCalls += 1;
         fn();
@@ -247,10 +261,10 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
         if (cfg?.scrollTrigger) scrollTriggerConfigs.push(cfg.scrollTrigger);
         return makeTimeline();
       },
-      from() {},
+      from() { },
       to(_t, vars) { stats.toCalls += 1; if (vars?.scrollTrigger) scrollTriggerConfigs.push(vars.scrollTrigger); },
       fromTo(_t, _f, vars) { stats.fromToCalls += 1; if (vars?.scrollTrigger) scrollTriggerConfigs.push(vars.scrollTrigger); },
-      quickTo() { return () => {}; }
+      quickTo() { return () => { }; }
     };
 
     globalThis.requestAnimationFrame = (cb) => { if (typeof cb === 'function') cb(); };
@@ -262,10 +276,10 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
       location: { protocol: 'https:', search: '', hash: '' },
       matchMedia: (q) => ({
         matches: q.includes('prefers-reduced-motion') ? reducedFlag : q.includes('min-width: 769px'),
-        addEventListener() {}
+        addEventListener() { }
       }),
-      addEventListener() {},
-      removeEventListener() {}
+      addEventListener() { },
+      removeEventListener() { }
     };
 
     const appMod = await import(`../scripts/app.js?gsap=${Date.now()}`);
@@ -285,6 +299,11 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
     assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.luxury-story' && c.scrub));
     assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.cta-shell' && c.scrub));
     assert.ok(scrollTriggerConfigs.some((c) => c.trigger === '.ritual-shell' && c.scrub));
+    assert.equal(
+      timelineToCalls.some((c) => c.target === '.hero-editorial' && typeof c.vars?.opacity === 'number' && c.vars.opacity < 1),
+      false,
+      '.hero-editorial must never fade below full opacity on scroll'
+    );
     assert.equal(headline.getAttribute('aria-label'), 'Kopi dan kriya dalam keranjang.');
     const initialClips = headline.querySelectorAll('.kt-clip').length;
     assert.equal(initialClips, 5);

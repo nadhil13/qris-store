@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
-  <link rel="stylesheet" href="styles/main.css?v=20261113-v24">
+  <link rel="stylesheet" href="styles/main.css?v=20261113-v25">
   <script>
     if ('serviceWorker' in navigator) {
       const hadController = Boolean(navigator.serviceWorker.controller);
@@ -113,6 +113,7 @@
   <main id="main-content" tabindex="-1">
     <!-- Hero section -->
     <section class="hero-section" id="hero">
+      <canvas id="hero-field-canvas" class="hero-field-canvas" aria-hidden="true"></canvas>
       <div class="container hero-grid">
         <div class="hero-editorial">
           <h1 class="hero-headline reveal-up">
@@ -198,6 +199,7 @@
                 <span>Produk Digital</span>
                 <span class="tab-count">2</span>
               </button>
+              <span class="tab-active-slider" id="tab-active-slider" aria-hidden="true"></span>
             </div>
 
             <!-- Search & Sort Controls -->
@@ -242,7 +244,8 @@
 
     <!-- Order process & interactive product preview -->
     <section class="luxury-story reveal-section" id="filosofi">
-      <div class="container story-grid">
+      <div class="story-stage-pin">
+        <div class="container story-grid">
         <div class="story-copy">
           <h2>Dari keranjang ke pembayaran dalam tiga langkah.</h2>
           <p>
@@ -260,6 +263,35 @@
             <div>
               <strong><span class="metric-num" data-count-to="10">10</span> menit</strong>
               <span class="metric-caption">stok ditahan selama Anda menyelesaikan pembayaran</span>
+            </div>
+          </div>
+
+          <div class="story-timeline-rail" role="group" aria-label="Linimasa alur belanja">
+            <div class="story-rail-track" aria-hidden="true">
+              <div class="story-rail-fill" id="story-rail-fill"></div>
+            </div>
+            <div class="story-rail-items">
+              <button type="button" class="story-rail-item is-active" data-story-step="1" aria-current="step">
+                <span class="story-rail-index">01</span>
+                <span class="story-rail-text">
+                  <strong>Pilih Menu &amp; Varian</strong>
+                  <small>Cek level rasa dan stok live</small>
+                </span>
+              </button>
+              <button type="button" class="story-rail-item" data-story-step="2">
+                <span class="story-rail-index">02</span>
+                <span class="story-rail-text">
+                  <strong>Tahan Stok 10 Menit</strong>
+                  <small>Isi kontak WA dan opsi kirim</small>
+                </span>
+              </button>
+              <button type="button" class="story-rail-item" data-story-step="3">
+                <span class="story-rail-index">03</span>
+                <span class="story-rail-text">
+                  <strong>QRIS Nominal Otomatis</strong>
+                  <small>Pindai kode dan simpan struk</small>
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -283,6 +315,13 @@
               <div class="story-panel active" id="story-panel-1" role="tabpanel" aria-labelledby="story-tab-1">
                 <h3>Wagyu Se’i Sapi Asap</h3>
                 <p>Buka detail untuk melihat 4 varian sambal lu’at, sisa stok, dan harga sebelum menambahkannya ke keranjang.</p>
+                <div class="story-variant-chips" role="group" aria-label="Pilih pratinjau level sambal">
+                  <button type="button" class="story-variant-chip is-active" data-story-variant="Level 0: Ramah Anak" aria-pressed="true">Level 0 · Ramah Anak</button>
+                  <button type="button" class="story-variant-chip" data-story-variant="Level 1: Sedang Nikmat" aria-pressed="false">Level 1 · Sedang Nikmat</button>
+                  <button type="button" class="story-variant-chip" data-story-variant="Level 2: Pedas Nampol" aria-pressed="false">Level 2 · Pedas Nampol</button>
+                  <button type="button" class="story-variant-chip" data-story-variant="Level 3: Ekstra Kecombrang" aria-pressed="false">Level 3 · Ekstra Kecombrang</button>
+                </div>
+                <p class="story-variant-note" id="story-variant-note">Varian dipilih: Level 0: Ramah Anak (Rp 78.000).</p>
                 <div class="price-row">
                   <span>Harga</span>
                   <strong>Rp 78.000</strong>
@@ -318,6 +357,7 @@
             </div>
           </div>
         </div>
+        </div>
       </div>
     </section>
 
@@ -334,6 +374,21 @@
             <li>Dapat dipindai lintas dompet digital maupun mobile banking</li>
             <li>Invoice dan struk tersimpan setelah halaman dimuat ulang</li>
           </ul>
+
+          <div class="ritual-faq" aria-label="Pertanyaan singkat pembayaran">
+            <details class="ritual-faq-item">
+              <summary>Aplikasi apa saja yang bisa memindai kode QRIS?</summary>
+              <p>Semua dompet digital dan mobile banking berlogo QRIS nasional, termasuk GoPay, OVO, DANA, ShopeePay, BCA mobile, Livin' Mandiri, dan BRImo.</p>
+            </details>
+            <details class="ritual-faq-item">
+              <summary>Berapa lama stok barang ditahan setelah checkout?</summary>
+              <p>Stok dikunci selama 10 menit sejak kode QRIS diterbitkan supaya barang Anda tidak terambil pembeli lain selama proses transfer.</p>
+            </details>
+            <details class="ritual-faq-item">
+              <summary>Di mana nomor invoice dan struk dapat dilihat ulang?</summary>
+              <p>Nomor invoice dan struk digital tersimpan di browser Anda dan dapat dibuka kembali kapan saja lewat tombol Lacak Pesanan di bar atas.</p>
+            </details>
+          </div>
         </div>
 
         <div class="ritual-visual-col">
@@ -356,8 +411,13 @@
                 <span class="ritual-qr-scanline"></span>
               </div>
               <div class="ritual-ticket-meta">
-                <span class="ritual-ticket-label">Contoh nominal produk</span>
-                <strong class="ritual-ticket-amount">Rp 78.000</strong>
+                <span class="ritual-ticket-label" id="ritual-ticket-label">Contoh nominal produk</span>
+                <strong class="ritual-ticket-amount" id="ritual-ticket-amount">Rp 78.000</strong>
+                <div class="ritual-preset-row" role="group" aria-label="Simulasi nominal QRIS">
+                  <button type="button" class="ritual-preset-btn is-active" data-ritual-preset="78000" aria-pressed="true">1x Menu · Rp 78rb</button>
+                  <button type="button" class="ritual-preset-btn" data-ritual-preset="156000" aria-pressed="false">2 Porsi · Rp 156rb</button>
+                  <button type="button" class="ritual-preset-btn" data-ritual-preset="cart" aria-pressed="false">Keranjang Aktif</button>
+                </div>
                 <p class="ritual-ticket-note" id="ritual-channel-note">Satu kode standar nasional terbaca langsung dengan nominal tepat.</p>
               </div>
             </div>
@@ -1337,7 +1397,7 @@
   <script src="scripts/vendor/jsqr.js"></script>
   <script src="scripts/vendor/gsap.min.js"></script>
   <script src="scripts/vendor/ScrollTrigger.min.js"></script>
-  <script type="module" src="scripts/app.js?v=20261113-v24"></script>
+  <script type="module" src="scripts/app.js?v=20261113-v25"></script>
 </body>
 
 </html>

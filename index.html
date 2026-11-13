@@ -360,13 +360,16 @@
         <div class="customer-fields-grid">
           <label for="customer-name" class="customer-field-label">Nama pemesan</label>
           <input type="text" class="customer-input-field" id="customer-name" placeholder="Nama lengkap"
-            autocomplete="name" aria-describedby="checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+            autocomplete="name" aria-describedby="error-customer-name checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+          <p class="customer-field-error" id="error-customer-name" role="alert" hidden></p>
           <label for="customer-phone" class="customer-field-label">Nomor WhatsApp</label>
           <input type="tel" class="customer-input-field" id="customer-phone" placeholder="08..."
-            autocomplete="tel" inputmode="tel" aria-describedby="checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+            autocomplete="tel" inputmode="tel" aria-describedby="error-customer-phone checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+          <p class="customer-field-error" id="error-customer-phone" role="alert" hidden></p>
           <label for="customer-address" class="customer-field-label">Alamat atau catatan lokasi</label>
           <input type="text" class="customer-input-field" id="customer-address"
-            placeholder="Kosongkan jika ambil di toko" autocomplete="street-address" aria-describedby="checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+            placeholder="Kosongkan jika ambil di toko" autocomplete="street-address" aria-describedby="error-customer-address checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+          <p class="customer-field-error" id="error-customer-address" role="alert" hidden></p>
         </div>
         <p class="checkout-privacy-note" id="checkout-privacy-note">
           Nama, nomor, dan alamat dikirim ke server toko untuk membuat pesanan dan menahan stok, lalu dipakai penjual untuk menghubungi dan mengantar pesanan Anda.
@@ -395,7 +398,7 @@
       <!-- Voucher Promo -->
       <div class="voucher-row">
         <label for="voucher-input" class="sr-only">Kode voucher</label>
-        <input type="text" class="voucher-input" id="voucher-input" placeholder="Kode voucher (contoh: RASAHEMAT)" autocomplete="off" />
+        <input type="text" class="voucher-input" id="voucher-input" placeholder="Kode voucher (RASAHEMAT)" autocomplete="off" />
         <button type="button" class="voucher-btn" onclick="window.applyVoucher()">Pasang</button>
       </div>
 
@@ -503,6 +506,7 @@
             <div class="qris-amount-display">
               <span class="amount-label" id="qris-amount-label">Total Tagihan Otomatis</span>
               <div class="amount-number" id="qris-amount-number">Rp 0</div>
+              <div class="qris-unique-badge" id="qris-unique-badge" hidden></div>
             </div>
 
             <div class="countdown-box">
@@ -521,7 +525,7 @@
 
             <div class="polling-indicator">
               <span class="radar-spinner"></span>
-              <span>Menunggu pembayaran QRIS &amp; konfirmasi kasir...</span>
+              <span id="qris-polling-label">Menunggu pembayaran QRIS · cek status otomatis tiap 2 detik...</span>
             </div>
 
             <!-- FEATURE 1: Mobile Buyer QRIS Gallery Helper -->
@@ -828,7 +832,10 @@
             <button type="button" class="admin-section-nav-item active" data-admin-section="overview"
               onclick="window.switchAdminSection('overview')">Ringkasan</button>
             <button type="button" class="admin-section-nav-item" data-admin-section="orders"
-              onclick="window.switchAdminSection('orders')">Pesanan</button>
+              onclick="window.switchAdminSection('orders')">
+              <span>Pesanan</span>
+              <span class="admin-nav-badge" id="admin-orders-nav-badge" hidden>0</span>
+            </button>
             <button type="button" class="admin-section-nav-item" data-admin-section="catalog"
               onclick="window.switchAdminSection('catalog')">Katalog</button>
             <button type="button" class="admin-section-nav-item" data-admin-section="storefront"
@@ -847,6 +854,7 @@
         <div class="admin-workspace-main">
 
       <div class="admin-body">
+        <div id="admin-live-alert-banner" class="admin-live-alert" role="status" aria-live="polite" hidden></div>
         <section id="admin-section-overview" class="admin-section-view" aria-labelledby="admin-overview-title">
           <div class="admin-section-heading">
             <div>

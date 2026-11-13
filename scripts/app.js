@@ -103,7 +103,7 @@ import {
   watchOrder
 } from './core/payments.js';
 
-import { reserveInventory, getPendingReservation, refreshInventoryOrder, isInventoryOrder, syncInventory, listInventoryOrders, setInventoryAdminToken, hasInventoryAdminToken, refreshInventoryStock, adjustInventoryStock } from './core/inventory.js';
+import { reserveInventory, getPendingReservation, refreshInventoryOrder, isInventoryOrder, syncInventory, listInventoryOrders, setInventoryAdminToken, hasInventoryAdminToken, refreshInventoryStock, adjustInventoryStock, formatInventoryError } from './core/inventory.js';
 
 // Realtime synchronization across browser tabs powered by BroadcastChannel
 export const REALTIME_CHANNEL_TYPE = typeof BroadcastChannel !== 'undefined' ? 'BroadcastChannel' : 'StorageEvent';
@@ -287,6 +287,28 @@ class SoundFX {
       gainBell.connect(this.ctx.destination);
       oscBell.start(now + 0.08);
       oscBell.stop(now + 0.85);
+    } catch {}
+  }
+
+  playOrderAlert() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      [660, 880, 1100].forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const start = now + idx * 0.085;
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.14, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.25);
+      });
     } catch {}
   }
 }
@@ -617,6 +639,72 @@ export function updateCustomerInfo() {
     phone: phoneEl ? phoneEl.value.trim() : state.customer.phone,
     address: addrEl ? addrEl.value.trim() : state.customer.address
   };
+  clearCustomerErrors();
+}
+
+function setCustomerFieldError(field, message) {
+  const input = document.getElementById(`customer-${field}`);
+  const errEl = document.getElementById(`error-customer-${field}`);
+  const hasErr = Boolean(message);
+  if (input) {
+    if (hasErr) {
+      input.classList?.add?.('is-invalid');
+      input.setAttribute?.('aria-invalid', 'true');
+    } else {
+      input.classList?.remove?.('is-invalid');
+      input.removeAttribute?.('aria-invalid');
+    }
+  }
+  if (errEl) {
+    errEl.textContent = message || '';
+    errEl.hidden = !hasErr;
+  }
+  return hasErr ? input : null;
+}
+
+function clearCustomerErrors() {
+  for (const field of ['name', 'phone', 'address']) {
+    setCustomerFieldError(field, '');
+  }
+}
+
+function validateCheckoutCustomer({ digitalOnly = false, shippingId = 'instant' } = {}) {
+  clearCustomerErrors();
+  const name = String(state.customer?.name || '').trim();
+  const phone = String(state.customer?.phone || '').trim();
+  const address = String(state.customer?.address || '').trim();
+  const phoneDigits = phone.replace(/\D/g, '');
+  const needsAddress = !digitalOnly && shippingId !== 'pickup';
+
+  let firstInvalid = null;
+  let firstMessage = '';
+  const recordErr = (field, msg) => {
+    const el = setCustomerFieldError(field, msg);
+    if (!firstInvalid && el) firstInvalid = el;
+    if (!firstMessage) firstMessage = msg;
+  };
+
+  if (name.length < 2 || name.length > 100) {
+    recordErr('name', 'Isi nama pemesan minimal 2 huruf.');
+  }
+  if (!phone || !/^\+?[0-9 ()-]{8,24}$/.test(phone) || phoneDigits.length < 8) {
+    recordErr('phone', 'Isi nomor WhatsApp aktif minimal 8 angka.');
+  }
+  if (needsAddress && address.length === 0) {
+    recordErr('address', 'Alamat pengantaran wajib diisi untuk kurir pilihan Anda.');
+  } else if (address.length > 500) {
+    recordErr('address', 'Alamat terlalu panjang (maksimal 500 karakter).');
+  }
+
+  if (firstMessage) {
+    if (firstInvalid) {
+      firstInvalid.focus?.();
+      firstInvalid.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+    showToast(firstMessage);
+    return false;
+  }
+  return true;
 }
 
 export function applyVoucher() {
@@ -827,6 +915,9 @@ export async function openCheckoutModal(existingOrderId = null) {
   }
 
   updateCustomerInfo();
+  if (!pending && !existingOrderId && !validateCheckoutCustomer({ digitalOnly: totals.digitalOnly, shippingId: activeShipping?.id || 'digital' })) {
+    return;
+  }
   let newOrder;
   setCheckoutPending(true);
   try {
@@ -838,7 +929,7 @@ export async function openCheckoutModal(existingOrderId = null) {
     if (!newOrder) throw Error('Pesanan tidak tersedia.');
     if (newOrder.payment?.method !== 'qris') throw Error('Reservasi sebelumnya menggunakan WhatsApp. Lanjutkan melalui tombol WhatsApp.');
   }
-  catch (error) { showToast(error.message || 'Reservasi gagal. Keranjang tetap tersimpan.'); return; }
+  catch (error) { showToast(formatInventoryError(error)); return; }
   finally { setCheckoutPending(false); }
   if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder) <= 0) {
     showToast(`Reservasi berstatus ${statusLabel(newOrder.status, newOrder)}. Tidak ada tagihan baru dibuat.`);
@@ -881,6 +972,11 @@ export async function openCheckoutModal(existingOrderId = null) {
         } else if (updatedOrder.status === STATUS.EXPIRED) {
           handlePaymentExpired(updatedOrder);
         }
+      },
+      onError: () => {
+        const polling = document.querySelector('.polling-indicator');
+        if (polling) polling.style.display = 'none';
+        showToast('Pesanan ini sudah kedaluwarsa atau dihapus dari server. Silakan buat pesanan baru.');
       }
     });
   } catch (err) {
@@ -896,6 +992,7 @@ function renderCheckoutView(order) {
   const desc = describeQRIS(rawStatic);
 
   const amountEl = document.getElementById('qris-amount-number');
+  const uniqueBadgeEl = document.getElementById('qris-unique-badge');
   const invoiceEl = document.getElementById('payment-invoice-number');
   const merchantEl = document.getElementById('qris-merchant-display');
   const nmidEl = document.getElementById('qris-nmid-display');
@@ -911,6 +1008,16 @@ function renderCheckoutView(order) {
   if (clockEl) clockEl.textContent = expired ? '00:00 (Hangus)' : formatCountdown(msLeft);
 
   if (amountEl) amountEl.textContent = formatIDR(order.totals.total);
+  if (uniqueBadgeEl) {
+    const code = Number(order.totals?.uniqueCode || 0);
+    if (code > 0) {
+      uniqueBadgeEl.textContent = `Sudah termasuk kode unik +Rp ${code} (verifikasi otomatis)`;
+      uniqueBadgeEl.hidden = false;
+    } else {
+      uniqueBadgeEl.textContent = '';
+      uniqueBadgeEl.hidden = true;
+    }
+  }
   if (invoiceEl) invoiceEl.textContent = order.invoice;
   if (merchantEl) merchantEl.textContent = desc.merchantName || settings.store.name;
   if (nmidEl) nmidEl.textContent = [desc.nmid ? `NMID: ${desc.nmid}` : '', desc.city].filter(Boolean).join(' · ');
@@ -1242,6 +1349,9 @@ export async function checkoutViaWhatsApp(existingOrderId = null) {
     return;
   }
   updateCustomerInfo();
+  if (!pending && !existingOrderId && !validateCheckoutCustomer({ digitalOnly: totals.digitalOnly, shippingId: activeShipping?.id || 'digital' })) {
+    return;
+  }
 
   let popup = null;
   try { popup = window.open('about:blank', '_blank'); if (popup) popup.opener = null; } catch {}
@@ -1253,7 +1363,7 @@ export async function checkoutViaWhatsApp(existingOrderId = null) {
       newOrder = await refreshInventoryOrder(existingOrderId);
     } else newOrder = await reserveCheckout('whatsapp', activeShipping);
   }
-  catch (error) { popup?.close(); showToast(error.message || 'Reservasi gagal. Keranjang tetap tersimpan.'); return; }
+  catch (error) { popup?.close(); showToast(formatInventoryError(error)); return; }
   finally { setCheckoutPending(false); }
   if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder) <= 0 || newOrder.payment?.method !== 'whatsapp') {
     popup?.close();
@@ -1503,6 +1613,10 @@ export async function submitAdminLogin(event) {
 
 export function logoutAdminSession() {
   state.adminAuthenticated = false;
+  adminBaselineCaptured = false;
+  knownAdminOrderStates.clear();
+  recentAlertOrderIds.clear();
+  dismissAdminAlert();
   setInventoryAdminToken('');
   try { localStorage.removeItem(STORAGE_KEY_ADMIN_SESSION); } catch {}
   closeAdminDashboardModal();
@@ -1523,6 +1637,8 @@ export function openAdminDashboardModal() {
     overlays().open(modal, closeAdminDashboardModal);
     switchAdminSection('overview');
     refreshAdminDashboard();
+    listInventoryOrders().then(() => refreshAdminDashboard()).catch(() => {});
+    checkWebhookStatus().catch(() => {});
   }
 }
 
@@ -1539,7 +1655,152 @@ export function switchAdminSection(sectionName) {
   document.querySelectorAll('.admin-section-view').forEach((sec) => {
     sec.hidden = sec.id !== `admin-section-${sectionName}`;
   });
+  if (sectionName === 'payments' && adminWebhookStatus.configured === null) {
+    checkWebhookStatus().catch(() => {});
+  }
   refreshAdminDashboard();
+}
+
+const knownAdminOrderStates = new Map();
+const recentAlertOrderIds = new Set();
+let adminBaselineCaptured = false;
+let adminWebhookStatus = { configured: null, endpoint: '/api/qris-webhook' };
+
+function renderWebhookStatusBadge() {
+  const badge = document.getElementById('admin-webhook-status-badge');
+  if (!badge) return;
+  if (adminWebhookStatus.configured === true) {
+    badge.className = 'status-badge-step done';
+    badge.textContent = 'Webhook aktif (QRIS_WEBHOOK_SECRET terpasang)';
+  } else if (adminWebhookStatus.configured === false) {
+    badge.className = 'status-badge-step pending';
+    badge.textContent = 'Belum terpasang (isi QRIS_WEBHOOK_SECRET di server)';
+  } else {
+    badge.className = 'status-badge-step muted';
+    badge.textContent = 'Memeriksa status webhook server...';
+  }
+}
+
+export async function checkWebhookStatus() {
+  if (typeof fetch !== 'function') return adminWebhookStatus;
+  try {
+    const res = await fetch('/api/qris-webhook', { cache: 'no-store' });
+    if (!res.ok) return adminWebhookStatus;
+    const data = await res.json();
+    adminWebhookStatus = {
+      configured: Boolean(data?.configured),
+      endpoint: data?.endpoint || '/api/qris-webhook'
+    };
+    renderWebhookStatusBadge();
+  } catch {}
+  return adminWebhookStatus;
+}
+
+export async function toggleUniqueCodeSetting(enabled) {
+  const toggleEl = document.getElementById('admin-unique-code-toggle');
+  if (toggleEl) toggleEl.disabled = true;
+  try {
+    await saveSharedSettings((s) => ({
+      ...s,
+      qris: { ...s.qris, uniqueCodeEnabled: Boolean(enabled) }
+    }), { type: 'qris' });
+    renderAdminPaymentsSection({ force: true });
+    showToast(enabled
+      ? 'Kode unik 3 digit diaktifkan untuk checkout QRIS.'
+      : 'Kode unik checkout QRIS dinonaktifkan.');
+  } catch (error) {
+    if (toggleEl) toggleEl.checked = Boolean(getSettings().qris?.uniqueCodeEnabled);
+    showToast(error?.message || 'Gagal menyimpan pengaturan kode unik.');
+  } finally {
+    if (toggleEl) toggleEl.disabled = false;
+  }
+}
+
+export function dismissAdminAlert() {
+  recentAlertOrderIds.clear();
+  const banner = document.getElementById('admin-live-alert-banner');
+  if (banner) {
+    banner.hidden = true;
+    banner.className = 'admin-live-alert';
+    banner.innerHTML = '';
+  }
+  renderAdminOrderTable();
+}
+
+export function openOrdersFromAlert() {
+  switchAdminSection('orders');
+}
+
+function renderAdminLiveAlert(type, order, extraCount = 0) {
+  const banner = document.getElementById('admin-live-alert-banner');
+  if (!banner || !order) return;
+  const isPaid = type === 'paid';
+  const suffix = extraCount > 0 ? ` (+${extraCount} lainnya)` : '';
+  const sourceLabel = order.payment?.confirmedBy === 'gopay_merchant_webhook' ? 'otomatis via GoPay Merchant' : 'terkonfirmasi';
+  const title = isPaid
+    ? `Pembayaran QRIS masuk (${sourceLabel})`
+    : 'Pesanan baru masuk';
+  banner.className = isPaid ? 'admin-live-alert is-paid' : 'admin-live-alert';
+  banner.hidden = false;
+  banner.innerHTML = `
+    <div>
+      <strong>${escapeHTML(title)}:</strong>
+      <span>${escapeHTML(order.invoice)} &middot; ${escapeHTML(order.customer?.name || 'Pelanggan')} &middot; <strong>${formatIDR(order.totals?.total || 0)}</strong>${escapeHTML(suffix)}</span>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button type="button" class="btn-primary" style="padding:6px 12px; font-size:0.78rem;" onclick="window.openOrdersFromAlert()">Lihat Pesanan</button>
+      <button type="button" class="btn-secondary" style="padding:6px 12px; font-size:0.78rem;" onclick="window.dismissAdminAlert()">Tutup</button>
+    </div>
+  `;
+}
+
+function syncAdminOrderAlerts(orders) {
+  const navBadge = document.getElementById('admin-orders-nav-badge');
+  const actionableCount = orders.filter((o) => [STATUS.AWAITING, STATUS.PAID, STATUS.PROCESSING].includes(o.status)).length;
+  if (navBadge) {
+    navBadge.textContent = String(actionableCount);
+    navBadge.hidden = actionableCount === 0;
+  }
+
+  if (!state.adminAuthenticated) return;
+
+  if (!adminBaselineCaptured) {
+    orders.forEach((o) => knownAdminOrderStates.set(o.id, o.status));
+    adminBaselineCaptured = true;
+    return;
+  }
+
+  const freshOrders = [];
+  const freshPaidOrders = [];
+  for (const o of orders) {
+    const prevStatus = knownAdminOrderStates.get(o.id);
+    if (prevStatus === undefined) {
+      if (isOpenStatus(o.status)) freshOrders.push(o);
+    } else if (prevStatus === STATUS.AWAITING && o.status === STATUS.PAID && o.payment?.confirmedBy !== 'admin') {
+      freshPaidOrders.push(o);
+    }
+    knownAdminOrderStates.set(o.id, o.status);
+  }
+
+  if (freshPaidOrders.length > 0) {
+    freshPaidOrders.forEach((o) => recentAlertOrderIds.add(o.id));
+    renderAdminLiveAlert('paid', freshPaidOrders[0], freshPaidOrders.length - 1);
+    triggerPaymentAlert(freshPaidOrders[0]);
+  } else if (freshOrders.length > 0) {
+    freshOrders.forEach((o) => recentAlertOrderIds.add(o.id));
+    renderAdminLiveAlert('incoming', freshOrders[0], freshOrders.length - 1);
+    sfx.playOrderAlert();
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const first = freshOrders[0];
+        new Notification('Pesanan baru masuk', {
+          body: `${first.invoice} - ${first.customer?.name || 'Pelanggan'} (${formatIDR(first.totals?.total || 0)})`,
+          icon: './assets/notification-icon.svg',
+          tag: `new-${first.invoice}`
+        });
+      } catch {}
+    }
+  }
 }
 
 let storefrontDraftBaseline = null;
@@ -1554,6 +1815,7 @@ export function refreshAdminDashboard() {
   const orders = getAdminOrders();
   const products = getProducts();
   const settings = getSettings();
+  syncAdminOrderAlerts(orders);
 
   const totalOmzet = orders.filter((o) => isPaidStatus(o.status)).reduce((sum, o) => sum + o.totals.total, 0);
   const totalOrders = orders.length;
@@ -1591,7 +1853,7 @@ export function refreshAdminDashboard() {
     if (storefrontWa) storefrontWa.value = settings.store.whatsapp || '';
     storefrontDraftBaseline = storefrontDraftValues();
   }
-  if (syncStatus) syncStatus.textContent = 'Sinkronisasi tab aktif · server diperiksa setiap 12 detik';
+  if (syncStatus) syncStatus.textContent = 'Sinkronisasi aktif · server diperiksa tiap 2 detik saat dasbor terbuka';
 
   renderAdminOrderTable();
   renderAdminProductsTable();
@@ -1644,7 +1906,7 @@ function renderAdminOrderTable() {
     }
 
     return `
-      <tr class="admin-order-row" data-admin-row="${escapeHTML(o.invoice)}">
+      <tr class="admin-order-row${recentAlertOrderIds.has(o.id) ? ' is-new' : ''}" data-admin-row="${escapeHTML(o.invoice)}">
         <td><strong style="font-family: var(--font-mono);">${escapeHTML(o.invoice)}</strong></td>
         <td style="white-space: nowrap; font-size: 0.74rem;">${formatDateTime(o.createdAt)}</td>
         <td><strong>${escapeHTML(o.customer.name || 'Pelanggan')}</strong><br><span style="font-size:0.7rem; color:var(--ink-secondary);">${escapeHTML(o.customer.phone || '-')}</span></td>
@@ -1924,10 +2186,13 @@ function renderAdminPaymentsSection({ force = false } = {}) {
   if (!section) return;
   const settings = getSettings();
   const activePayload = settings.qris.payload || DEMO_STATIC_QRIS;
+  const uniqueCodeEnabled = Boolean(settings.qris.uniqueCodeEnabled);
+  const webhookUrl = `${typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''}/api/qris-webhook`;
   const nextSignature = JSON.stringify({
     payload: activePayload,
     history: (settings.qris.history || []).map((h) => h.payload),
-    storeName: settings.store.name || ''
+    storeName: settings.store.name || '',
+    uniqueCodeEnabled
   });
   if (!force && section.innerHTML && section.dataset?.qrisSignature === nextSignature) return;
 
@@ -1940,7 +2205,7 @@ function renderAdminPaymentsSection({ force = false } = {}) {
       <div>
         <span class="admin-section-kicker">Konfigurasi Pembayaran Toko</span>
         <h3 id="admin-payments-title">Kelola QRIS Toko (Upload Foto / Statis ke Dinamis)</h3>
-        <p>Unggah foto atau poster QRIS merchant Anda (GoPay, BCA, Mandiri, ShopeePay, DANA, dsb). Sistem otomatis memindai QR, memverifikasi checksum, dan mengubahnya menjadi QRIS Dinamis yang mengunci nominal tagihan otomatis di scanner pembeli.</p>
+        <p>Unggah foto atau poster QRIS merchant Anda (GoPay Merchant, BCA, Mandiri, ShopeePay, DANA, dsb). Sistem otomatis memindai QR, memverifikasi checksum, dan mengubahnya menjadi QRIS Dinamis yang mengunci nominal tagihan otomatis di scanner pembeli.</p>
       </div>
     </div>
 
@@ -1969,7 +2234,7 @@ function renderAdminPaymentsSection({ force = false } = {}) {
         <span class="admin-section-kicker">Perbarui QRIS Toko</span>
         <h4>1. Upload Foto / Poster QRIS Baru</h4>
         <p style="font-size:0.78rem; color:var(--ink-secondary); margin-bottom:12px;">
-          Punya poster atau screenshot QRIS dari m-Banking / aplikasi merchant? Upload langsung fotonya di sini:
+          Punya poster atau screenshot QRIS dari GoPay Merchant / m-Banking? Upload langsung fotonya di sini:
         </p>
 
         <!-- Drag & Drop Zone -->
@@ -2010,8 +2275,40 @@ function renderAdminPaymentsSection({ force = false } = {}) {
           </div>
         ` : ''}
       </section>
+
+      <!-- GoPay Merchant Webhook Auto-Verification Card -->
+      <section class="admin-settings-card webhook-guide-card" style="grid-column: 1 / -1;">
+        <span class="admin-section-kicker">Verifikasi Otomatis GoPay Merchant</span>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <h4 style="margin:0;">3. Konfirmasi Lunas Otomatis dari Notifikasi HP Merchant</h4>
+          <span id="admin-webhook-status-badge" class="status-badge-step muted">Memeriksa status webhook server...</span>
+        </div>
+        <p style="font-size:0.8rem; color:var(--ink-secondary); line-height:1.5; margin:0;">
+          Tetap gunakan QRIS GoPay Merchant Anda sendiri tanpa penyedia gateway lain. Saat HP kasir menerima notifikasi dana masuk dari <strong>GoPay Merchant</strong>, aplikasi penerus notifikasi (seperti MacroDroid di Android) mengirim nominal masuk ke endpoint aman di bawah ini agar pesanan langsung berstatus Lunas dan struk terbuka otomatis di HP pembeli.
+        </p>
+
+        <label class="webhook-toggle-row" for="admin-unique-code-toggle">
+          <input type="checkbox" id="admin-unique-code-toggle" ${uniqueCodeEnabled ? 'checked' : ''} onchange="window.toggleUniqueCodeSetting(this.checked)" />
+          <div>
+            <strong style="display:block; font-size:0.84rem; color:var(--ink-primary);">Aktifkan kode unik 3 digit (Rp 101 sampai Rp 999)</strong>
+            <span style="display:block; font-size:0.76rem; color:var(--ink-secondary); line-height:1.45;">
+              Menambahkan angka unik ke total tagihan QRIS tiap pesanan aktif agar dua pembeli dengan nominal belanja sama tidak pernah tertukar saat diverifikasi oleh webhook GoPay Merchant.
+            </span>
+          </div>
+        </label>
+
+        <div style="font-size:0.78rem; color:var(--ink-secondary); line-height:1.6;">
+          <strong style="color:var(--ink-primary); display:block; margin-bottom:4px;">Langkah singkat di HP Android kasir:</strong>
+          <div>1. Pasang env <code>QRIS_WEBHOOK_SECRET</code> di pengaturan proyek Vercel lalu redeploy.</div>
+          <div>2. Di aplikasi MacroDroid (Android), buat Trigger: <em>Notification Received</em> dari aplikasi <strong>GoPay Merchant</strong> (isi filter berisi <code>Rp</code>).</div>
+          <div>3. Buat Action: <em>HTTP Request (POST)</em> ke URL:</div>
+          <div class="webhook-code-box" style="margin:6px 0;">${escapeHTML(webhookUrl)}</div>
+          <div>4. Tambahkan Header <code>X-Webhook-Secret: &lt;QRIS_WEBHOOK_SECRET&gt;</code> dan JSON Body <code>{"text":"[not_ticker] [notification]"}</code>. Jika HP kasir belum disambungkan, admin tetap dapat menekan <strong>Konfirmasi Lunas</strong> sekali ketuk di tab Pesanan.</div>
+        </div>
+      </section>
     </div>
   `;
+  renderWebhookStatusBadge();
   if (section.dataset) section.dataset.qrisSignature = nextSignature;
   if (prevScanStatus) {
     const nextStatusEl = document.getElementById('admin-qris-scan-status');
@@ -2451,7 +2748,13 @@ function initRealtimeSync() {
     } else if (change.domain === 'orders') {
       updateCartUI();
       updateOrderTrackerDockUI();
-      if (state.adminAuthenticated) refreshAdminDashboard();
+      if (state.adminAuthenticated) {
+        if (change.remote && change.type !== 'admin-inventory') {
+          listInventoryOrders().then(() => refreshAdminDashboard()).catch(() => {});
+        } else {
+          refreshAdminDashboard();
+        }
+      }
     } else if (change.domain === 'settings') {
       updateStorefrontStatus();
       updateCartUI();
@@ -2973,8 +3276,28 @@ function initApp() {
       if (window.location?.hash === '#privasi') toggleFooterPrivacy(true);
     });
   }
+  const isModalVisible = (id) => {
+    const el = document.getElementById(id);
+    return Boolean(el && !el.inert && el.classList?.contains?.('open'));
+  };
+  let pollTick = 0;
   syncInventory().catch(() => {});
-  setInterval(() => syncInventory().catch(() => {}), 5000);
+  setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    pollTick++;
+    const fast = Boolean(
+      (state.adminAuthenticated && isModalVisible('admin-dashboard-modal-backdrop'))
+      || (state.activeCheckoutOrderId && isModalVisible('payment-modal-backdrop'))
+    );
+    if (fast || pollTick % 3 === 0) {
+      syncInventory().catch(() => {});
+    }
+  }, 2000);
+  if (typeof document !== 'undefined') {
+    document.addEventListener?.('visibilitychange', () => {
+      if (document.visibilityState === 'visible') syncInventory().catch(() => {});
+    });
+  }
   window.addEventListener('focus', () => syncInventory().catch(() => {}));
 
   // Cloud QRIS and settings sync for all visitors across devices
@@ -3084,6 +3407,10 @@ if (typeof window !== 'undefined') {
   window.handleQRISDrop = handleQRISDrop;
   window.handleQRISImageUpload = handleQRISImageUpload;
   window.processQRISFile = processQRISFile;
+  window.toggleUniqueCodeSetting = toggleUniqueCodeSetting;
+  window.dismissAdminAlert = dismissAdminAlert;
+  window.openOrdersFromAlert = openOrdersFromAlert;
+  window.checkWebhookStatus = checkWebhookStatus;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);

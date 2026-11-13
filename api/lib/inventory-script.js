@@ -167,7 +167,25 @@ local function run()
       end
       local packaging=(not digitalOnly and subtotal>0) and input.commerce.packagingFee or 0
       local shippingCost=subtotal>0 and shipping.price or 0
-      local totals={itemCount=itemCount,subtotal=subtotal,discount=discount,shippingCost=shippingCost,packaging=packaging,total=math.max(0,subtotal-discount+shippingCost+packaging),digitalOnly=digitalOnly}
+      local baseTotal=math.max(0,subtotal-discount+shippingCost+packaging)
+      local uniqueFlag=settings.uniqueCodeEnabled==true
+      if type(settings.qris)=='table' and settings.qris.uniqueCodeEnabled~=nil then uniqueFlag=settings.qris.uniqueCodeEnabled==true end
+      local uniqueCode=0
+      if input.paymentMethod=='qris' and uniqueFlag and baseTotal>0 then
+        local usedTotals={}
+        for id,entry in pairs(state.orders) do
+          if entry.order.status=='awaiting_payment' and state.holds[id] and entry.order.totals then
+            usedTotals[entry.order.totals.total]=true
+          end
+        end
+        local start=(state.sequence*137)%899
+        for offset=0,898 do
+          local candidate=101+((start+offset)%899)
+          if not usedTotals[baseTotal+candidate] then uniqueCode=candidate; break end
+        end
+      end
+      local totals={itemCount=itemCount,subtotal=subtotal,discount=discount,shippingCost=shippingCost,packaging=packaging,total=baseTotal+uniqueCode,digitalOnly=digitalOnly}
+      if uniqueCode>0 then totals.uniqueCode=uniqueCode end
       local payload=''
       if type(settings.qris)=='table' then
         if type(settings.qris.payload)=='string' then payload=settings.qris.payload end
@@ -201,6 +219,57 @@ local function run()
       state.stock[input.productId]=input.stock
       state.revision=state.revision+1
       return {ok=true,stock=snapshot()}
+    end
+    if input.action=='webhook_confirm' then
+      local targetId,order
+      local invoice=type(input.invoice)=='string' and input.invoice or ''
+      local reqId=type(input.id)=='string' and input.id or ''
+      local reqAmount=tonumber(input.amount or 0) or 0
+      if reqId~='' then
+        local rec=state.orders[reqId]
+        if not rec then return fail('ORDER_NOT_FOUND',404) end
+        targetId=reqId; order=rec.order
+      elseif invoice~='' then
+        for id,entry in pairs(state.orders) do
+          if entry.order.invoice==invoice then targetId=id; order=entry.order; break end
+        end
+        if not order then return fail('ORDER_NOT_FOUND',404) end
+      elseif reqAmount>0 then
+        local matches={}
+        for id,entry in pairs(state.orders) do
+          local o=entry.order
+          if o.status=='awaiting_payment' and state.holds[id] and now<o.expiresAt and o.totals and o.totals.total==reqAmount then
+            table.insert(matches,id)
+          end
+        end
+        if #matches>1 then return fail('AMBIGUOUS_AMOUNT') end
+        if #matches==1 then
+          targetId=matches[1]; order=state.orders[targetId].order
+        else
+          local ref=type(input.reference)=='string' and input.reference or ''
+          if ref~='' then
+            for _,entry in pairs(state.orders) do
+              local o=entry.order
+              if o.status=='paid' and o.payment and o.payment.reference==ref and o.totals and o.totals.total==reqAmount then
+                return success(o)
+              end
+            end
+          end
+          return fail('ORDER_NOT_FOUND',404)
+        end
+      else
+        return fail('INVALID_REQUEST',400)
+      end
+      if reqAmount>0 and order.totals and order.totals.total~=reqAmount then return fail('AMOUNT_MISMATCH') end
+      if order.status=='paid' then return success(order) end
+      if order.status~='awaiting_payment' or not state.holds[targetId] or now>=order.expiresAt then return fail('INVALID_TRANSITION') end
+      transition(order,'paid',type(input.note)=='string' and input.note or '')
+      order.payment.paidAt=now
+      order.payment.confirmedBy=(type(input.confirmedBy)=='string' and input.confirmedBy~='') and input.confirmedBy or 'gopay_merchant_webhook'
+      if type(input.reference)=='string' and input.reference~='' then order.payment.reference=input.reference end
+      state.holds[targetId]=nil
+      state.revision=state.revision+1
+      return success(order)
     end
     if not record then return fail('ORDER_NOT_FOUND',404) end
     local order=record.order

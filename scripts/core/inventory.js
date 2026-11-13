@@ -1,6 +1,28 @@
-import { saveOrder, saveAdminOrder, rememberMyOrder, setInventoryStock, getOrders } from './store.js';
+import { saveOrder, saveAdminOrder, rememberMyOrder, forgetMyOrder, setInventoryStock, getOrders } from './store.js';
 
 const KEY = 'an.inventory.reservations.v1';
+const INVENTORY_ERROR_MESSAGES = {
+  ADDRESS_REQUIRED: 'Alamat pengantaran wajib diisi untuk kurir pilihan Anda.',
+  INVALID_REQUEST: 'Lengkapi nama pemesan (minimal 2 huruf), nomor WhatsApp (minimal 8 angka), dan alamat yang sesuai.',
+  OUT_OF_STOCK: 'Sebagian stok produk baru saja habis. Periksa kembali keranjang Anda.',
+  PRODUCT_UNAVAILABLE: 'Salah satu produk di keranjang sedang tidak tersedia.',
+  STORE_CLOSED: 'Maaf, toko sedang tutup sementara waktu.',
+  INVALID_VOUCHER: 'Kode voucher tidak berlaku atau sudah tidak aktif.',
+  INVALID_SHIPPING: 'Metode pengiriman tidak valid. Silakan pilih ulang.',
+  INVALID_VARIANT: 'Varian produk berubah. Hapus item lalu tambahkan ulang ke keranjang.',
+  ORDER_NOT_FOUND: 'Pesanan tidak ditemukan atau sudah kedaluwarsa di server.',
+  ORDER_CAPACITY_REACHED: 'Antrean server sedang penuh. Hubungi penjual lewat WhatsApp.',
+  STORAGE_UNAVAILABLE: 'Server sedang sibuk menyimpan pesanan. Coba beberapa detik lagi.',
+  IDEMPOTENCY_CONFLICT: 'Pesanan sebelumnya masih tersimpan dengan rincian berbeda. Muat ulang halaman lalu coba lagi.',
+  INVALID_TRANSITION: 'Status pesanan sudah berubah dan tidak dapat diproses lagi.',
+  REVISION_CONFLICT: 'Data stok baru saja berubah. Tampilan sudah diperbarui, silakan ulangi.'
+};
+export function formatInventoryError(error) {
+  const code = error?.code || error?.message || '';
+  if (INVENTORY_ERROR_MESSAGES[code]) return INVENTORY_ERROR_MESSAGES[code];
+  if (typeof error?.message === 'string' && error.message && !/^[A-Z_]+$/.test(error.message)) return error.message;
+  return 'Terjadi kendala saat menghubungi server toko. Coba lagi sebentar lagi.';
+}
 import { hasInventoryAdminToken, getAdminSessionVersion, inventoryAdminHeaders, rejectUnauthorized } from './auth.js';
 export { hasInventoryAdminToken, setInventoryAdminToken } from './auth.js';
 let reserving = false;
@@ -82,7 +104,7 @@ export async function reserveInventory(input) {
       }
     }
     if (!record) {
-      record = { signature, pending: true, payload: { action: 'reserve', id: `inv_${randomHex(16)}`, capability: randomHex(32), ...input } };
+      record = { createdAt: Date.now(), signature, pending: true, payload: { action: 'reserve', id: `inv_${randomHex(16)}`, capability: randomHex(32), ...input } };
       records.push(record);
     }
     persist(records);
@@ -136,7 +158,20 @@ export async function syncInventory() {
     if (hasInventoryAdminToken()) await listInventoryOrders();
     else {
       const known = new Map(getOrders().map(o => [o.id, o]));
-      await Promise.all(getReservations().filter(r => r.pending || !['completed','expired','cancelled'].includes(known.get(r.payload.id)?.status)).map(r => refreshInventoryOrder(r.payload.id).catch(() => null)));
+      const targets = getReservations().filter(r => r.pending || !['completed', 'expired', 'cancelled'].includes(known.get(r.payload.id)?.status));
+      const deadIds = new Set();
+      await Promise.all(targets.map(r => refreshInventoryOrder(r.payload.id).catch((error) => {
+        const stalePending = r.pending && !reserving && Number.isFinite(r.createdAt) && (Date.now() - r.createdAt > 120000);
+        if (error?.status === 404 && error?.code === 'ORDER_NOT_FOUND' && (!r.pending || stalePending)) {
+          deadIds.add(r.payload.id);
+        }
+        return null;
+      })));
+      if (deadIds.size) {
+        persist(getReservations().filter(r => !deadIds.has(r.payload.id)));
+        deadIds.forEach(id => forgetMyOrder(id));
+        getOrders();
+      }
     }
   } finally { syncing = false; }
 }

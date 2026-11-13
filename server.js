@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import settingsHandler from './api/settings.js';
 import ordersHandler from './api/orders.js';
 import inventoryHandler, { authorizeInventoryAdmin } from './api/inventory.js';
+import qrisWebhookHandler from './api/qris-webhook.js';
 import { createLocalInventoryEngine } from './api/lib/local-inventory.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -135,6 +136,15 @@ export async function handleRequest(req, res) {
     if (pathname === '/api/inventory' || pathname === '/api/inventory/') {
       adaptServerless(req, res, await parseBody(req));
       await (isLocalDevWithoutKV() ? localInventoryHandler(req, res) : inventoryHandler(req, res));
+      return;
+    }
+    if (pathname === '/api/qris-webhook' || pathname === '/api/qris-webhook/') {
+      adaptServerless(req, res, await parseBody(req));
+      await qrisWebhookHandler(
+        req,
+        res,
+        isLocalDevWithoutKV() ? { localExecutor: localInventoryHandler.execute } : undefined
+      );
       return;
     }
     if (pathname === '/api/settings' || pathname === '/api/settings/') {

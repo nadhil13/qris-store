@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS = {
   qris: {
     payload: DEMO_STATIC_QRIS,
     updatedAt: 0,
+    uniqueCodeEnabled: false,
     history: []
   },
   payment: {
@@ -122,6 +123,11 @@ function initChannel() {
     channel.addEventListener('message', (event) => {
       const change = event.data;
       if (!change || change.sourceId === sourceId) return;
+      if (change.domain === 'products' && change.type === 'inventory-stock' && change.snapshot
+        && Number.isSafeInteger(change.snapshot.revision)
+        && (!inventoryStock || change.snapshot.revision >= inventoryStock.revision)) {
+        inventoryStock = structuredClone(change.snapshot);
+      }
       emit({ ...change, remote: true });
     });
   } else {
@@ -152,7 +158,7 @@ export function setInventoryStock(snapshot) {
     || Object.values(snapshot.products).some(stock => stock !== null && (!Number.isSafeInteger(stock) || stock < 0 || stock > 1e9))) return false;
   if (inventoryStock && snapshot.revision < inventoryStock.revision) return false;
   inventoryStock = structuredClone(snapshot);
-  announce('products', { type: 'inventory-stock' });
+  announce('products', { type: 'inventory-stock', snapshot: structuredClone(inventoryStock) });
   return true;
 }
 
@@ -546,7 +552,9 @@ export function applyRemoteSettings(remote) {
 
   const remoteStore = remote.store && typeof remote.store === 'object' ? remote.store : {};
   const nextStore = { ...current.store, ...remoteStore };
+  const remoteUniqueCode = Boolean(remote.qris.uniqueCodeEnabled);
   const contentChanged = remote.qris.payload !== current.qris.payload
+    || remoteUniqueCode !== Boolean(current.qris.uniqueCodeEnabled)
     || JSON.stringify(nextStore) !== JSON.stringify(current.store);
 
   const updated = saveSettings((s) => ({
@@ -556,6 +564,7 @@ export function applyRemoteSettings(remote) {
       ...s.qris,
       payload: remote.qris.payload,
       merchantName: remote.qris.merchantName || s.qris.merchantName,
+      uniqueCodeEnabled: remoteUniqueCode,
       updatedAt: remoteTime
     },
     store: nextStore
@@ -597,6 +606,7 @@ export async function pushSettingsToCloud(settings) {
   const payloadToPush = {
     payload: settings.qris?.payload || '',
     merchantName: settings.qris?.merchantName || settings.store?.name || '',
+    uniqueCodeEnabled: Boolean(settings.qris?.uniqueCodeEnabled),
     updatedAt: sharedVersion(settings) || Date.now(),
     store: settings.store
   };

@@ -192,15 +192,37 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
 
       const packaging = (!digitalOnly && subtotal > 0) ? input.commerce.packagingFee : 0;
       const shippingCost = subtotal > 0 ? shipping.price : 0;
+      const baseTotal = Math.max(0, subtotal - discount + shippingCost + packaging);
+      const uniqueFlag = (settings.qris && typeof settings.qris === 'object' && settings.qris.uniqueCodeEnabled !== undefined)
+        ? settings.qris.uniqueCodeEnabled === true
+        : settings.uniqueCodeEnabled === true;
+      let uniqueCode = 0;
+      if (input.paymentMethod === 'qris' && uniqueFlag && baseTotal > 0) {
+        const usedTotals = new Set();
+        for (const [id, entry] of Object.entries(state.orders)) {
+          if (entry.order.status === 'awaiting_payment' && state.holds[id] && entry.order.totals) {
+            usedTotals.add(entry.order.totals.total);
+          }
+        }
+        const start = (state.sequence * 137) % 899;
+        for (let offset = 0; offset < 899; offset++) {
+          const candidate = 101 + ((start + offset) % 899);
+          if (!usedTotals.has(baseTotal + candidate)) {
+            uniqueCode = candidate;
+            break;
+          }
+        }
+      }
       const totals = {
         itemCount,
         subtotal,
         discount,
         shippingCost,
         packaging,
-        total: Math.max(0, subtotal - discount + shippingCost + packaging),
+        total: baseTotal + uniqueCode,
         digitalOnly
       };
+      if (uniqueCode > 0) totals.uniqueCode = uniqueCode;
 
       for (const [id, qty] of Object.entries(quantities)) {
         if (state.stock[id] !== null) state.stock[id] -= qty;
@@ -263,6 +285,69 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
       return { ok: true, stock: snapshot(now) };
     }
 
+    if (input.action === 'webhook_confirm') {
+      let targetId = '';
+      let targetOrder = null;
+      const invoice = typeof input.invoice === 'string' ? input.invoice : '';
+      const reqId = typeof input.id === 'string' ? input.id : '';
+      const reqAmount = Number(input.amount || 0) || 0;
+      if (reqId) {
+        const rec = state.orders[reqId];
+        if (!rec) return fail('ORDER_NOT_FOUND', 404);
+        targetId = reqId;
+        targetOrder = rec.order;
+      } else if (invoice) {
+        for (const [id, entry] of Object.entries(state.orders)) {
+          if (entry.order.invoice === invoice) {
+            targetId = id;
+            targetOrder = entry.order;
+            break;
+          }
+        }
+        if (!targetOrder) return fail('ORDER_NOT_FOUND', 404);
+      } else if (reqAmount > 0) {
+        const matches = [];
+        for (const [id, entry] of Object.entries(state.orders)) {
+          const o = entry.order;
+          if (o.status === 'awaiting_payment' && state.holds[id] && now < o.expiresAt && o.totals?.total === reqAmount) {
+            matches.push(id);
+          }
+        }
+        if (matches.length > 1) return fail('AMBIGUOUS_AMOUNT', 409);
+        if (matches.length === 1) {
+          targetId = matches[0];
+          targetOrder = state.orders[targetId].order;
+        } else {
+          const ref = typeof input.reference === 'string' ? input.reference : '';
+          if (ref) {
+            for (const entry of Object.values(state.orders)) {
+              const o = entry.order;
+              if (o.status === 'paid' && o.payment?.reference === ref && o.totals?.total === reqAmount) {
+                return { ok: true, order: clone(o), stock: snapshot(now) };
+              }
+            }
+          }
+          return fail('ORDER_NOT_FOUND', 404);
+        }
+      } else {
+        return fail('INVALID_REQUEST', 400);
+      }
+      if (reqAmount > 0 && targetOrder.totals?.total !== reqAmount) return fail('AMOUNT_MISMATCH', 409);
+      if (targetOrder.status === 'paid') return { ok: true, order: clone(targetOrder), stock: snapshot(now) };
+      if (targetOrder.status !== 'awaiting_payment' || !state.holds[targetId] || now >= targetOrder.expiresAt) {
+        return fail('INVALID_TRANSITION', 409);
+      }
+      transition(targetOrder, 'paid', now, typeof input.note === 'string' ? input.note : '');
+      targetOrder.payment.paidAt = now;
+      targetOrder.payment.confirmedBy = (typeof input.confirmedBy === 'string' && input.confirmedBy)
+        ? input.confirmedBy
+        : 'gopay_merchant_webhook';
+      if (typeof input.reference === 'string' && input.reference) targetOrder.payment.reference = input.reference;
+      delete state.holds[targetId];
+      state.revision++;
+      return { ok: true, order: clone(targetOrder), stock: snapshot(now) };
+    }
+
     if (!existingRecord) return fail('ORDER_NOT_FOUND', 404);
     const order = existingRecord.order;
 
@@ -296,7 +381,7 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
     return { ok: true, order: clone(order), stock: snapshot(now) };
   }
 
-  return function handleLocalInventory(req, res) {
+  function handleLocalInventory(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
     const send = (status, body) => res.status(status).json(body);
@@ -320,6 +405,8 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
         code: error.status === 400 ? 'INVALID_REQUEST' : 'STORAGE_UNAVAILABLE'
       });
     }
-  };
+  }
+  handleLocalInventory.execute = execute;
+  return handleLocalInventory;
 }
 

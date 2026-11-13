@@ -84,11 +84,18 @@ export function cancelOrderById(orderId, { by = 'admin', note = '' } = {}) {
 }
 
 // Watches one order: 1s ticks for the countdown, expiry sweep, provider polling
-// every 5s, and instant updates from other tabs. Returns a stop function.
-export function watchOrder(orderId, { onUpdate, onTick } = {}) {
+// every 2s, and instant updates from other tabs. Returns a stop function.
+export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
   let last = getOrder(orderId);
   let stopped = false;
   let polling = false;
+
+  const stopAll = () => {
+    stopped = true;
+    unsubscribe();
+    clearInterval(tick);
+    clearInterval(poll);
+  };
 
   const push = () => {
     const fresh = getOrder(orderId);
@@ -128,18 +135,18 @@ export function watchOrder(orderId, { onUpdate, onTick } = {}) {
       const result = await provider.check(last);
       if (result && result.paid) confirmPayment(orderId, { by: provider.id, reference: result.reference || '' });
     } catch (err) {
-      console.warn('Cek status pembayaran gagal', err);
+      if (err?.status === 404 && err?.code === 'ORDER_NOT_FOUND') {
+        stopAll();
+        onError && onError(err);
+      } else {
+        console.warn('Cek status pembayaran gagal', err);
+      }
     } finally {
       polling = false;
     }
-  }, 5000);
+  }, 2000);
 
   if (last && onTick && last.status === STATUS.AWAITING) onTick(remainingMs(last), last);
 
-  return () => {
-    stopped = true;
-    unsubscribe();
-    clearInterval(tick);
-    clearInterval(poll);
-  };
+  return stopAll;
 }

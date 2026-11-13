@@ -24,6 +24,7 @@ local existingCatalogUpdatedAt = tonumber(existing.catalogUpdatedAt or 0) or 0
 
 local nextPayload = existing.payload or (existing.qris and existing.qris.payload) or defaultQris
 local nextMerchant = existing.merchantName or (existing.qris and existing.qris.merchantName) or (existing.store and existing.store.name) or 'Atelier Nusantara'
+local nextUniqueCode = (existing.uniqueCodeEnabled == true) or (existing.qris and existing.qris.uniqueCodeEnabled == true)
 local nextUpdatedAt = existingUpdatedAt
 local nextStore = existing.store
 local stale = false
@@ -36,6 +37,9 @@ if incoming.hasSettingsInput then
     nextUpdatedAt = incVer
     if incoming.payload and incoming.payload ~= '' then
       nextPayload = incoming.payload
+    end
+    if incoming.hasUniqueCodeInput then
+      nextUniqueCode = (incoming.uniqueCodeEnabled == true)
     end
     if incoming.hasStoreInput then
       nextStore = incoming.store
@@ -76,10 +80,12 @@ end
 local record = {
   payload = nextPayload,
   merchantName = nextMerchant,
+  uniqueCodeEnabled = nextUniqueCode,
   updatedAt = nextUpdatedAt,
   qris = {
     payload = nextPayload,
     merchantName = nextMerchant,
+    uniqueCodeEnabled = nextUniqueCode,
     updatedAt = nextUpdatedAt
   },
   store = nextStore,
@@ -103,6 +109,7 @@ class SettingsStorageError extends Error {}
 let inMemorySettings = {
   payload: DEFAULT_QRIS,
   merchantName: 'Atelier Nusantara',
+  uniqueCodeEnabled: false,
   updatedAt: 0,
   store: null,
   catalogUpdatedAt: 0,
@@ -151,9 +158,11 @@ function normalizeStoredRecord(raw) {
   const updatedAt = Number(base.updatedAt || base.qris?.updatedAt || 0);
   const catalogUpdatedAt = Number(base.catalogUpdatedAt || 0);
   const products = Array.isArray(base.products) ? base.products : null;
+  const uniqueCodeEnabled = Boolean(base.uniqueCodeEnabled ?? base.qris?.uniqueCodeEnabled ?? false);
   return {
     payload: base.payload || base.qris?.payload || DEFAULT_QRIS,
     merchantName: base.merchantName || base.qris?.merchantName || base.store?.name || 'Atelier Nusantara',
+    uniqueCodeEnabled,
     updatedAt,
     store: base.store || null,
     catalogUpdatedAt,
@@ -185,12 +194,14 @@ export function mergeSharedState(existingRaw, incomingRaw) {
   const existing = normalizeStoredRecord(existingRaw);
   const incoming = incomingRaw && typeof incomingRaw === 'object' ? incomingRaw : {};
 
+  const hasUniqueCodeInput = incoming.uniqueCodeEnabled !== undefined || incoming.qris?.uniqueCodeEnabled !== undefined;
   const hasSettingsInput = Boolean(
     incoming.updatedAt !== undefined
     || incoming.payload !== undefined
     || incoming.qris !== undefined
     || incoming.store !== undefined
     || incoming.merchantName !== undefined
+    || hasUniqueCodeInput
   );
   const hasCatalogInput = Boolean(
     incoming.catalogUpdatedAt !== undefined
@@ -199,6 +210,7 @@ export function mergeSharedState(existingRaw, incomingRaw) {
 
   let nextPayload = existing.payload;
   let nextMerchant = existing.merchantName;
+  let nextUniqueCode = Boolean(existing.uniqueCodeEnabled);
   let nextUpdatedAt = existing.updatedAt;
   let nextStore = existing.store;
   let stale = false;
@@ -210,6 +222,9 @@ export function mergeSharedState(existingRaw, incomingRaw) {
     } else {
       nextUpdatedAt = incomingSettingsVersion;
       nextPayload = incoming.payload || incoming.qris?.payload || existing.payload || DEFAULT_QRIS;
+      if (hasUniqueCodeInput) {
+        nextUniqueCode = Boolean(incoming.uniqueCodeEnabled ?? incoming.qris?.uniqueCodeEnabled);
+      }
       nextStore = incoming.store !== undefined ? incoming.store : (existing.store || { name: 'Atelier Nusantara' });
       nextMerchant = incoming.merchantName || incoming.qris?.merchantName || nextStore?.name || existing.merchantName || 'Atelier Nusantara';
     }
@@ -232,6 +247,7 @@ export function mergeSharedState(existingRaw, incomingRaw) {
   return {
     payload: nextPayload,
     merchantName: nextMerchant,
+    uniqueCodeEnabled: nextUniqueCode,
     updatedAt: nextUpdatedAt,
     store: nextStore,
     catalogUpdatedAt: nextCatalogUpdatedAt,
@@ -244,12 +260,14 @@ export function mergeSharedState(existingRaw, incomingRaw) {
 async function writeToCloud(kv, incomingRaw) {
   const incoming = incomingRaw && typeof incomingRaw === 'object' ? incomingRaw : {};
   if (kv) {
+    const hasUniqueCodeInput = incoming.uniqueCodeEnabled !== undefined || incoming.qris?.uniqueCodeEnabled !== undefined;
     const hasSettingsInput = Boolean(
       incoming.updatedAt !== undefined
       || incoming.payload !== undefined
       || incoming.qris !== undefined
       || incoming.store !== undefined
       || incoming.merchantName !== undefined
+      || hasUniqueCodeInput
     );
     const hasCatalogInput = Boolean(
       incoming.catalogUpdatedAt !== undefined
@@ -260,6 +278,8 @@ async function writeToCloud(kv, incomingRaw) {
       settingsVersion: hasSettingsInput ? (Number(incoming.updatedAt ?? incoming.qris?.updatedAt ?? 0) || Date.now()) : 0,
       payload: incoming.payload || incoming.qris?.payload || '',
       merchantName: incoming.merchantName || incoming.qris?.merchantName || '',
+      hasUniqueCodeInput,
+      uniqueCodeEnabled: hasUniqueCodeInput ? Boolean(incoming.uniqueCodeEnabled ?? incoming.qris?.uniqueCodeEnabled) : false,
       hasStoreInput: incoming.store !== undefined,
       store: incoming.store !== undefined ? incoming.store : null,
       productsJson: JSON.stringify(Array.isArray(incoming.products) ? incoming.products : null),
@@ -290,6 +310,7 @@ async function writeToCloud(kv, incomingRaw) {
   inMemorySettings = {
     payload: merged.payload,
     merchantName: merged.merchantName,
+    uniqueCodeEnabled: merged.uniqueCodeEnabled,
     updatedAt: merged.updatedAt,
     store: merged.store,
     catalogUpdatedAt: merged.catalogUpdatedAt,
@@ -301,13 +322,17 @@ async function writeToCloud(kv, incomingRaw) {
 function formatSettingsResponse(data) {
   const version = Number(data.updatedAt || 0);
   const catalogVersion = Number(data.catalogUpdatedAt || 0);
+  const qris = {
+    payload: data.payload || DEFAULT_QRIS,
+    merchantName: data.merchantName || 'Atelier Nusantara',
+    updatedAt: version
+  };
+  if (data.uniqueCodeEnabled) {
+    qris.uniqueCodeEnabled = true;
+  }
   return {
     updatedAt: version,
-    qris: {
-      payload: data.payload || DEFAULT_QRIS,
-      merchantName: data.merchantName || 'Atelier Nusantara',
-      updatedAt: version
-    },
+    qris,
     store: data.store || null,
     catalogUpdatedAt: catalogVersion,
     products: Array.isArray(data.products) ? data.products : null

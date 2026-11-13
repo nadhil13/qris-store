@@ -267,6 +267,41 @@ export function renderQRCodeCanvas(canvasEl, text, { size = 236, margin = 2 } = 
   return false;
 }
 
+let jsQRLoadPromise = null;
+
+function resolveJsQRGlobal() {
+  if (typeof window !== 'undefined' && typeof window.jsQR === 'function') return window.jsQR;
+  if (typeof globalThis !== 'undefined' && typeof globalThis.jsQR === 'function') return globalThis.jsQR;
+  return null;
+}
+
+export async function ensureJsQRLoaded() {
+  const existing = resolveJsQRGlobal();
+  if (existing) return existing;
+  if (typeof document === 'undefined' || !document.head) return null;
+  if (!jsQRLoadPromise) {
+    jsQRLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = './scripts/vendor/jsqr.js';
+      script.async = true;
+      script.onload = () => {
+        const fn = resolveJsQRGlobal();
+        if (fn) resolve(fn);
+        else {
+          jsQRLoadPromise = null;
+          reject(new Error('Modul pembaca QR gagal menginisialisasi jsQR.'));
+        }
+      };
+      script.onerror = () => {
+        jsQRLoadPromise = null;
+        reject(new Error('Gagal memuat modul pembaca QR (jsqr.js). Periksa koneksi lalu coba lagi.'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return jsQRLoadPromise;
+}
+
 export async function scanQRISFromImageFile(file) {
   if (!file) throw new Error('File gambar tidak ditemukan.');
 
@@ -277,12 +312,6 @@ export async function scanQRISFromImageFile(file) {
     img.onerror = () => reject(new Error('Gagal membaca gambar.'));
     img.src = src;
   });
-
-  const getJsQR = () => {
-    if (typeof window !== 'undefined' && typeof window.jsQR === 'function') return window.jsQR;
-    if (typeof globalThis !== 'undefined' && typeof globalThis.jsQR === 'function') return globalThis.jsQR;
-    return null;
-  };
 
   let bitmap = null;
   let objectUrl = null;
@@ -311,9 +340,12 @@ export async function scanQRISFromImageFile(file) {
     const detector = typeof window !== 'undefined' && 'BarcodeDetector' in window
       ? new window.BarcodeDetector({ formats: ['qr_code'] })
       : null;
-    const jsQR = getJsQR();
+    const jsQR = resolveJsQRGlobal() || await ensureJsQRLoaded().catch((err) => {
+      if (!detector) throw err;
+      return null;
+    });
     if (!jsQR && !detector) {
-      throw new Error('Modul pembaca QR (jsQR) belum termuat. Pastikan jsqr.js dimuat.');
+      throw new Error('Modul pembaca QR (jsQR) belum termuat. Pastikan jsqr.js tersedia.');
     }
 
     const decodeAtMaxDim = async (maxDim, inversionAttempts) => {

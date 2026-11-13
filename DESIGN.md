@@ -15,7 +15,7 @@ Current `:root` values:
 :root {
   --bg-canvas: #f5efe7;
   --bg-canvas-subtle: #efe3d2;
-  --bg-card: rgba(255, 252, 247, 0.76);
+  --bg-card: #fffcf7;
   --bg-card-muted: #f7f1e7;
   --border-hairline: rgba(29, 23, 19, 0.08);
   --border-strong: rgba(29, 23, 19, 0.14);

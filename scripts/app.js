@@ -145,6 +145,7 @@ export function updateStorefrontStatus() {
       el.setAttribute('aria-disabled', 'true');
     }
   });
+  syncFeaturedShowcase();
 }
 
 export function toggleFooterPrivacy(forceOpen) {
@@ -366,15 +367,131 @@ export function renderCategoryBadges() {
 }
 
 let lastRenderedCatalogHtml = '';
+let featuredProductId = 'prod-01';
+
+/**
+ * Formats live stock availability for a product across admin and storefront views.
+ */
+function formatProductStockLabel(product, { fallback = 'Stok server belum dimuat' } = {}) {
+  if (!product) return fallback;
+  const snapshot = getInventoryStock();
+  if (!snapshot) return fallback;
+  if (!Object.hasOwn(snapshot.products, product.id)) return 'Stok belum diinisialisasi';
+  return product.stock === null ? 'Stok: Tanpa Batas' : `Stok: ${product.stock}`;
+}
+
+export function syncFeaturedShowcase(products = getProducts()) {
+  if (typeof document === 'undefined') return null;
+  const list = Array.isArray(products) ? products : [];
+  const featured =
+    list.find((p) => p.id === 'prod-01' && isPurchasable(p))
+    || list.find((p) => isPurchasable(p))
+    || list.find((p) => p.id === 'prod-01')
+    || list[0];
+  if (!featured) return null;
+
+  featuredProductId = featured.id;
+  const available = isPurchasable(featured);
+  const { store } = getSettings();
+  const storeOpen = store.isOpen !== false;
+  const variants = Array.isArray(featured.variants) ? featured.variants : [];
+  const firstVariant = variants[0]?.label || '';
+  const activeVariantObj = variants.find((v) => v.label === selectedStoryVariant) || variants[0] || null;
+  selectedStoryVariant = activeVariantObj ? activeVariantObj.label : '';
+  const effectivePrice = Math.max(0, Number(featured.price || 0) + Number(activeVariantObj?.priceDelta || 0));
+
+  const heroQuickBtn = document.getElementById('hero-showcase-quick-btn');
+  if (heroQuickBtn) {
+    heroQuickBtn.disabled = !available || !storeOpen;
+    heroQuickBtn.onclick = () => addToCart(featured.id, firstVariant);
+    const span = heroQuickBtn.querySelector?.('span');
+    const shortName = featured.name.split(/\s+/).slice(0, 2).join(' ');
+    if (span) {
+      span.textContent = !storeOpen
+        ? 'Toko Sedang Tutup'
+        : available
+          ? `+ Pesan ${shortName}`
+          : `${shortName} Habis`;
+    }
+  }
+
+  const heroTag = document.getElementById('hero-showcase-tag');
+  if (heroTag) heroTag.textContent = available ? (featured.tags?.[0] || 'Produk unggulan') : 'Stok habis';
+  const heroImg = document.getElementById('hero-showcase-img');
+  if (heroImg && featured.image) {
+    heroImg.src = featured.image;
+    heroImg.alt = `${featured.name} Atelier Nusantara`;
+  }
+  const heroTitle = document.getElementById('hero-showcase-title');
+  if (heroTitle) heroTitle.textContent = featured.name;
+  const heroPrice = document.getElementById('hero-showcase-price');
+  if (heroPrice) heroPrice.textContent = formatIDR(featured.price);
+  const heroDesc = document.getElementById('hero-showcase-desc');
+  if (heroDesc) heroDesc.textContent = featured.desc || '';
+  const heroBtn = document.getElementById('hero-showcase-btn');
+  if (heroBtn) {
+    heroBtn.disabled = !available || !storeOpen;
+    heroBtn.onclick = () => addToCart(featured.id, firstVariant);
+    const btnSpan = heroBtn.querySelector?.('span');
+    if (btnSpan) {
+      btnSpan.textContent = !storeOpen ? 'Toko Tutup' : available ? 'Tambah ke Pesanan' : 'Stok Habis';
+    }
+  }
+
+  const storyImg = document.getElementById('story-preview-img');
+  if (storyImg && featured.image) {
+    storyImg.src = featured.image;
+    storyImg.alt = `${featured.name} Atelier Nusantara`;
+  }
+  const storyTitle = document.getElementById('story-panel-1-title');
+  if (storyTitle) storyTitle.textContent = featured.name;
+  const storyDesc = document.getElementById('story-panel-1-desc');
+  if (storyDesc) {
+    storyDesc.textContent = featured.desc || 'Buka detail untuk melihat varian, sisa stok, dan harga terkini sebelum menambahkannya ke keranjang.';
+  }
+  const storyPrice = document.getElementById('story-panel-1-price');
+  if (storyPrice) storyPrice.textContent = formatIDR(effectivePrice);
+  const storyBtn = document.getElementById('story-panel-1-btn');
+  if (storyBtn) {
+    storyBtn.onclick = () => openQuickView(featured.id, selectedStoryVariant);
+  }
+
+  const chipsWrap = document.getElementById('story-panel-1-chips');
+  const noteEl = document.getElementById('story-variant-note');
+  if (chipsWrap) {
+    if (variants.length > 0) {
+      chipsWrap.hidden = false;
+      const chipSig = `${featured.id}|${variants.map((v) => `${v.label}:${v.priceDelta || 0}`).join(',')}|${selectedStoryVariant}`;
+      if (chipsWrap.dataset?.signature !== chipSig) {
+        if (chipsWrap.dataset) chipsWrap.dataset.signature = chipSig;
+        chipsWrap.innerHTML = variants.map((v) => {
+          const isSelected = v.label === selectedStoryVariant;
+          return `<button type="button" class="story-variant-chip${isSelected ? ' is-active' : ''}" data-story-variant="${escapeHTML(v.label)}" aria-pressed="${isSelected ? 'true' : 'false'}">${escapeHTML(v.label.replace(':', ' ·'))}</button>`;
+        }).join('');
+      }
+      if (noteEl) {
+        const stockText = formatProductStockLabel(featured, { fallback: 'Stok aktif' });
+        noteEl.textContent = `Varian dipilih: ${selectedStoryVariant} (${formatIDR(effectivePrice)}) · ${stockText}.`;
+      }
+    } else {
+      chipsWrap.hidden = true;
+      chipsWrap.innerHTML = '';
+      if (noteEl) noteEl.textContent = `Stok saat ini: ${formatProductStockLabel(featured, { fallback: 'Stok aktif' })}.`;
+    }
+  }
+
+  return featured;
+}
 
 export function renderCatalog() {
+  const all = getProducts();
+  syncFeaturedShowcase(all);
+
   const grid = document.getElementById('product-grid');
   const countEl = document.getElementById('results-count');
   if (!grid) return;
 
   renderCategoryBadges();
-
-  const all = getProducts();
   let list = all.filter((p) => {
     const matchCat = state.activeCategory === 'semua' || p.category === state.activeCategory;
     const q = state.searchQuery.toLowerCase();
@@ -409,7 +526,7 @@ export function renderCatalog() {
 
   const emptyHtml = `
       <div class="empty-state">
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <h3>Koleksi tidak ditemukan</h3>
         <p>Coba gunakan kata kunci lain atau pilih kategori koleksi di atas.</p>
       </div>
@@ -459,7 +576,7 @@ export function renderCatalog() {
                 </div>
               ` : `
                 <button type="button" class="btn-add" data-action="quick-view" data-product-id="${escapeHTML(item.id)}" aria-label="Pilih varian ${escapeHTML(item.name)}">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                   <span>Pilih Varian</span>
                 </button>
               `}
@@ -908,7 +1025,7 @@ export function updateCartUI() {
   if (lines.length === 0) {
     drawerItems.innerHTML = `
       <div class="cart-empty-view">
-        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
         <p>Keranjang pesanan masih kosong.<br>Silakan pilih menu atau karya yang Anda inginkan.</p>
       </div>
     `;
@@ -1164,14 +1281,15 @@ export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
   const amountLabelEl = document.getElementById('qris-amount-label');
   const qrContainer = document.getElementById('qris-svg-container');
 
-  if (btnDynamic) {
-    btnDynamic.style.background = mode === 'dynamic' ? 'var(--accent-terracotta)' : 'transparent';
-    btnDynamic.style.color = mode === 'dynamic' ? '#FFFFFF' : 'var(--ink-secondary)';
-  }
-  if (btnStatic) {
-    btnStatic.style.background = mode === 'static' ? 'var(--accent-terracotta)' : 'transparent';
-    btnStatic.style.color = mode === 'static' ? '#FFFFFF' : 'var(--ink-secondary)';
-  }
+  const setModeState = (el, active) => {
+    if (!el) return;
+    if (typeof el.classList?.toggle === 'function') el.classList.toggle('is-active', active);
+    else if (active) el.classList?.add?.('is-active');
+    else el.classList?.remove?.('is-active');
+    el.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  };
+  setModeState(btnDynamic, mode === 'dynamic');
+  setModeState(btnStatic, mode === 'static');
 
   let payload = rawStatic;
   if (mode === 'static') {
@@ -1773,6 +1891,42 @@ export function logoutAdminSession() {
   showToast('Sesi admin ditutup.');
 }
 
+let adminOrdersSyncState = 'idle';
+
+function setAdminOrdersError(message = '') {
+  const banner = document.getElementById('admin-orders-error-banner');
+  if (!banner) return;
+  if (!message) {
+    banner.hidden = true;
+    banner.innerHTML = '';
+    return;
+  }
+  banner.hidden = false;
+  banner.innerHTML = `
+    <div>
+      <strong>Gagal menyinkronkan pesanan server:</strong>
+      <span>${escapeHTML(message)}</span>
+    </div>
+    <button type="button" class="btn-secondary btn-admin-sm" onclick="window.retryAdminOrdersSync()">Coba Lagi</button>
+  `;
+}
+
+export async function retryAdminOrdersSync() {
+  adminOrdersSyncState = 'loading';
+  const syncStatus = document.getElementById('admin-live-sync');
+  if (syncStatus) syncStatus.textContent = 'Menyinkronkan ulang pesanan server...';
+  setAdminOrdersError('');
+  try {
+    await listInventoryOrders();
+    adminOrdersSyncState = 'ready';
+    refreshAdminDashboard();
+  } catch (error) {
+    adminOrdersSyncState = 'error';
+    if (syncStatus) syncStatus.textContent = 'Gagal sinkronisasi server · data lokal ditampilkan';
+    setAdminOrdersError(formatInventoryError(error));
+  }
+}
+
 export function openAdminDashboardModal() {
   if (!state.adminAuthenticated || !hasInventoryAdminToken()) {
     openAdminLoginModal();
@@ -1785,8 +1939,21 @@ export function openAdminDashboardModal() {
   if (modal) {
     overlays().open(modal, closeAdminDashboardModal);
     switchAdminSection('overview');
+    adminOrdersSyncState = 'loading';
+    setAdminOrdersError('');
     refreshAdminDashboard();
-    listInventoryOrders().then(() => refreshAdminDashboard()).catch(() => {});
+    listInventoryOrders()
+      .then(() => {
+        adminOrdersSyncState = 'ready';
+        setAdminOrdersError('');
+        refreshAdminDashboard();
+      })
+      .catch((error) => {
+        adminOrdersSyncState = 'error';
+        const syncStatus = document.getElementById('admin-live-sync');
+        if (syncStatus) syncStatus.textContent = 'Gagal sinkronisasi server · data lokal ditampilkan';
+        setAdminOrdersError(formatInventoryError(error));
+      });
     checkWebhookStatus().catch(() => {});
   }
 }
@@ -1851,6 +2018,16 @@ function renderWebhookStatusBadge() {
     } else {
       badge.className = 'status-badge-step muted';
       badge.textContent = 'Memeriksa status webhook server...';
+    }
+  }
+  const overviewWebhook = document.getElementById('admin-overview-webhook');
+  if (overviewWebhook) {
+    if (adminWebhookStatus.configured === true) {
+      overviewWebhook.textContent = 'Webhook aktif (QRIS_WEBHOOK_SECRET terpasang)';
+    } else if (adminWebhookStatus.configured === false) {
+      overviewWebhook.textContent = 'Konfirmasi manual / pasang QRIS_WEBHOOK_SECRET';
+    } else {
+      overviewWebhook.textContent = 'Memeriksa status webhook server...';
     }
   }
   const logBox = document.getElementById('admin-webhook-activity-list');
@@ -1940,8 +2117,8 @@ function renderAdminLiveAlert(type, order, extraCount = 0) {
       <span>${escapeHTML(order.invoice)} &middot; ${escapeHTML(order.customer?.name || 'Pelanggan')} &middot; <strong>${formatIDR(order.totals?.total || 0)}</strong>${escapeHTML(suffix)}</span>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button type="button" class="btn-primary" style="padding:6px 12px; font-size:0.78rem;" onclick="window.openOrdersFromAlert()">Lihat Pesanan</button>
-      <button type="button" class="btn-secondary" style="padding:6px 12px; font-size:0.78rem;" onclick="window.dismissAdminAlert()">Tutup</button>
+      <button type="button" class="btn-primary btn-admin-sm" onclick="window.openOrdersFromAlert()">Lihat Pesanan</button>
+      <button type="button" class="btn-secondary btn-admin-sm" onclick="window.dismissAdminAlert()">Tutup</button>
     </div>
   `;
 }
@@ -2015,9 +2192,11 @@ export function refreshAdminDashboard() {
   const settings = getSettings();
   syncAdminOrderAlerts(orders);
 
-  const totalOmzet = orders.filter((o) => isPaidStatus(o.status)).reduce((sum, o) => sum + Number(o.totals?.total || 0), 0);
+  const settledOrders = orders.filter((o) => isPaidStatus(o.status));
+  const settledCount = settledOrders.length;
+  const totalOmzet = settledOrders.reduce((sum, o) => sum + Number(o.totals?.total || 0), 0);
   const totalOrders = orders.length;
-  const aov = totalOrders > 0 ? Math.round(totalOmzet / totalOrders) : 0;
+  const aov = settledCount > 0 ? Math.round(totalOmzet / settledCount) : 0;
   const needsAction = orders.filter((o) => o.status === STATUS.PAID || o.status === STATUS.PROCESSING).length;
   const activeOrders = orders.filter((o) => isOpenStatus(o.status)).length;
   const readyCount = products.filter((p) => isPurchasable(p)).length;
@@ -2032,6 +2211,8 @@ export function refreshAdminDashboard() {
   const activeOrdersEl = document.getElementById('admin-active-orders');
   const overviewOrders = document.getElementById('admin-overview-orders');
   const overviewProducts = document.getElementById('admin-overview-products');
+  const overviewQueue = document.getElementById('admin-overview-queue');
+  const overviewQris = document.getElementById('admin-overview-qris');
   const storefrontCatalogStatus = document.getElementById('admin-storefront-catalog-status');
   const hoursInput = document.getElementById('admin-storefront-hours');
   const openInput = document.getElementById('admin-storefront-is-open');
@@ -2041,12 +2222,32 @@ export function refreshAdminDashboard() {
   if (omzetEl) omzetEl.textContent = formatIDR(totalOmzet);
   if (ordersEl) ordersEl.textContent = totalOrders;
   if (aovEl) aovEl.textContent = formatIDR(aov);
-  if (settledEl) settledEl.textContent = orders.filter((o) => isPaidStatus(o.status)).length;
+  if (settledEl) settledEl.textContent = settledCount;
   if (countEl) countEl.textContent = `${totalOrders} pesanan tercatat`;
   if (needsActionEl) needsActionEl.textContent = needsAction;
   if (activeOrdersEl) activeOrdersEl.textContent = activeOrders;
   if (overviewOrders) overviewOrders.textContent = `${totalOrders} pesanan (${activeOrders} aktif)`;
-  if (overviewProducts) overviewProducts.textContent = `${products.length} produk di katalog`;
+  if (overviewProducts) overviewProducts.textContent = `${products.length} produk (${readyCount} tersedia)`;
+  if (overviewQueue) {
+    const pendingQueue = orders.filter((o) => [STATUS.AWAITING, STATUS.PAID, STATUS.PROCESSING, STATUS.READY].includes(o.status));
+    if (pendingQueue.length === 0) {
+      overviewQueue.innerHTML = '<p class="admin-panel-muted">Semua pesanan aktif sudah selesai. Tidak ada antrean tertunda saat ini.</p>';
+    } else {
+      overviewQueue.innerHTML = pendingQueue.slice(0, 4).map((o) => `
+        <div class="admin-queue-row">
+          <div>
+            <strong>${escapeHTML(o.invoice)} &middot; ${escapeHTML(o.customer?.name || 'Pelanggan')}</strong>
+            <span>${formatIDR(o.totals?.total || 0)} &middot; ${escapeHTML(statusLabel(o.status, o))}</span>
+          </div>
+          <button type="button" class="btn-secondary btn-admin-sm" onclick="window.switchAdminSection('orders')">Proses</button>
+        </div>
+      `).join('');
+    }
+  }
+  if (overviewQris) {
+    const qrisMeta = describeQRIS(settings.qris?.payload || DEMO_STATIC_QRIS);
+    overviewQris.textContent = `${qrisMeta.merchantName || settings.store.name} (${qrisMeta.acquirer || 'QRIS Dinamis'})`;
+  }
   if (storefrontCatalogStatus) {
     storefrontCatalogStatus.textContent = `${products.length} produk terdaftar (${readyCount} siap dipesan, ${unavailableCount} habis/nonaktif).`;
   }
@@ -2067,8 +2268,17 @@ export function refreshAdminDashboard() {
     if (storefrontWa) storefrontWa.value = settings.store.whatsapp || '';
     storefrontBaselines.merchantWhatsApp = readMerchantWhatsAppDraft();
   }
-  if (syncStatus) syncStatus.textContent = 'Sinkronisasi aktif · server diperiksa tiap 2 detik saat dasbor terbuka';
+  if (syncStatus) {
+    if (adminOrdersSyncState === 'loading') {
+      syncStatus.textContent = 'Menyinkronkan pesanan server...';
+    } else if (adminOrdersSyncState === 'error') {
+      syncStatus.textContent = 'Gagal sinkronisasi server · data lokal ditampilkan';
+    } else {
+      syncStatus.textContent = 'Sinkronisasi aktif · server diperiksa tiap 2 detik saat dasbor terbuka';
+    }
+  }
 
+  renderWebhookStatusBadge();
   renderAdminOrderTable();
   renderAdminProductsTable();
   const paymentSection = document.getElementById('admin-section-payments');
@@ -2087,13 +2297,15 @@ export function refreshAdminDashboard() {
 function renderAdminOrderTable() {
   const tbody = document.getElementById('admin-orders-tbody');
   const emptyStateEl = document.getElementById('admin-empty-state');
+  const tableWrapEl = document.getElementById('admin-orders-table-wrap');
   if (!tbody) return;
 
   const orders = getAdminOrders();
   if (emptyStateEl) emptyStateEl.hidden = orders.length !== 0;
+  if (tableWrapEl) tableWrapEl.hidden = orders.length === 0;
 
   if (orders.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 24px; color: var(--ink-secondary);">Belum ada riwayat pesanan.</td></tr>`;
+    tbody.innerHTML = '';
     return;
   }
 
@@ -2102,6 +2314,7 @@ function renderAdminOrderTable() {
     const itemsSummary = (o.items || []).map((i) => `${escapeHTML(i.name)} (x${i.qty})`).join(', ');
     const isAwaiting = o.status === STATUS.AWAITING;
     const isComplete = o.status === STATUS.COMPLETED || o.status === STATUS.CANCELLED || o.status === STATUS.EXPIRED;
+    const isNewAlert = recentAlertOrderIds.has(o.id);
 
     let actionBtn = '';
     if (isAwaiting) {
@@ -2109,26 +2322,31 @@ function renderAdminOrderTable() {
     } else if (!isComplete) {
       actionBtn = `<button type="button" class="btn-admin-action" data-action="admin-advance-order" data-invoice="${escapeHTML(o.invoice)}">Majukan status</button>`;
     } else if (o.status === STATUS.CANCELLED) {
-      actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Dibatalkan</span>`;
+      actionBtn = `<span style="font-size:0.78rem; color:var(--ink-secondary);">Dibatalkan</span>`;
     } else if (o.status === STATUS.EXPIRED) {
-      actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Kedaluwarsa</span>`;
+      actionBtn = `<span style="font-size:0.78rem; color:var(--ink-secondary);">Kedaluwarsa</span>`;
     } else {
-      actionBtn = `<span style="font-size:0.75rem; color:var(--ink-secondary);">Selesai</span>`;
+      actionBtn = `<span style="font-size:0.78rem; color:var(--ink-secondary);">Selesai</span>`;
     }
     if (!isComplete) {
-      actionBtn += ` <button type="button" class="btn-admin-action" data-action="admin-cancel-order" data-order-id="${escapeHTML(o.id)}">Batalkan</button>`;
+      actionBtn += `<button type="button" class="btn-admin-action" data-action="admin-cancel-order" data-order-id="${escapeHTML(o.id)}">Batalkan</button>`;
     }
 
     return `
-      <tr class="admin-order-row${recentAlertOrderIds.has(o.id) ? ' is-new' : ''}" data-admin-row="${escapeHTML(o.invoice)}">
-        <td><strong style="font-family: var(--font-mono);">${escapeHTML(o.invoice)}</strong></td>
-        <td style="white-space: nowrap; font-size: 0.74rem;">${formatDateTime(o.createdAt)}</td>
-        <td><strong>${escapeHTML(o.customer?.name || 'Pelanggan')}</strong><br><span style="font-size:0.7rem; color:var(--ink-secondary);">${escapeHTML(o.customer?.phone || '-')}</span></td>
-        <td style="max-width: 220px; font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHTML(itemsSummary)}">${escapeHTML(itemsSummary)}</td>
-        <td style="font-size: 0.74rem;">${escapeHTML(paymentMethodLabel(o, desc))}</td>
-        <td style="font-weight: 700; font-family: var(--font-mono); color: var(--brand-forest);">${formatIDR(o.totals?.total || 0)}</td>
-        <td><span class="status-badge-step ${statusTone(o.status)}">${escapeHTML(statusLabel(o.status, o))}</span></td>
-        <td>${actionBtn}</td>
+      <tr class="admin-order-row${isNewAlert ? ' is-new' : ''}" data-admin-row="${escapeHTML(o.invoice)}">
+        <td data-label="No. Invoice">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <strong style="font-family: var(--font-mono);">${escapeHTML(o.invoice)}</strong>
+            ${isNewAlert ? '<span class="admin-badge-new">Baru</span>' : ''}
+          </div>
+        </td>
+        <td data-label="Waktu" style="white-space: nowrap; font-size: 0.78rem;">${formatDateTime(o.createdAt)}</td>
+        <td data-label="Pemesan"><strong>${escapeHTML(o.customer?.name || 'Pelanggan')}</strong><br><span style="font-size:0.75rem; color:var(--ink-secondary);">${escapeHTML(o.customer?.phone || '-')}</span></td>
+        <td data-label="Item Pesanan" class="admin-orders-items">${itemsSummary}</td>
+        <td data-label="Metode" style="font-size: 0.78rem;">${escapeHTML(paymentMethodLabel(o, desc))}</td>
+        <td data-label="Total Tagihan" style="font-weight: 700; font-family: var(--font-mono); color: var(--brand-forest); font-variant-numeric: tabular-nums;">${formatIDR(o.totals?.total || 0)}</td>
+        <td data-label="Status"><span class="status-badge-step ${statusTone(o.status)}">${escapeHTML(statusLabel(o.status, o))}</span></td>
+        <td data-label="Aksi"><div class="admin-table-actions">${actionBtn}</div></td>
       </tr>
     `;
   }).join('');
@@ -2193,37 +2411,33 @@ function renderAdminProductsTable() {
   const tbody = document.getElementById('admin-products-tbody');
   if (!tbody) return;
   const products = getProducts();
-  const snapshot = getInventoryStock();
-  const stockLabel = p => !snapshot ? 'Stok server belum dimuat'
-    : !Object.hasOwn(snapshot.products, p.id) ? 'Stok belum diinisialisasi'
-      : p.stock === null ? 'Stok: Tanpa Batas' : `Stok: ${p.stock}`;
 
   tbody.innerHTML = products.map((p) => `
     <tr>
-      <td>
+      <td data-label="Produk">
         <div style="display:flex; align-items:center; gap:10px;">
           <img src="${escapeHTML(p.image)}" width="36" height="36" style="border-radius:4px; object-fit:cover;" alt="" />
           <div>
             <strong>${escapeHTML(p.name)}</strong>
-            <span style="display:block; font-size:0.72rem; color:var(--ink-secondary);">${stockLabel(p)}</span>
+            <span style="display:block; font-size:0.75rem; color:var(--ink-secondary);">${formatProductStockLabel(p)}</span>
           </div>
         </div>
       </td>
-      <td style="font-size:0.78rem;">${escapeHTML(getCategoryLabel(p.category))}</td>
-      <td style="font-family:var(--font-mono); font-weight:700;">${formatIDR(p.price)}</td>
-      <td>
+      <td data-label="Kategori" style="font-size:0.8rem;">${escapeHTML(getCategoryLabel(p.category))}</td>
+      <td data-label="Harga" style="font-family:var(--font-mono); font-weight:700; font-variant-numeric: tabular-nums;">${formatIDR(p.price)}</td>
+      <td data-label="Status Stok">
         <span class="status-badge-step ${p.isAvailable !== false ? 'done' : 'muted'}">
           ${p.isAvailable !== false ? 'Tersedia' : 'Habis'}
         </span>
       </td>
-      <td>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button type="button" class="btn-secondary" data-action="admin-adjust-stock" data-product-id="${escapeHTML(p.id)}">Atur stok</button>
-          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" data-action="admin-edit-product" data-product-id="${escapeHTML(p.id)}">Edit</button>
-          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem;" data-action="admin-toggle-product" data-product-id="${escapeHTML(p.id)}">
+      <td data-label="Aksi">
+        <div class="admin-table-actions">
+          <button type="button" class="btn-secondary btn-admin-sm" data-action="admin-adjust-stock" data-product-id="${escapeHTML(p.id)}">Atur stok</button>
+          <button type="button" class="btn-secondary btn-admin-sm" data-action="admin-edit-product" data-product-id="${escapeHTML(p.id)}">Edit</button>
+          <button type="button" class="btn-secondary btn-admin-sm" data-action="admin-toggle-product" data-product-id="${escapeHTML(p.id)}">
             ${p.isAvailable !== false ? 'Set Habis' : 'Set Ready'}
           </button>
-          <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:0.74rem; color:var(--status-danger);" data-action="admin-delete-product" data-product-id="${escapeHTML(p.id)}">Hapus</button>
+          <button type="button" class="btn-secondary btn-admin-sm" style="color:var(--status-danger);" data-action="admin-delete-product" data-product-id="${escapeHTML(p.id)}">Hapus</button>
         </div>
       </td>
     </tr>
@@ -2458,7 +2672,6 @@ function renderAdminPaymentsSection({ force = false } = {}) {
   section.innerHTML = `
     <div class="admin-section-heading">
       <div>
-        <span class="admin-section-kicker">Konfigurasi Pembayaran Toko</span>
         <h3 id="admin-payments-title">Kelola QRIS Toko (Upload Foto / Statis ke Dinamis)</h3>
         <p>Unggah foto atau poster QRIS merchant Anda (GoPay Merchant, BCA, Mandiri, ShopeePay, DANA, dsb). Sistem otomatis memindai QR, memverifikasi checksum, dan mengubahnya menjadi QRIS Dinamis yang mengunci nominal tagihan otomatis di scanner pembeli.</p>
       </div>
@@ -2467,9 +2680,8 @@ function renderAdminPaymentsSection({ force = false } = {}) {
     <div class="admin-settings-grid">
       <!-- Active QRIS Status Card -->
       <section class="admin-settings-card">
-        <span class="admin-section-kicker">QRIS Aktif Toko Saat Ini</span>
         <h4 style="margin-bottom:4px;">${escapeHTML(desc.merchantName || settings.store.name)}</h4>
-        <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--ink-secondary); margin:6px 0 14px; line-height:1.6;">
+        <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--ink-secondary); margin:6px 0 14px; line-height:1.6;">
           NMID: <strong>${escapeHTML(desc.nmid || 'ID1026533086801')}</strong><br>
           Kota: <strong>${escapeHTML(desc.city || 'JAKARTA BARAT')}</strong><br>
           Acquirer: <strong>${escapeHTML(desc.acquirer || 'QRIS NASIONAL')}</strong><br>
@@ -2477,32 +2689,31 @@ function renderAdminPaymentsSection({ force = false } = {}) {
         </div>
         <div style="background:#ffffff; padding:12px; border-radius:8px; display:inline-block; border:1px solid var(--border-hairline); box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
           ${renderQRCodeSVG(activePayload, { label: 'Preview QRIS Toko', size: 180 })}
-          <span style="display:block; font-size:0.72rem; color:var(--ink-secondary); margin-top:8px;">Kode QRIS Toko Siap Digunakan</span>
+          <span style="display:block; font-size:0.75rem; color:var(--ink-secondary); margin-top:8px;">Kode QRIS Toko Siap Digunakan</span>
         </div>
-        <div style="margin-top:12px; font-size:0.76rem; color:var(--brand-forest); background:rgba(46,69,50,0.08); padding:8px 12px; border-radius:6px; line-height:1.4;">
+        <div style="margin-top:12px; font-size:0.78rem; color:var(--brand-forest); background:rgba(46,69,50,0.08); padding:8px 12px; border-radius:6px; line-height:1.4;">
           <strong>QRIS dinamis aktif:</strong> Nominal tagihan disertakan dalam kode QRIS saat checkout.
         </div>
       </section>
 
       <!-- Update QRIS Card -->
       <section class="admin-settings-card">
-        <span class="admin-section-kicker">Perbarui QRIS Toko</span>
         <h4>1. Upload Foto / Poster QRIS Baru</h4>
-        <p style="font-size:0.78rem; color:var(--ink-secondary); margin-bottom:12px;">
+        <p style="font-size:0.8rem; color:var(--ink-secondary); margin-bottom:12px;">
           Punya poster atau screenshot QRIS dari GoPay Merchant / m-Banking? Upload langsung fotonya di sini:
         </p>
 
         <!-- Drag & Drop Zone -->
         <div id="admin-qris-dropzone" class="qris-upload-dropzone" ondragover="window.handleQRISDragOver(event)" ondragleave="window.handleQRISDragLeave(event)" ondrop="window.handleQRISDrop(event)">
           <div class="upload-icon-circle">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
               <circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21 15 16 10 5 21"/>
             </svg>
           </div>
           <strong style="display:block; font-size:0.88rem; margin-top:8px; color:var(--ink-primary);">Klik atau Seret Foto QRIS ke Sini</strong>
-          <p style="font-size:0.75rem; color:var(--ink-secondary); margin:4px 0 10px;">Format: PNG, JPG, JPEG, atau WebP</p>
+          <p style="font-size:0.78rem; color:var(--ink-secondary); margin:4px 0 10px;">Format: PNG, JPG, JPEG, atau WebP</p>
           <button type="button" id="admin-qris-upload-btn" class="btn-primary" onclick="window.triggerQRISUpload()">Pilih File Gambar</button>
           <input type="file" id="admin-qris-file-input" aria-label="Foto QRIS" accept="image/*" hidden onchange="window.handleQRISImageUpload(event)" />
         </div>
@@ -2510,35 +2721,36 @@ function renderAdminPaymentsSection({ force = false } = {}) {
 
         <!-- Manual String Option -->
         <div style="border-top:1px dashed var(--border-hairline); padding-top:12px; margin-top:8px;">
-          <h4 style="font-size:0.85rem;">2. Atau Tempel String EMVCo QRIS Manual</h4>
-          <p style="font-size:0.75rem; color:var(--ink-secondary); margin-bottom:6px;">Jika Anda memiliki salinan teks string QRIS (diawali <code>000201...</code>):</p>
+          <h4 style="font-size:0.88rem;">2. Atau Tempel String EMVCo QRIS Manual</h4>
+          <p style="font-size:0.78rem; color:var(--ink-secondary); margin-bottom:6px;">Jika Anda memiliki salinan teks string QRIS (diawali <code>000201...</code>):</p>
           <textarea id="admin-custom-qris-input" class="config-textarea" rows="3" placeholder="000201010211...">${escapeHTML(activePayload)}</textarea>
           <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-            <button type="button" id="admin-apply-qris-btn" class="btn-primary" onclick="window.adminApplyCustomQRIS()" style="padding:6px 14px; font-size:0.8rem;">Terapkan String QRIS</button>
-            <button type="button" id="admin-reset-qris-btn" class="btn-secondary" onclick="window.adminResetQRISDefault()" style="padding:6px 12px; font-size:0.78rem;">Gunakan QRIS Demo</button>
+            <button type="button" id="admin-apply-qris-btn" class="btn-primary btn-admin-sm" onclick="window.adminApplyCustomQRIS()">Terapkan String QRIS</button>
+            <button type="button" id="admin-reset-qris-btn" class="btn-secondary btn-admin-sm" onclick="window.adminResetQRISDefault()">Gunakan QRIS Demo</button>
           </div>
         </div>
 
         ${settings.qris.history && settings.qris.history.length > 0 ? `
           <div style="margin-top:14px; border-top:1px dashed var(--border-hairline); padding-top:8px;">
-            <small style="color:var(--ink-secondary); display:block; margin-bottom:4px; font-weight:600;">Riwayat QRIS Sebelumnya:</small>
-            ${settings.qris.history.map((h, idx) => `
-              <button type="button" class="btn-secondary" style="font-size:0.72rem; padding:4px 8px; margin:2px;" data-action="admin-restore-qris" data-qris-payload="${escapeHTML(h.payload)}">
-                Pulihkan #${idx + 1} (${formatDateTime(h.replacedAt)})
-              </button>
-            `).join('')}
+            <small style="color:var(--ink-secondary); display:block; margin-bottom:6px; font-weight:600;">Riwayat QRIS Sebelumnya:</small>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              ${settings.qris.history.map((h, idx) => `
+                <button type="button" class="btn-secondary btn-admin-sm" data-action="admin-restore-qris" data-qris-payload="${escapeHTML(h.payload)}">
+                  Pulihkan #${idx + 1} (${formatDateTime(h.replacedAt)})
+                </button>
+              `).join('')}
+            </div>
           </div>
         ` : ''}
       </section>
 
       <!-- GoPay Merchant Webhook Auto-Verification Card -->
       <section class="admin-settings-card webhook-guide-card" style="grid-column: 1 / -1;">
-        <span class="admin-section-kicker">Verifikasi Otomatis GoPay Merchant</span>
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
           <h4 style="margin:0;">3. Konfirmasi Lunas Otomatis dari Notifikasi HP Merchant</h4>
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <span id="admin-webhook-status-badge" class="status-badge-step muted">Memeriksa status webhook server...</span>
-            <button type="button" class="btn-secondary" style="padding:4px 10px; font-size:0.74rem;" onclick="window.checkWebhookStatus({ manual: true })">Cek Log Webhook</button>
+            <button type="button" class="btn-secondary btn-admin-sm" onclick="window.checkWebhookStatus({ manual: true })">Cek Log Webhook</button>
           </div>
         </div>
         <p style="font-size:0.8rem; color:var(--ink-secondary); line-height:1.5; margin:0;">
@@ -2952,8 +3164,8 @@ export function initEventBindings() {
     const updateAudioIcon = () => {
       audioBtn.setAttribute('aria-pressed', sfx.enabled ? 'true' : 'false');
       audioBtn.innerHTML = sfx.enabled
-        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`
-        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`
+        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
     };
     updateAudioIcon();
     audioBtn.addEventListener('click', () => {
@@ -3177,33 +3389,41 @@ function initRealtimeSync() {
     });
   }
 
-  const storyVariantChips = Array.from(document.querySelectorAll?.('.story-variant-chip[data-story-variant]') || []);
+  const storyChipsContainer = document.getElementById?.('story-panel-1-chips');
   const storyVariantNote = document.getElementById?.('story-variant-note');
+  const storyPriceEl = document.getElementById?.('story-panel-1-price');
   const storyPreviewBtn = document.querySelector?.('#story-panel-1 .story-dossier-btn');
   if (storyPreviewBtn) {
-    storyPreviewBtn.onclick = () => window.openQuickView('prod-01', selectedStoryVariant);
+    storyPreviewBtn.onclick = () => window.openQuickView(featuredProductId || 'prod-01', selectedStoryVariant);
   }
-  if (storyVariantChips.length) {
-    storyVariantChips.forEach((chip) => {
-      chip.addEventListener?.('click', () => {
-        sfx.playClick();
-        selectedStoryVariant = chip.dataset?.storyVariant || 'Level 0: Ramah Anak';
-        storyVariantChips.forEach((c) => {
-          const active = c === chip;
-          c.classList?.toggle?.('is-active', active);
-          c.setAttribute?.('aria-pressed', active ? 'true' : 'false');
-        });
-        if (storyVariantNote) {
-          storyVariantNote.textContent = `Varian dipilih: ${selectedStoryVariant} (Rp 78.000).`;
-          if (gsapReady && !isReducedMotion() && typeof window?.gsap?.fromTo === 'function') {
-            window.gsap.fromTo(
-              storyVariantNote,
-              { y: 4 },
-              { y: 0, duration: 0.22, ease: 'power2.out', clearProps: 'transform', overwrite: 'auto' }
-            );
-          }
-        }
+  if (storyChipsContainer) {
+    storyChipsContainer.addEventListener?.('click', (e) => {
+      const chip = e.target?.closest?.('.story-variant-chip[data-story-variant]');
+      if (!chip) return;
+      sfx.playClick();
+      const featured = getProduct(featuredProductId) || getProducts().find((p) => p.id === featuredProductId) || getProducts()[0];
+      selectedStoryVariant = chip.dataset?.storyVariant || featured?.variants?.[0]?.label || '';
+      storyChipsContainer.querySelectorAll?.('.story-variant-chip[data-story-variant]')?.forEach((c) => {
+        const active = c === chip;
+        c.classList?.toggle?.('is-active', active);
+        c.setAttribute?.('aria-pressed', active ? 'true' : 'false');
       });
+      const activeVarObj = featured?.variants?.find((v) => v.label === selectedStoryVariant);
+      const effectivePrice = featured
+        ? Math.max(0, Number(featured.price || 0) + Number(activeVarObj?.priceDelta || 0))
+        : 78000;
+      if (storyPriceEl) storyPriceEl.textContent = formatIDR(effectivePrice);
+      if (storyVariantNote) {
+        const stockText = featured ? ` · ${formatProductStockLabel(featured, { fallback: 'Stok aktif' })}` : '';
+        storyVariantNote.textContent = `Varian dipilih: ${selectedStoryVariant} (${formatIDR(effectivePrice)})${stockText}.`;
+        if (gsapReady && !isReducedMotion() && typeof window?.gsap?.fromTo === 'function') {
+          window.gsap.fromTo(
+            storyVariantNote,
+            { y: 4 },
+            { y: 0, duration: 0.22, ease: 'power2.out', clearProps: 'transform', overwrite: 'auto' }
+          );
+        }
+      }
     });
   }
 
@@ -3456,19 +3676,20 @@ function animateWordReveal(gsap, selector, scrollTriggerConfig, vars = {}) {
         ? scrollTriggerConfig
         : { toggleActions: 'play none play none', ...scrollTriggerConfig })
     : undefined;
+  const toVars = {
+    yPercent: 0,
+    opacity: 1,
+    rotateZ: 0,
+    duration: vars.duration ?? 0.62,
+    stagger: vars.stagger ?? (isScrub ? 0.045 : 0.032),
+    ease: isScrub ? 'none' : (vars.ease ?? 'power3.out')
+  };
+  if (!isScrub) toVars.clearProps = 'transform';
+  if (triggerCfg) toVars.scrollTrigger = triggerCfg;
   gsap.fromTo(
     words,
     { yPercent: isScrub ? 94 : 104, opacity: 1, rotateZ: isScrub ? 2.2 : 1.5 },
-    {
-      yPercent: 0,
-      opacity: 1,
-      rotateZ: 0,
-      duration: vars.duration ?? 0.62,
-      stagger: vars.stagger ?? (isScrub ? 0.045 : 0.032),
-      ease: isScrub ? 'none' : (vars.ease ?? 'power3.out'),
-      clearProps: isScrub ? undefined : 'transform',
-      scrollTrigger: triggerCfg
-    }
+    toVars
   );
 }
 
@@ -3771,7 +3992,6 @@ function setupHeroChoreography(gsap, isDesktop) {
   } else {
     entrance.from('.hero-headline', { y: 28, duration: 0.65, clearProps: 'transform' });
   }
-  entrance.fromTo('.hero-kicker', { y: 18 }, { y: 0, opacity: 1, duration: 0.45, clearProps: 'transform' }, '-=0.52');
   if (descEl) {
     entrance.fromTo(descEl, { y: 20 }, { y: 0, opacity: 1, duration: 0.48, clearProps: 'transform' }, '-=0.45');
   }
@@ -3790,7 +4010,6 @@ function setupHeroChoreography(gsap, isDesktop) {
   });
   heroScroll
     .to('.hero-editorial', { y: isDesktop ? -68 : -24, ease: 'none' }, 0)
-    .to('.hero-kicker', { y: isDesktop ? -22 : -8, ease: 'none' }, 0)
     .to('.hero-actions', { y: isDesktop ? 22 : 8, ease: 'none' }, 0);
   if (isDesktop) {
     heroScroll
@@ -4307,6 +4526,8 @@ if (typeof window !== 'undefined') {
   window.dismissAdminAlert = dismissAdminAlert;
   window.openOrdersFromAlert = openOrdersFromAlert;
   window.checkWebhookStatus = checkWebhookStatus;
+  window.retryAdminOrdersSync = retryAdminOrdersSync;
+  window.syncFeaturedShowcase = syncFeaturedShowcase;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);

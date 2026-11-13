@@ -471,7 +471,7 @@ export async function replaceQRIS(payload, info = {}) {
     const history = previous && previous !== payload
       ? [{ payload: previous, replacedAt: Date.now() }, ...s.qris.history.filter((h) => h.payload !== payload && h.payload !== previous)].slice(0, 5)
       : s.qris.history;
-    return { ...s, qris: { payload, updatedAt: Date.now(), history, merchantName: info.merchantName || '' } };
+    return { ...s, qris: { ...s.qris, payload, updatedAt: Date.now(), history, merchantName: info.merchantName || '' } };
   }, { type: 'qris' });
   return next.qris;
 }
@@ -491,7 +491,7 @@ export async function saveSharedSettings(patchOrFn, detail = {}) {
   const patched = typeof patchOrFn === 'function' ? patchOrFn(structuredClone(s)) : { ...s, ...patchOrFn, store: { ...s.store, ...(patchOrFn?.store || {}) } };
   allocatedSettingsVersion = Math.max(Date.now(), sharedVersion(s) + 1, allocatedSettingsVersion + 1);
   const next = mergeSettings({ ...patched, sharedUpdatedAt: allocatedSettingsVersion });
-  if (canReachNetwork() && !await pushSettingsToCloud(next)) throw Error('Pengaturan belum tersimpan di server. Periksa token dan koneksi lalu coba lagi.');
+  if (canReachNetwork() && !await pushSettingsToCloud(next, { includeCatalog: false })) throw Error('Pengaturan belum tersimpan di server. Periksa token dan koneksi lalu coba lagi.');
   if (sharedVersion(getSettings()) > sharedVersion(next)) return getSettings();
   return saveSettings(next, detail);
 }
@@ -600,9 +600,9 @@ export async function syncSettingsWithCloud() {
   return applyRemoteSettings(remote);
 }
 
-export async function pushSettingsToCloud(settings) {
+export async function pushSettingsToCloud(settings, { includeCatalog = true } = {}) {
   if (!canReachNetwork() || !hasInventoryAdminToken()) return false;
-  const catalogVersion = getCatalogVersion();
+  const catalogVersion = includeCatalog ? getCatalogVersion() : 0;
   const payloadToPush = {
     payload: settings.qris?.payload || '',
     merchantName: settings.qris?.merchantName || settings.store?.name || '',

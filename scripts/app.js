@@ -919,6 +919,7 @@ export async function openCheckoutModal(existingOrderId = null) {
     return;
   }
   let newOrder;
+  const settingsSync = syncSettingsWithCloud().catch(() => null);
   setCheckoutPending(true);
   try {
     if (existingOrderId) {
@@ -935,6 +936,7 @@ export async function openCheckoutModal(existingOrderId = null) {
     showToast(`Reservasi berstatus ${statusLabel(newOrder.status, newOrder)}. Tidak ada tagihan baru dibuat.`);
     return;
   }
+  await Promise.race([settingsSync, new Promise((resolve) => setTimeout(resolve, 400))]);
 
   const adminDash = document.getElementById('admin-dashboard-modal-backdrop');
   overlays().close(adminDash);
@@ -2248,7 +2250,7 @@ function renderAdminPaymentsSection({ force = false } = {}) {
           </div>
           <strong style="display:block; font-size:0.88rem; margin-top:8px; color:var(--ink-primary);">Klik atau Seret Foto QRIS ke Sini</strong>
           <p style="font-size:0.75rem; color:var(--ink-secondary); margin:4px 0 10px;">Format: PNG, JPG, JPEG, atau WebP</p>
-          <button type="button" class="btn-primary" onclick="window.triggerQRISUpload()">Pilih File Gambar</button>
+          <button type="button" id="admin-qris-upload-btn" class="btn-primary" onclick="window.triggerQRISUpload()">Pilih File Gambar</button>
           <input type="file" id="admin-qris-file-input" aria-label="Foto QRIS" accept="image/*" hidden onchange="window.handleQRISImageUpload(event)" />
         </div>
         <div id="admin-qris-scan-status" role="status" style="display:none; padding:8px 12px; border-radius:6px; font-size:0.8rem; margin-bottom:12px;"></div>
@@ -2259,8 +2261,8 @@ function renderAdminPaymentsSection({ force = false } = {}) {
           <p style="font-size:0.75rem; color:var(--ink-secondary); margin-bottom:6px;">Jika Anda memiliki salinan teks string QRIS (diawali <code>000201...</code>):</p>
           <textarea id="admin-custom-qris-input" class="config-textarea" rows="3" placeholder="000201010211...">${escapeHTML(activePayload)}</textarea>
           <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-            <button type="button" class="btn-primary" onclick="window.adminApplyCustomQRIS()" style="padding:6px 14px; font-size:0.8rem;">Terapkan String QRIS</button>
-            <button type="button" class="btn-secondary" onclick="window.adminResetQRISDefault()" style="padding:6px 12px; font-size:0.78rem;">Gunakan QRIS Demo</button>
+            <button type="button" id="admin-apply-qris-btn" class="btn-primary" onclick="window.adminApplyCustomQRIS()" style="padding:6px 14px; font-size:0.8rem;">Terapkan String QRIS</button>
+            <button type="button" id="admin-reset-qris-btn" class="btn-secondary" onclick="window.adminResetQRISDefault()" style="padding:6px 12px; font-size:0.78rem;">Gunakan QRIS Demo</button>
           </div>
         </div>
 
@@ -2348,70 +2350,109 @@ export function handleQRISDrop(event) {
   }
 }
 
+function setQrisButtonsBusy(busy, activeBtn = null, activeLabel = 'Menerapkan...') {
+  const buttons = [
+    document.getElementById('admin-qris-upload-btn'),
+    document.getElementById('admin-apply-qris-btn'),
+    document.getElementById('admin-reset-qris-btn'),
+    ...Array.from(document.querySelectorAll?.('[data-action="admin-restore-qris"]') || [])
+  ].filter(Boolean);
+  for (const btn of buttons) {
+    if (busy) {
+      if (!btn.dataset.idleLabel) btn.dataset.idleLabel = btn.textContent || '';
+      btn.disabled = true;
+      btn.setAttribute?.('aria-busy', 'true');
+      if (btn === activeBtn) btn.textContent = activeLabel;
+    } else {
+      btn.disabled = false;
+      btn.removeAttribute?.('aria-busy');
+      if (btn.dataset.idleLabel) btn.textContent = btn.dataset.idleLabel;
+    }
+  }
+}
+
+function setQrisScanBanner(tone, content, { textOnly = false } = {}) {
+  const statusEl = document.getElementById('admin-qris-scan-status');
+  if (!statusEl) return;
+  const tones = {
+    info: { background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' },
+    error: { background: '#FEE2E2', color: '#B91C1C', border: '1px solid #FCA5A5' },
+    success: { background: 'var(--status-success-bg)', color: 'var(--status-success)', border: '1px solid #B7E4C7' }
+  };
+  const style = tones[tone] || tones.info;
+  statusEl.style.display = 'block';
+  statusEl.style.background = style.background;
+  statusEl.style.color = style.color;
+  statusEl.style.border = style.border;
+  if (textOnly) statusEl.textContent = content;
+  else statusEl.innerHTML = content;
+}
+
+async function applyQRISUpdate(val, { sourceBtn = null, activeLabel = 'Menerapkan...', statusHtml = '', toastMessage = 'QRIS baru berhasil diterapkan ke toko.' } = {}) {
+  clearQrisScanStatus();
+  setQrisButtonsBusy(true, sourceBtn, activeLabel);
+  try {
+    await replaceQRIS(val.payload, val.info || {});
+    if (statusHtml) setQrisScanBanner('success', statusHtml);
+    // Force-refresh payment panel right away even while focus stays inside #admin-section-payments.
+    renderAdminPaymentsSection({ force: true });
+    sfx.playSuccess();
+    refreshAdminDashboard();
+    showToast(toastMessage);
+    return true;
+  } catch (error) {
+    showToast(error.message);
+    return false;
+  } finally {
+    setQrisButtonsBusy(false);
+  }
+}
+
 export function handleQRISImageUpload(event) {
   const file = event.target && event.target.files && event.target.files[0];
+  if (event.target) event.target.value = '';
   if (file) {
     processQRISFile(file);
   }
 }
 
 export async function processQRISFile(file) {
-  const statusEl = document.getElementById('admin-qris-scan-status');
-  if (statusEl) {
-    statusEl.style.display = 'block';
-    statusEl.style.background = '#EFF6FF';
-    statusEl.style.color = '#1D4ED8';
-    statusEl.style.border = '1px solid #BFDBFE';
-    statusEl.innerHTML = `Sedang memindai gambar <strong>${escapeHTML(file.name)}</strong>...`;
-  }
+  const uploadBtn = document.getElementById('admin-qris-upload-btn');
+  setQrisScanBanner('info', `Sedang memindai gambar <strong>${escapeHTML(file.name)}</strong>...`);
+  setQrisButtonsBusy(true, uploadBtn, 'Memindai...');
   sfx.playClick();
+  await new Promise((resolve) => setTimeout(resolve, 0));
 
   try {
     const rawPayload = await scanQRISFromImageFile(file);
     if (!rawPayload) {
-      if (statusEl) {
-        statusEl.style.background = '#FEE2E2';
-        statusEl.style.color = '#B91C1C';
-        statusEl.style.border = '1px solid #FCA5A5';
-        statusEl.innerHTML = `Kode QR tidak terdeteksi dari foto ini. Pastikan foto QRIS jelas, tidak buram, dan tidak terpotong.`;
-      }
+      setQrisScanBanner('error', 'Kode QR tidak terdeteksi dari foto ini. Pastikan foto QRIS jelas, tidak buram, dan tidak terpotong.');
       showToast('Gambar QRIS tidak dapat dideteksi.');
       return;
     }
 
     const val = validateQRIS(rawPayload);
     if (!val.ok) {
-      if (statusEl) {
-        statusEl.style.background = '#FEE2E2';
-        statusEl.style.color = '#B91C1C';
-        statusEl.style.border = '1px solid #FCA5A5';
-        statusEl.textContent = `Kode QR terdeteksi namun struktur QRIS tidak valid: ${val.errors.join(', ')}`;
-      }
+      setQrisScanBanner('error', `Kode QR terdeteksi namun struktur QRIS tidak valid: ${val.errors.join(', ')}`, { textOnly: true });
       showToast('QRIS tidak valid: ' + val.errors[0]);
       return;
     }
 
-    // Success: preserve status feedback across subscriber re-render and save QRIS
-    if (statusEl) {
-      statusEl.style.display = 'block';
-      statusEl.style.background = 'var(--status-success-bg)';
-      statusEl.style.color = 'var(--status-success)';
-      statusEl.style.border = '1px solid #B7E4C7';
-      statusEl.innerHTML = `QRIS <strong>${escapeHTML(val.info?.merchantName || 'Toko')}</strong> valid (CRC OK) dan disimpan.`;
-    }
+    setQrisScanBanner('info', `QRIS <strong>${escapeHTML(val.info?.merchantName || 'Toko')}</strong> valid (CRC OK). Menyimpan &amp; menerapkan ke toko...`);
+    setQrisButtonsBusy(true, uploadBtn, 'Menyimpan...');
     await replaceQRIS(val.payload, val.info || {});
+    setQrisScanBanner('success', `QRIS <strong>${escapeHTML(val.info?.merchantName || 'Toko')}</strong> valid (CRC OK) dan langsung aktif.`);
+    // Force-refresh immediately because focus stays on the upload button inside #admin-section-payments.
+    renderAdminPaymentsSection({ force: true });
     sfx.playSuccess();
     refreshAdminDashboard();
     showToast(`QRIS ${val.info.merchantName || 'Toko'} berhasil diperbarui.`);
   } catch (err) {
     console.error('QR decode error:', err);
-    if (statusEl) {
-      statusEl.style.background = '#FEE2E2';
-      statusEl.style.color = '#B91C1C';
-      statusEl.style.border = '1px solid #FCA5A5';
-      statusEl.innerHTML = `Gagal memproses gambar: ${escapeHTML(err.message)}`;
-    }
+    setQrisScanBanner('error', `Gagal memproses gambar: ${escapeHTML(err.message)}`);
     showToast('Gagal memproses gambar: ' + err.message);
+  } finally {
+    setQrisButtonsBusy(false);
   }
 }
 
@@ -2424,32 +2465,35 @@ export async function adminApplyCustomQRIS() {
     await showDialog(`String QRIS tidak valid:\n${val.errors.join('\n')}`);
     return;
   }
-  clearQrisScanStatus();
-  try { await replaceQRIS(val.payload, val.info || {}); }
-  catch (error) { showToast(error.message); return; }
-  sfx.playSuccess();
-  refreshAdminDashboard();
-  showToast('QRIS baru berhasil diterapkan ke toko.');
+  await applyQRISUpdate(val, {
+    sourceBtn: document.getElementById('admin-apply-qris-btn'),
+    activeLabel: 'Menerapkan...',
+    statusHtml: `QRIS <strong>${escapeHTML(val.info?.merchantName || 'Toko')}</strong> berhasil diterapkan dan langsung aktif.`,
+    toastMessage: 'QRIS baru berhasil diterapkan ke toko.'
+  });
 }
 
-export async function adminRestoreQRIS(payload) {
+export async function adminRestoreQRIS(payload, triggerEl = null) {
   const val = validateQRIS(payload);
   if (!val.ok) return;
-  clearQrisScanStatus();
-  try { await replaceQRIS(val.payload, val.info || {}); }
-  catch (error) { showToast(error.message); return; }
-  sfx.playSuccess();
-  refreshAdminDashboard();
-  showToast('QRIS riwayat berhasil dipulihkan.');
+  await applyQRISUpdate(val, {
+    sourceBtn: triggerEl,
+    activeLabel: 'Memulihkan...',
+    statusHtml: `QRIS riwayat <strong>${escapeHTML(val.info?.merchantName || 'Toko')}</strong> dipulihkan dan langsung aktif.`,
+    toastMessage: 'QRIS riwayat berhasil dipulihkan.'
+  });
 }
 
 export async function adminResetQRISDefault() {
-  clearQrisScanStatus();
-  try { await replaceQRIS(DEMO_STATIC_QRIS, { merchantName: 'Atelier Nusantara' }); }
-  catch (error) { showToast(error.message); return; }
-  sfx.playSuccess();
-  refreshAdminDashboard();
-  showToast('QRIS di-reset ke default demo.');
+  await applyQRISUpdate(
+    { ok: true, payload: DEMO_STATIC_QRIS, info: { merchantName: 'Atelier Nusantara' } },
+    {
+      sourceBtn: document.getElementById('admin-reset-qris-btn'),
+      activeLabel: 'Mereset...',
+      statusHtml: 'QRIS demo default diaktifkan kembali.',
+      toastMessage: 'QRIS di-reset ke default demo.'
+    }
+  );
 }
 
 export async function saveAdminStorefrontSetting(key) {
@@ -2703,7 +2747,7 @@ export function initEventBindings() {
     } else if (action === 'admin-delete-product') {
       deleteProduct(trigger.dataset.productId);
     } else if (action === 'admin-restore-qris') {
-      adminRestoreQRIS(trigger.dataset.qrisPayload);
+      adminRestoreQRIS(trigger.dataset.qrisPayload, trigger);
     }
   });
 
@@ -2758,7 +2802,7 @@ function initRealtimeSync() {
     } else if (change.domain === 'settings') {
       updateStorefrontStatus();
       updateCartUI();
-      if (change.type === 'qris' && state.activeCheckoutOrderId) {
+      if ((change.type === 'qris' || change.type === 'cloud-sync') && state.activeCheckoutOrderId) {
         const order = getOrder(state.activeCheckoutOrderId);
         if (order) renderCheckoutView(order);
       }
@@ -3293,44 +3337,31 @@ function initApp() {
       syncInventory().catch(() => {});
     }
   }, 2000);
+  const syncCloudState = ({ inventory = false } = {}) => {
+    if (inventory) syncInventory().catch(() => {});
+    syncSettingsWithCloud().then((updated) => {
+      if (updated && state.activeCheckoutOrderId) {
+        const order = getOrder(state.activeCheckoutOrderId);
+        if (order) renderCheckoutView(order);
+      }
+    }).catch(() => {});
+    syncOrdersWithCloud().catch(() => {});
+  };
+
   if (typeof document !== 'undefined') {
     document.addEventListener?.('visibilitychange', () => {
-      if (document.visibilityState === 'visible') syncInventory().catch(() => {});
+      if (document.visibilityState === 'visible') syncCloudState({ inventory: true });
     });
   }
-  window.addEventListener('focus', () => syncInventory().catch(() => {}));
 
-  // Cloud QRIS and settings sync for all visitors across devices
-  syncSettingsWithCloud().then((updated) => {
-    if (updated && state.activeCheckoutOrderId) {
-      const order = getOrder(state.activeCheckoutOrderId);
-      if (order) renderCheckoutView(order);
-    }
-  }).catch(() => {});
-
-  syncOrdersWithCloud().catch(() => {});
-
-  // Polling every 12s so admin QRIS changes update all visitor screens in real time
+  // Initial sync and rapid foreground polling (4s) so admin QRIS changes propagate immediately across visitors
+  syncCloudState();
   if (typeof window !== 'undefined') {
     setInterval(() => {
-      syncSettingsWithCloud().then((updated) => {
-        if (updated && state.activeCheckoutOrderId) {
-          const order = getOrder(state.activeCheckoutOrderId);
-          if (order) renderCheckoutView(order);
-        }
-      }).catch(() => {});
-      syncOrdersWithCloud().catch(() => {});
-    }, 12000);
-
-    window.addEventListener('focus', () => {
-      syncSettingsWithCloud().then((updated) => {
-        if (updated && state.activeCheckoutOrderId) {
-          const order = getOrder(state.activeCheckoutOrderId);
-          if (order) renderCheckoutView(order);
-        }
-      }).catch(() => {});
-      syncOrdersWithCloud().catch(() => {});
-    });
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      syncCloudState();
+    }, 4000);
+    window.addEventListener('focus', () => syncCloudState({ inventory: true }));
   }
 
   if (typeof window !== 'undefined' && typeof requestAnimationFrame === 'function') {

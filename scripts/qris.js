@@ -278,65 +278,100 @@ export async function scanQRISFromImageFile(file) {
     img.src = src;
   });
 
-  const objectUrl = URL.createObjectURL(file);
+  const getJsQR = () => {
+    if (typeof window !== 'undefined' && typeof window.jsQR === 'function') return window.jsQR;
+    if (typeof globalThis !== 'undefined' && typeof globalThis.jsQR === 'function') return globalThis.jsQR;
+    return null;
+  };
+
+  let bitmap = null;
+  let objectUrl = null;
   try {
-    const img = await loadImage(objectUrl);
-
-    // 1. Native BarcodeDetector if available in browser
-    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+    let source = null;
+    if (typeof createImageBitmap === 'function') {
       try {
-        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-        const detected = await detector.detect(img);
-        if (detected && detected.length > 0 && detected[0].rawValue) {
-          return cleanQRISPayload(detected[0].rawValue);
-        }
-      } catch (err) {
-        console.warn('BarcodeDetector error, using jsQR fallback:', err);
+        bitmap = await createImageBitmap(file);
+        source = bitmap;
+      } catch {
+        bitmap = null;
       }
     }
+    if (!source) {
+      objectUrl = URL.createObjectURL(file);
+      source = await loadImage(objectUrl);
+    }
 
-    // 2. jsQR fallback
+    const naturalWidth = source.naturalWidth || source.width;
+    const naturalHeight = source.naturalHeight || source.height;
+    const maxSourceDim = Math.max(naturalWidth || 0, naturalHeight || 0);
     const canvas = document.createElement('canvas');
-    const maxDim = 1200;
-    let width = img.naturalWidth || img.width;
-    let height = img.naturalHeight || img.height;
-
-    if (width > maxDim || height > maxDim) {
-      if (width > height) {
-        height = Math.round((height * maxDim) / width);
-        width = maxDim;
-      } else {
-        width = Math.round((width * maxDim) / height);
-        height = maxDim;
-      }
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D tidak didukung.');
 
-    ctx.drawImage(img, 0, 0, width, height);
-    const imageData = ctx.getImageData(0, 0, width, height);
+    const detector = typeof window !== 'undefined' && 'BarcodeDetector' in window
+      ? new window.BarcodeDetector({ formats: ['qr_code'] })
+      : null;
+    const jsQR = getJsQR();
+    if (!jsQR && !detector) {
+      throw new Error('Modul pembaca QR (jsQR) belum termuat. Pastikan jsqr.js dimuat.');
+    }
 
-    const getJsQR = () => {
-      if (typeof window !== 'undefined' && typeof window.jsQR === 'function') return window.jsQR;
-      if (typeof globalThis !== 'undefined' && typeof globalThis.jsQR === 'function') return globalThis.jsQR;
+    const decodeAtMaxDim = async (maxDim, inversionAttempts) => {
+      let width = naturalWidth;
+      let height = naturalHeight;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.max(1, Math.round((height * maxDim) / width));
+          width = maxDim;
+        } else {
+          width = Math.max(1, Math.round((width * maxDim) / height));
+          height = maxDim;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(source, 0, 0, width, height);
+
+      if (detector) {
+        try {
+          const detected = await detector.detect(canvas);
+          if (detected && detected.length > 0 && detected[0].rawValue) {
+            return cleanQRISPayload(detected[0].rawValue);
+          }
+        } catch (err) {
+          console.warn('BarcodeDetector error, using jsQR fallback:', err);
+        }
+      }
+
+      if (jsQR) {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const code = jsQR(imageData.data, width, height, { inversionAttempts });
+        if (code && code.data) {
+          return cleanQRISPayload(code.data);
+        }
+      } else {
+        throw new Error('Modul pembaca QR (jsQR) belum termuat. Pastikan jsqr.js dimuat.');
+      }
+
       return null;
     };
 
-    const jsQR = getJsQR();
-    if (jsQR) {
-      const code = jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
-      if (code && code.data) {
-        return cleanQRISPayload(code.data);
-      }
-    } else {
-      throw new Error('Modul pembaca QR (jsQR) belum termuat. Pastikan jsqr.js dimuat.');
+    // Fast 680px pass decodes screenshots/posters in milliseconds before trying high-res fallback.
+    const fastMatch = await decodeAtMaxDim(680, 'dontInvert');
+    if (fastMatch) return fastMatch;
+
+    if (maxSourceDim > 680) {
+      const highResMatch = await decodeAtMaxDim(1200, 'attemptBoth');
+      if (highResMatch) return highResMatch;
+    } else if (jsQR) {
+      const invertedMatch = await decodeAtMaxDim(680, 'onlyInvert');
+      if (invertedMatch) return invertedMatch;
     }
 
     return null;
   } finally {
-    URL.revokeObjectURL(objectUrl);
+    bitmap?.close?.();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
   }
 }

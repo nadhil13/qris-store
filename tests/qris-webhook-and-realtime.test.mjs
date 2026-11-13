@@ -317,8 +317,74 @@ test('checkout customer validation prevents 400 POST, .sr-only hides voucher lab
     assert.match(getEl('admin-live-alert-banner').innerHTML, /Rani/);
     assert.match(getEl('admin-section-payments').innerHTML, /admin-unique-code-toggle/);
     assert.match(getEl('admin-section-payments').innerHTML, /\/api\/qris-webhook/);
+
+    // Turning on uniqueCodeEnabled and immediately applying a new QRIS (even with focus inside #admin-section-payments)
+    // must preserve uniqueCodeEnabled, omit full catalog products from the QRIS POST, and force-refresh the preview.
+    const store = await import('../scripts/core/store.js');
+    const qris = await import('../scripts/qris.js');
+    const settingsPosts = [];
+    globalThis.fetch = async (url, options = {}) => {
+      if (url === '/api/settings' && options.method === 'POST') {
+        const body = JSON.parse(options.body);
+        settingsPosts.push(body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            settings: {
+              updatedAt: body.updatedAt,
+              qris: { payload: body.payload, merchantName: body.merchantName, uniqueCodeEnabled: Boolean(body.uniqueCodeEnabled), updatedAt: body.updatedAt },
+              store: body.store
+            }
+          })
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, orders: [incoming, existing], stock: { revision: step, products: { 'prod-01': 20 } } }) };
+    };
+
+    await app.toggleUniqueCodeSetting(true);
+    assert.equal(store.getSettings().qris.uniqueCodeEnabled, true);
+
+    const paySec = getEl('admin-section-payments');
+    const applyBtn = getEl('admin-apply-qris-btn');
+    const qrisInput = getEl('admin-custom-qris-input');
+    paySec.contains = (target) => target === applyBtn || target === qrisInput;
+    globalThis.document.activeElement = applyBtn;
+
+    const rawBody = qris.buildTLV([
+      ...qris.parseTLV(store.DEMO_STATIC_QRIS).items.filter((i) => i.tag !== '63' && i.tag !== '59'),
+      { tag: '59', value: 'GoPay Merchant Cepat' }
+    ]);
+    const updatedPayload = `${rawBody}6304${qris.calculateCRC16(`${rawBody}6304`)}`;
+    qrisInput.value = updatedPayload;
+
+    await app.adminApplyCustomQRIS();
+    assert.equal(store.getSettings().qris.payload, updatedPayload);
+    assert.equal(store.getSettings().qris.uniqueCodeEnabled, true, 'replaceQRIS must preserve uniqueCodeEnabled');
+    assert.match(paySec.innerHTML, /GoPay Merchant Cepat/, 'Active QRIS preview must refresh immediately without blurring focus');
+    assert.equal(settingsPosts.at(-1).products, undefined, 'QRIS-only settings save must not upload full product catalog');
   } finally {
     globalThis.setInterval = nativeSetInterval;
   }
+});
+
+test('Cache-busting config: vercel.json disables stale HTML/JS/CSS/SW caching and index.html auto-reloads on SW update', async () => {
+  const [vercelRaw, html, sw] = await Promise.all([
+    read('vercel.json'),
+    read('index.html'),
+    read('sw.js')
+  ]);
+  const vercel = JSON.parse(vercelRaw);
+
+  const rules = new Map((vercel.headers || []).map((h) => [h.source, h.headers || []]));
+  for (const source of ['/', '/index.html', '/sw.js', '/scripts/(.*)', '/styles/(.*)']) {
+    const cc = rules.get(source)?.find((x) => x.key === 'Cache-Control')?.value || '';
+    assert.match(cc, /no-store/, `${source} must disable stale edge/browser caching`);
+  }
+  assert.match(html, /styles\/main\.css\?v=20261113-v22/);
+  assert.match(html, /scripts\/app\.js\?v=20261113-v22/);
+  assert.match(html, /controllerchange/);
+  assert.match(sw, /atelier-nusantara-cache-v22/);
 });
 

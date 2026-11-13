@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atelier-nusantara-cache-v23';
+const CACHE_NAME = 'atelier-nusantara-cache-v24';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => { });
         }
         return networkResponse;
       })

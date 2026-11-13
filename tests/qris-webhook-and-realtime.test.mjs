@@ -171,7 +171,7 @@ test('syncInventory prunes stale 404 ORDER_NOT_FOUND reservations & setInventory
     setItem: (k, v) => storage.set(k, String(v)),
     removeItem: (k) => storage.delete(k)
   };
-  globalThis.window = { location: { protocol: 'https:' }, addEventListener() {} };
+  globalThis.window = { location: { protocol: 'https:' }, addEventListener() { } };
 
   const store = await import(`../scripts/core/store.js?sync=${Date.now()}`);
   const inventory = await import(`../scripts/core/inventory.js?sync=${Date.now()}`);
@@ -240,10 +240,10 @@ test('checkout customer validation prevents 400 POST, .sr-only hides voucher lab
     setAttribute(k, v) { this.attrs[k] = String(v); },
     getAttribute(k) { return this.attrs[k] ?? null; },
     removeAttribute(k) { delete this.attrs[k]; },
-    addEventListener() {},
-    removeEventListener() {},
-    scrollIntoView() {},
-    focus() {},
+    addEventListener() { },
+    removeEventListener() { },
+    scrollIntoView() { },
+    focus() { },
     matches: () => false,
     contains: () => false,
     querySelector: () => null,
@@ -267,11 +267,11 @@ test('checkout customer validation prevents 400 POST, .sr-only hides voucher lab
   const storage = new Map();
   globalThis.localStorage = { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k) };
   globalThis.document = {
-    body: { children: [], style: {}, querySelector: () => null, querySelectorAll: () => [], classList: { add() {}, remove() {} } },
+    body: { children: [], style: {}, querySelector: () => null, querySelectorAll: () => [], classList: { add() { }, remove() { } } },
     activeElement: null,
     visibilityState: 'visible',
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener() { },
+    removeEventListener() { },
     getElementById: getEl,
     querySelector: () => null,
     querySelectorAll: () => []
@@ -280,10 +280,10 @@ test('checkout customer validation prevents 400 POST, .sr-only hides voucher lab
     document: globalThis.document,
     localStorage: globalThis.localStorage,
     location: { protocol: 'https:', origin: 'https://qris-store.vercel.app', search: '', hash: '' },
-    addEventListener() {},
-    removeEventListener() {}
+    addEventListener() { },
+    removeEventListener() { }
   };
-  globalThis.requestAnimationFrame = () => {};
+  globalThis.requestAnimationFrame = () => { };
 
   const nativeSetInterval = globalThis.setInterval;
   globalThis.setInterval = (...args) => {
@@ -405,9 +405,9 @@ test('Cache-busting config: vercel.json disables stale HTML/JS/CSS/SW caching an
     const cc = rules.get(source)?.find((x) => x.key === 'Cache-Control')?.value || '';
     assert.match(cc, /no-store/, `${source} must disable stale edge/browser caching`);
   }
-  assert.match(html, /styles\/main\.css\?v=20261113-v23/);
-  assert.match(html, /scripts\/app\.js\?v=20261113-v23/);
+  assert.match(html, /styles\/main\.css\?v=20261113-v24/);
+  assert.match(html, /scripts\/app\.js\?v=20261113-v24/);
   assert.match(html, /controllerchange/);
-  assert.match(sw, /atelier-nusantara-cache-v23/);
+  assert.match(sw, /atelier-nusantara-cache-v24/);
 });
 

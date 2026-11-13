@@ -2863,6 +2863,96 @@ function initRealtimeSync() {
     }
   });
 
+  // Story 3-step interactive dossier & QRIS channel selector
+  const storyTabs = Array.from(document.querySelectorAll?.('.story-step-tab') || []);
+  if (storyTabs.length) {
+    const tagByStep = { '1': 'Contoh produk', '2': 'Alur checkout', '3': 'Struk & QRIS' };
+    const photoTag = document.querySelector?.('.story-photo-tag');
+    const activateStoryStep = (targetTab, focusTab = false) => {
+      const step = targetTab?.dataset?.storyStep;
+      if (!step) return;
+      storyTabs.forEach((btn) => {
+        const isTarget = btn === targetTab;
+        btn.classList?.toggle?.('active', isTarget);
+        btn.setAttribute?.('aria-selected', isTarget ? 'true' : 'false');
+      });
+      document.querySelectorAll?.('.story-panel')?.forEach((panel) => {
+        const matches = panel.id === `story-panel-${step}`;
+        panel.classList?.toggle?.('active', matches);
+        if (matches) {
+          panel.removeAttribute?.('hidden');
+          if (gsapReady && !isReducedMotion() && typeof window?.gsap?.fromTo === 'function') {
+            window.gsap.fromTo(
+              panel,
+              { y: 8, opacity: 0.15 },
+              { y: 0, opacity: 1, duration: 0.28, ease: 'power3.out', clearProps: 'transform,opacity', overwrite: 'auto' }
+            );
+          }
+        } else {
+          panel.setAttribute?.('hidden', '');
+        }
+      });
+      if (photoTag && tagByStep[step]) {
+        photoTag.textContent = tagByStep[step];
+      }
+      if (focusTab) targetTab.focus?.();
+    };
+
+    storyTabs.forEach((btn, idx) => {
+      btn.addEventListener?.('click', () => {
+        sfx.playClick();
+        activateStoryStep(btn);
+      });
+      btn.addEventListener?.('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        const nextIdx = e.key === 'ArrowRight'
+          ? (idx + 1) % storyTabs.length
+          : (idx - 1 + storyTabs.length) % storyTabs.length;
+        sfx.playClick();
+        activateStoryStep(storyTabs[nextIdx], true);
+      });
+    });
+  }
+
+  const ritualChannelBtns = Array.from(document.querySelectorAll?.('.ritual-badge[data-pay-channel]') || []);
+  if (ritualChannelBtns.length) {
+    const channelNotes = {
+      qris: 'Satu kode standar nasional terbaca langsung dengan nominal tepat.',
+      ewallet: 'Pindai langsung lewat GoPay, OVO, DANA, atau ShopeePay tanpa ketik nominal.',
+      mbanking: 'Didukung BCA mobile, Livin’ Mandiri, BRImo, dan bank QRIS lainnya.'
+    };
+    const noteEl = document.getElementById?.('ritual-channel-note');
+    ritualChannelBtns.forEach((btn) => {
+      btn.addEventListener?.('click', () => {
+        sfx.playClick();
+        const channel = btn.dataset?.payChannel || 'qris';
+        ritualChannelBtns.forEach((item) => {
+          const active = item === btn;
+          item.classList?.toggle?.('is-active', active);
+          item.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+        });
+        if (noteEl && channelNotes[channel]) {
+          noteEl.textContent = channelNotes[channel];
+          if (gsapReady && !isReducedMotion() && typeof window?.gsap?.fromTo === 'function') {
+            window.gsap.fromTo(
+              noteEl,
+              { y: 4, opacity: 0.25 },
+              { y: 0, opacity: 1, duration: 0.24, ease: 'power2.out', clearProps: 'transform,opacity', overwrite: 'auto' }
+            );
+            if (document.querySelector?.('.ritual-qr-scanline')) {
+              window.gsap.fromTo(
+                '.ritual-qr-scanline',
+                { y: 0, opacity: 0.35 },
+                { y: 52, opacity: 0.9, duration: 1.15, repeat: 1, yoyo: true, ease: 'sine.inOut', overwrite: 'auto' }
+              );
+            }
+          }
+        }
+      });
+    });
+  }
+
   // Sweep expired orders periodically
   setInterval(() => {
     sweepExpiredOrders();
@@ -3016,30 +3106,35 @@ function bindPointerInteractions(gsap) {
   if (!finePointer) return [];
   const cleanups = [];
 
-  const showcase = document.querySelector?.('.showcase-card');
-  if (showcase && typeof showcase.getBoundingClientRect === 'function') {
-    gsap.set?.(showcase, { transformPerspective: 900 });
-    const rxTo = gsap.quickTo(showcase, 'rotationX', { duration: 0.45, ease: 'power3.out' });
-    const ryTo = gsap.quickTo(showcase, 'rotationY', { duration: 0.45, ease: 'power3.out' });
+  const attachMicroTilt = (selector, maxDeg) => {
+    const el = document.querySelector?.(selector);
+    if (!el || typeof el.getBoundingClientRect !== 'function') return;
+    gsap.set?.(el, { transformPerspective: 920 });
+    const rxTo = gsap.quickTo(el, 'rotationX', { duration: 0.45, ease: 'power3.out' });
+    const ryTo = gsap.quickTo(el, 'rotationY', { duration: 0.45, ease: 'power3.out' });
     const onMove = (e) => {
-      const rect = showcase.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
       const nx = (e.clientX - rect.left) / rect.width - 0.5;
       const ny = (e.clientY - rect.top) / rect.height - 0.5;
-      rxTo(-ny * 5);
-      ryTo(nx * 5);
+      rxTo(-ny * maxDeg);
+      ryTo(nx * maxDeg);
     };
     const onLeave = () => {
       rxTo(0);
       ryTo(0);
     };
-    showcase.addEventListener('pointermove', onMove);
-    showcase.addEventListener('pointerleave', onLeave);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerleave', onLeave);
     cleanups.push(() => {
-      showcase.removeEventListener('pointermove', onMove);
-      showcase.removeEventListener('pointerleave', onLeave);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerleave', onLeave);
     });
-  }
+  };
+
+  attachMicroTilt('.showcase-card', 5);
+  attachMicroTilt('.story-dossier', 3.4);
+  attachMicroTilt('.ritual-ticket', 2.4);
 
   document.querySelectorAll?.('.hero-actions .btn-primary, .cta-actions .btn-primary, .showcase-btn')?.forEach((btn) => {
     if (typeof btn.getBoundingClientRect !== 'function') return;
@@ -3199,22 +3294,56 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
   animateWordReveal(gsap, '.story-copy h2', {
     trigger: '.story-copy h2',
     start: 'top 90%',
-    end: 'top 52%',
-    scrub: 0.65
+    end: 'top 56%',
+    scrub: 0.55
   });
 
   const storyTl = gsap.timeline({
     scrollTrigger: {
       trigger: '.luxury-story',
-      start: 'top 90%',
-      end: 'center 52%',
-      scrub: 0.78
+      start: 'top 92%',
+      end: 'top 54%',
+      scrub: 0.65
     }
   });
   storyTl
-    .from('.story-copy', { x: isDesktop ? -34 : 0, y: isDesktop ? 0 : 22, opacity: 0.25, ease: 'none' }, 0)
-    .from('.story-visual', { x: isDesktop ? 34 : 0, y: 24, opacity: 0.25, ease: 'none' }, 0)
-    .from('.story-metrics > div', { y: 20, opacity: 0.2, stagger: 0.12, ease: 'none' }, 0.12);
+    .from('.story-copy', { x: isDesktop ? -26 : 0, y: isDesktop ? 0 : 18, opacity: 0.35, ease: 'none' }, 0)
+    .from('.story-visual', { x: isDesktop ? 26 : 0, y: 20, opacity: 0.35, ease: 'none' }, 0)
+    .from('.story-metrics > div', { y: 18, opacity: 0.25, stagger: 0.1, ease: 'none' }, 0.08);
+
+  if (document.querySelector?.('.story-photo-wrap img')) {
+    gsap.fromTo(
+      '.story-photo-wrap img',
+      { yPercent: -6, scale: 1.07 },
+      {
+        yPercent: 6,
+        scale: 1,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.luxury-story',
+          start: 'top bottom',
+          end: 'bottom top',
+          scrub: true
+        }
+      }
+    );
+  }
+  if (isDesktop && document.querySelector?.('.story-dossier')) {
+    gsap.fromTo(
+      '.story-dossier',
+      { y: 12 },
+      {
+        y: -14,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.luxury-story',
+          start: 'top 95%',
+          end: 'bottom 15%',
+          scrub: true
+        }
+      }
+    );
+  }
 
   document.querySelectorAll?.('[data-count-to]')?.forEach((counterEl) => {
     const target = Number(counterEl.dataset?.countTo);
@@ -3222,7 +3351,7 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     const holder = { value: 0 };
     gsap.to(holder, {
       value: target,
-      duration: 0.9,
+      duration: 0.85,
       ease: 'power2.out',
       scrollTrigger: {
         trigger: '.story-metrics',
@@ -3238,75 +3367,122 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     });
   });
 
+  animateWordReveal(gsap, '.ritual-copy h2', {
+    trigger: '.ritual-copy h2',
+    start: 'top 92%',
+    toggleActions: 'play none none reverse'
+  });
+  gsap.fromTo(
+    '.ritual-shell',
+    { y: 24, opacity: 0.45 },
+    {
+      y: 0,
+      opacity: 1,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.ritual-shell',
+        start: 'top 94%',
+        end: 'top 62%',
+        scrub: 0.5
+      }
+    }
+  );
+  if (document.querySelector?.('.ritual-ticket')) {
+    gsap.fromTo(
+      '.ritual-ticket',
+      { y: 18, scale: 0.975, opacity: 0.4 },
+      {
+        y: 0,
+        scale: 1,
+        opacity: 1,
+        duration: 0.55,
+        ease: 'power3.out',
+        clearProps: 'transform,opacity',
+        scrollTrigger: {
+          trigger: '.ritual-shell',
+          start: 'top 86%',
+          toggleActions: 'play none none reverse'
+        }
+      }
+    );
+  }
+  if (document.querySelector?.('.ritual-qr-scanline')) {
+    gsap.fromTo(
+      '.ritual-qr-scanline',
+      { y: 0, opacity: 0.35 },
+      {
+        y: 52,
+        opacity: 0.9,
+        duration: 1.3,
+        repeat: 1,
+        yoyo: true,
+        ease: 'sine.inOut',
+        scrollTrigger: {
+          trigger: '.ritual-shell',
+          start: 'top 84%',
+          toggleActions: 'play none none reset'
+        }
+      }
+    );
+  }
+  gsap.fromTo(
+    '.ritual-badge',
+    { y: 14, opacity: 0.2 },
+    {
+      y: 0,
+      opacity: 1,
+      duration: 0.45,
+      stagger: 0.08,
+      ease: 'power3.out',
+      clearProps: 'transform,opacity',
+      scrollTrigger: {
+        trigger: '.ritual-shell',
+        start: 'top 88%',
+        toggleActions: 'play none none reverse'
+      }
+    }
+  );
+
   gsap.fromTo(
     '.cta-shell',
-    { scale: 0.94, y: 22 },
+    { scale: 0.975, y: 24, opacity: 0.45 },
     {
       scale: 1,
       y: 0,
+      opacity: 1,
       ease: 'none',
       scrollTrigger: {
         trigger: '.cta-shell',
-        start: 'top 92%',
-        end: 'center 54%',
-        scrub: 0.75
+        start: 'top 96%',
+        end: 'top 64%',
+        scrub: 0.5
       }
     }
   );
   animateWordReveal(gsap, '.cta-copy h2', {
     trigger: '.cta-copy h2',
-    start: 'top 90%',
+    start: 'top 94%',
     toggleActions: 'play none none reverse'
   });
-
-  animateWordReveal(gsap, '.ritual-copy h2', {
-    trigger: '.ritual-copy h2',
-    start: 'top 90%',
-    toggleActions: 'play none none reverse'
-  });
-  gsap.fromTo(
-    '.ritual-badge',
-    {
-      y: 26,
-      x: (idx) => (isDesktop ? (1 - idx) * 32 : 0),
-      rotate: (idx) => (isDesktop ? (idx - 1) * 5.5 : 0),
-      scale: 0.94,
-      opacity: 0.28
-    },
-    {
-      y: 0,
-      x: 0,
-      rotate: 0,
-      scale: 1,
-      opacity: 1,
-      stagger: 0.08,
-      ease: 'power2.out',
-      scrollTrigger: {
-        trigger: '.ritual-shell',
-        start: 'top 90%',
-        end: 'center 54%',
-        scrub: 0.75
-      }
-    }
-  );
 
   animateWordReveal(gsap, '.footer-brand', {
     trigger: '.site-footer',
-    start: 'top 95%',
+    start: 'top 98%',
     toggleActions: 'play none none reverse'
   });
   gsap.fromTo(
     ['.footer-brand-col', '.footer-nav-col', '.footer-bottom'],
-    { y: 18, opacity: 0.25 },
+    { y: 16, opacity: 0.3 },
     {
       y: 0,
       opacity: 1,
-      duration: 0.55,
-      stagger: 0.08,
+      duration: 0.5,
+      stagger: 0.07,
       ease: 'power2.out',
+      clearProps: 'transform,opacity',
       scrollTrigger: {
         trigger: '.site-footer',
-        start: 'top 95%',
+        start: 'top 98%',
         toggleActions: 'play none none reverse'
       }
     }

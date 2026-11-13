@@ -37,8 +37,10 @@ test('expanded GSAP & ScrollTrigger choreography: bidirectional scrub, kinetic w
   assert.match(css, /\.kt-clip\s*\{[\s\S]*?overflow:\s*hidden;/);
   assert.match(css, /\.site-header\.is-scrolled\s*\{/);
   assert.match(css, /body\.gsap-motion-active\s+\.hero-section/);
+  assert.doesNotMatch(css, /\.luxury-story[^{]*\{[^}]*perspective:/);
   assert.match(app, /ScrollTrigger\.batch\([\s\S]*onEnterBack:/);
   assert.match(app, /window\.innerHeight\s*>=\s*540/);
+  assert.match(app, /fitsPinnedViewport/);
   assert.match(app, /anticipatePin:\s*1/);
 
   const prevGlobals = {

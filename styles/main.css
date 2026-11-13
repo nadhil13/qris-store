@@ -5334,12 +5334,10 @@ a {
   display: inline-block;
 }
 
-body.gsap-motion-active .hero-section,
-body.gsap-motion-active .product-grid,
-body.gsap-motion-active .luxury-story,
-body.gsap-motion-active .luxury-ritual,
-body.gsap-motion-active .final-cta {
-  perspective: 1200px;
+/* Keep section ancestors free of CSS perspective/transform so ScrollTrigger pins never hit a fixed containing block;
+   3D perspective is applied per-card via GSAP transformPerspective. */
+body.gsap-motion-active .hero-section {
+  overflow-x: clip;
 }
 
 body.gsap-motion-active .showcase-card,
@@ -5375,17 +5373,21 @@ body.gsap-motion-active .ritual-badge {
 
 @media (min-width: 900px) and (max-height: 760px) {
   .luxury-story {
-    padding-block: 54px;
+    padding-block: 44px;
   }
 
   .story-metrics {
-    margin-top: 22px;
-    padding-top: 18px;
+    margin-top: 20px;
+    padding-top: 16px;
     gap: 14px;
   }
 
   .story-timeline-rail {
-    margin-top: 18px;
+    margin-top: 16px;
+  }
+
+  .story-photo-wrap {
+    aspect-ratio: 2 / 1;
   }
 
   .story-rail-item {

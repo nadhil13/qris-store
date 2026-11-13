@@ -3175,14 +3175,14 @@ function bindCatalogCardBatch(gsap, ScrollTrigger, grid) {
     onEnter: (batch) => {
       gsap.fromTo(
         batch,
-        { y: 42, scale: 0.93, rotationX: 6 },
+        { y: 40, scale: 0.94, rotationX: 6, transformPerspective: 1100 },
         { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 0.52, stagger: 0.055, ease: 'power3.out', clearProps: 'transform', overwrite: 'auto' }
       );
     },
     onEnterBack: (batch) => {
       gsap.fromTo(
         batch,
-        { y: -36, scale: 0.94, rotationX: -5 },
+        { y: -34, scale: 0.94, rotationX: -5, transformPerspective: 1100 },
         { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 0.5, stagger: 0.055, ease: 'power3.out', clearProps: 'transform', overwrite: 'auto' }
       );
     }
@@ -3196,7 +3196,7 @@ function animateCatalogCards(grid) {
   if (!cards.length) return;
   window.gsap.fromTo(
     cards,
-    { y: 36, scale: 0.94, rotationX: 5 },
+    { y: 34, scale: 0.94, rotationX: 5, transformPerspective: 1100 },
     { y: 0, opacity: 1, scale: 1, rotationX: 0, duration: 0.48, stagger: { amount: 0.28, from: 'start' }, ease: 'power3.out', clearProps: 'transform,opacity', overwrite: 'auto' }
   );
   bindCatalogCardBatch(window.gsap, window.ScrollTrigger, grid);
@@ -3616,14 +3616,15 @@ function setupHeroChoreography(gsap, isDesktop) {
   }
   entrance
     .fromTo('.hero-actions', { y: 22, scale: 0.96 }, { y: 0, scale: 1, opacity: 1, duration: 0.46, clearProps: 'transform' }, '-=0.38')
-    .fromTo('.hero-visual', { y: 44, scale: 0.93, rotationX: isDesktop ? 5 : 0 }, { y: 0, scale: 1, rotationX: 0, opacity: 1, duration: 0.72, clearProps: 'transform' }, '-=0.54');
+    .fromTo('.hero-visual', { y: 44, scale: 0.93, rotationX: isDesktop ? 5 : 0, transformPerspective: 1100 }, { y: 0, scale: 1, rotationX: 0, opacity: 1, duration: 0.72, clearProps: 'transform' }, '-=0.54');
 
   const heroScroll = gsap.timeline({
     scrollTrigger: {
       trigger: '.hero-section',
       start: 'top top',
       end: 'bottom top',
-      scrub: 0.65
+      scrub: 0.65,
+      invalidateOnRefresh: true
     }
   });
   heroScroll
@@ -3632,8 +3633,8 @@ function setupHeroChoreography(gsap, isDesktop) {
     .to('.hero-actions', { y: isDesktop ? 22 : 8, ease: 'none' }, 0);
   if (isDesktop) {
     heroScroll
-      .to('.hero-visual', { y: -96, scale: 0.92, rotationX: 4, rotationY: -5, ease: 'none' }, 0)
-      .to('.showcase-card', { yPercent: -12, rotation: -3.6, ease: 'none' }, 0)
+      .to('.hero-visual', { y: -96, scale: 0.92, rotationX: 4, rotationY: -5, transformPerspective: 1100, ease: 'none' }, 0)
+      .to('.showcase-card', { yPercent: -12, rotation: -3.6, transformPerspective: 1100, ease: 'none' }, 0)
       .to('.showcase-tag', { y: -44, x: 14, ease: 'none' }, 0)
       .to('.showcase-img-wrap img', { yPercent: 12, scale: 1.15, ease: 'none' }, 0);
   } else {
@@ -3687,10 +3688,10 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     }
   });
   storyArrival
-    .fromTo('.story-copy', { x: isDesktop ? -44 : 0, y: isDesktop ? 16 : 24, opacity: 1 }, { x: 0, y: 0, opacity: 1, ease: 'none' }, 0)
-    .fromTo('.story-visual', { x: isDesktop ? 48 : 0, y: 36, scale: 0.94, rotationY: isDesktop ? -6 : 0, opacity: 1 }, { x: 0, y: 0, scale: 1, rotationY: 0, opacity: 1, ease: 'none' }, 0)
-    .fromTo('.story-metrics > div', { y: 28, scale: 0.96, opacity: 1 }, { y: 0, scale: 1, opacity: 1, stagger: 0.08, ease: 'none' }, 0.05)
-    .fromTo('.story-rail-item', { x: isDesktop ? -26 : 0, y: 18, opacity: 1 }, { x: 0, y: 0, opacity: 1, stagger: 0.06, ease: 'none' }, 0.08);
+    .fromTo('.story-copy', { x: isDesktop ? -40 : 0, y: isDesktop ? 14 : 20, opacity: 1 }, { x: 0, y: 0, opacity: 1, ease: 'none' }, 0)
+    .fromTo('.story-visual', { x: isDesktop ? 42 : 0, y: 28, scale: 0.94, rotationY: isDesktop ? -5 : 0, transformPerspective: 1100, opacity: 1 }, { x: 0, y: 0, scale: 1, rotationY: 0, opacity: 1, ease: 'none' }, 0)
+    .fromTo('.story-metrics > div', { y: 24, scale: 0.96, opacity: 1 }, { y: 0, scale: 1, opacity: 1, stagger: 0.08, ease: 'none' }, 0.05)
+    .fromTo('.story-rail-item', { x: isDesktop ? -22 : 0, y: 14, opacity: 1 }, { x: 0, y: 0, opacity: 1, stagger: 0.06, ease: 'none' }, 0.08);
 
   const storyParallax = gsap.timeline({
     scrollTrigger: {
@@ -3706,46 +3707,68 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
 
   const pinStage = document.querySelector?.('.story-stage-pin');
   const railFill = document.getElementById?.('story-rail-fill');
+  const headerEl = document.getElementById?.('site-header');
+  const headerHeight = Math.round(headerEl?.getBoundingClientRect?.().height || 72);
+  const pinTop = headerHeight + 18;
+  const stageHeight = Math.round(pinStage?.getBoundingClientRect?.().height || 0);
+  const fitsPinnedViewport = Boolean(
+    stageHeight > 0 &&
+    typeof window?.innerHeight === 'number' &&
+    window.innerHeight >= 540 &&
+    stageHeight <= (window.innerHeight - pinTop - 18)
+  );
   const canPinStoryStage = Boolean(
     isDesktop &&
     pinStage &&
-    typeof window?.innerHeight === 'number' && window.innerHeight >= 540 &&
-    typeof window?.innerWidth === 'number' && window.innerWidth >= 900
+    fitsPinnedViewport &&
+    typeof window?.innerWidth === 'number' && window.innerWidth >= 960
   );
 
-  if (canPinStoryStage && typeof applyStoryStepFn === 'function') {
-    const pinnedTl = gsap.timeline({
-      scrollTrigger: {
-        trigger: '.story-stage-pin',
-        start: 'center center',
-        end: '+=720',
-        pin: true,
-        pinSpacing: true,
-        anticipatePin: 1,
-        scrub: 0.5,
-        onUpdate: (self) => {
-          if (Date.now() < manualStoryOverrideUntil) return;
-          const p = self.progress ?? 0;
-          const nextStep = p < 0.36 ? '1' : p < 0.72 ? '2' : '3';
-          if (nextStep !== lastAutoStoryStep) {
-            applyStoryStepFn(nextStep, { syncRail: false });
-          }
-        }
+  if (typeof applyStoryStepFn === 'function') {
+    const syncStoryProgress = (self) => {
+      if (Date.now() < manualStoryOverrideUntil) return;
+      const p = self.progress ?? 0;
+      const nextStep = p < 0.36 ? '1' : p < 0.72 ? '2' : '3';
+      if (nextStep !== lastAutoStoryStep) {
+        applyStoryStepFn(nextStep, { syncRail: false });
       }
+    };
+
+    const storyStageTl = gsap.timeline({
+      scrollTrigger: canPinStoryStage
+        ? {
+            trigger: '.story-stage-pin',
+            start: () => `top ${pinTop}px`,
+            end: '+=680',
+            pin: true,
+            pinSpacing: true,
+            anticipatePin: 1,
+            invalidateOnRefresh: true,
+            scrub: 0.5,
+            onUpdate: syncStoryProgress
+          }
+        : {
+            trigger: '.luxury-story',
+            start: 'top 74%',
+            end: 'bottom 32%',
+            scrub: 0.5,
+            onUpdate: syncStoryProgress
+          }
     });
+
     if (railFill) {
-      pinnedTl.fromTo(railFill, { scaleY: 0.333 }, { scaleY: 1, ease: 'none' }, 0);
+      storyStageTl.fromTo(railFill, { scaleY: 0.333 }, { scaleY: 1, ease: 'none' }, 0);
     }
     if (document.querySelector?.('.story-dossier')) {
-      pinnedTl.fromTo(
+      storyStageTl.fromTo(
         '.story-dossier',
-        { rotationY: -4, rotationX: 2.5, y: 16 },
-        { rotationY: 3.5, rotationX: -1.8, y: -16, ease: 'none' },
+        { rotationY: isDesktop ? -3.5 : 0, rotationX: 2, y: canPinStoryStage ? 12 : 24, transformPerspective: 1100 },
+        { rotationY: isDesktop ? 3.5 : 0, rotationX: -1.8, y: canPinStoryStage ? -12 : -24, ease: 'none' },
         0
       );
     }
   } else if (isDesktop && document.querySelector?.('.story-dossier')) {
-    storyParallax.fromTo('.story-dossier', { y: 36, rotationY: -4 }, { y: -36, rotationY: 4, ease: 'none' }, 0);
+    storyParallax.fromTo('.story-dossier', { y: 26, rotationY: -4, transformPerspective: 1100 }, { y: -26, rotationY: 4, ease: 'none' }, 0);
   }
 
   document.querySelectorAll?.('[data-count-to]')?.forEach((counterEl) => {
@@ -3783,7 +3806,7 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
   });
   gsap.fromTo(
     '.ritual-shell',
-    { y: 68, scale: 0.91, rotationX: isDesktop ? 5 : 2, opacity: 1 },
+    { y: 42, scale: 0.93, rotationX: isDesktop ? 4 : 1.5, transformPerspective: 1100, opacity: 1 },
     {
       y: 0,
       scale: 1,
@@ -3792,16 +3815,16 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
       ease: 'none',
       scrollTrigger: {
         trigger: '.ritual-shell',
-        start: 'top 96%',
-        end: 'top 46%',
-        scrub: 0.65
+        start: 'top 95%',
+        end: 'top 56%',
+        scrub: 0.6
       }
     }
   );
   if (document.querySelector?.('.ritual-ticket')) {
     gsap.fromTo(
       '.ritual-ticket',
-      { y: 74, x: isDesktop ? 32 : 0, scale: 0.9, rotationY: isDesktop ? -10 : 0, rotationX: isDesktop ? 6 : 0, opacity: 1 },
+      { y: 46, x: isDesktop ? 24 : 0, scale: 0.92, rotationY: isDesktop ? -9 : 0, rotationX: isDesktop ? 5 : 0, transformPerspective: 1100, opacity: 1 },
       {
         y: 0,
         x: 0,
@@ -3813,8 +3836,8 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
         scrollTrigger: {
           trigger: '.ritual-shell',
           start: 'top 95%',
-          end: 'top 46%',
-          scrub: 0.65
+          end: 'top 56%',
+          scrub: 0.6
         }
       }
     );
@@ -3841,7 +3864,7 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
   }
   gsap.fromTo(
     '.ritual-badge',
-    { y: 40, scale: 0.88, rotationZ: -3, opacity: 1 },
+    { y: 28, scale: 0.9, rotationZ: -2.5, opacity: 1 },
     {
       y: 0,
       scale: 1,
@@ -3852,7 +3875,7 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
       scrollTrigger: {
         trigger: '.ritual-shell',
         start: 'top 94%',
-        end: 'top 54%',
+        end: 'top 62%',
         scrub: 0.55
       }
     }
@@ -3860,7 +3883,7 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
 
   gsap.fromTo(
     '.cta-shell',
-    { scale: 0.86, y: 76, rotationX: isDesktop ? 7 : 3, opacity: 1 },
+    { scale: 0.89, y: 48, rotationX: isDesktop ? 5 : 2, transformPerspective: 1100, opacity: 1 },
     {
       scale: 1,
       y: 0,
@@ -3869,9 +3892,9 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
       ease: 'none',
       scrollTrigger: {
         trigger: '.cta-shell',
-        start: 'top 98%',
-        end: 'top 50%',
-        scrub: 0.65
+        start: 'top 96%',
+        end: 'top 58%',
+        scrub: 0.6
       }
     }
   );

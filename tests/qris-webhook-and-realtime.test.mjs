@@ -40,6 +40,8 @@ test('parseIndonesianAmount extracts Rupiah totals from GoPay Merchant notificat
   assert.equal(parseIndonesianAmount('IDR 1.250.000 berhasil masuk pukul 14:20'), 1250000);
   assert.equal(parseIndonesianAmount({ amount: 88321 }), 88321);
   assert.equal(parseIndonesianAmount({ amount: 'Rp 15.400' }), 15400);
+  assert.equal(parseIndonesianAmount('Diterima 88.321 via QRIS'), 88321);
+  assert.equal(parseIndonesianAmount('IDR 88,321.00'), 88321);
   assert.equal(parseIndonesianAmount('Pesan tanpa nominal 12:30'), null);
 });
 
@@ -139,6 +141,27 @@ test('qris-webhook fails closed without secret/auth before reading body and conf
   );
   assert.equal(dupRes.statusCode, 409);
   assert.equal(dupRes.body.code, 'AMBIGUOUS_AMOUNT');
+
+  // Re-enable uniqueCodeEnabled, then verify unescaped newline in MacroDroid JSON string parses cleanly and logs for admin
+  storedSettings = { ...storedSettings, uniqueCodeEnabled: true, qris: { ...storedSettings.qris, uniqueCodeEnabled: true } };
+  const streamOrder = reserve('ord_stream');
+  assert.equal(streamOrder.ok, true);
+  const brokenJsonWithNewline = `{"title":"GoPay Merchant","text":"Pembayaran masuk\nRp ${streamOrder.order.totals.total.toLocaleString('id-ID')} dari BCA","message":""}`;
+  const brokenRes = await callWebhook(
+    'POST',
+    brokenJsonWithNewline,
+    { 'x-webhook-secret': 'gopay-webhook-secret' }
+  );
+  assert.equal(brokenRes.statusCode, 200);
+  assert.equal(brokenRes.body.order.status, 'paid');
+
+  // Admin-authenticated GET returns recentEvents while unauthenticated GET omits recentEvents
+  process.env.INVENTORY_ADMIN_TOKEN = 'admin-panel-secret';
+  const pubGet = await callWebhook('GET');
+  assert.equal(pubGet.body.recentEvents, undefined);
+  const adminGet = await callWebhook('GET', null, { authorization: 'Bearer admin-panel-secret' });
+  assert.ok(Array.isArray(adminGet.body.recentEvents));
+  assert.equal(adminGet.body.recentEvents[0].code, 'CONFIRMED');
 });
 
 test('syncInventory prunes stale 404 ORDER_NOT_FOUND reservations & setInventoryStock broadcasts snapshot', async () => {
@@ -382,9 +405,9 @@ test('Cache-busting config: vercel.json disables stale HTML/JS/CSS/SW caching an
     const cc = rules.get(source)?.find((x) => x.key === 'Cache-Control')?.value || '';
     assert.match(cc, /no-store/, `${source} must disable stale edge/browser caching`);
   }
-  assert.match(html, /styles\/main\.css\?v=20261113-v22/);
-  assert.match(html, /scripts\/app\.js\?v=20261113-v22/);
+  assert.match(html, /styles\/main\.css\?v=20261113-v23/);
+  assert.match(html, /scripts\/app\.js\?v=20261113-v23/);
   assert.match(html, /controllerchange/);
-  assert.match(sw, /atelier-nusantara-cache-v22/);
+  assert.match(sw, /atelier-nusantara-cache-v23/);
 });
 

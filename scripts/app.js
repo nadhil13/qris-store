@@ -104,6 +104,7 @@ import {
 } from './core/payments.js';
 
 import { reserveInventory, getPendingReservation, refreshInventoryOrder, isInventoryOrder, syncInventory, listInventoryOrders, setInventoryAdminToken, hasInventoryAdminToken, refreshInventoryStock, adjustInventoryStock, formatInventoryError } from './core/inventory.js';
+import { inventoryAdminHeaders } from './core/auth.js';
 
 // Realtime synchronization across browser tabs powered by BroadcastChannel
 export const REALTIME_CHANNEL_TYPE = typeof BroadcastChannel !== 'undefined' ? 'BroadcastChannel' : 'StorageEvent';
@@ -1657,7 +1658,7 @@ export function switchAdminSection(sectionName) {
   document.querySelectorAll('.admin-section-view').forEach((sec) => {
     sec.hidden = sec.id !== `admin-section-${sectionName}`;
   });
-  if (sectionName === 'payments' && adminWebhookStatus.configured === null) {
+  if (sectionName === 'payments') {
     checkWebhookStatus().catch(() => {});
   }
   refreshAdminDashboard();
@@ -1666,34 +1667,77 @@ export function switchAdminSection(sectionName) {
 const knownAdminOrderStates = new Map();
 const recentAlertOrderIds = new Set();
 let adminBaselineCaptured = false;
-let adminWebhookStatus = { configured: null, endpoint: '/api/qris-webhook' };
+let adminWebhookStatus = { configured: null, endpoint: '/api/qris-webhook', recentEvents: [] };
+
+function describeWebhookEvent(ev) {
+  const timeStr = ev?.at ? new Date(ev.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+  const amt = ev?.amount ? `Rp ${Number(ev.amount).toLocaleString('id-ID')}` : '';
+  if (ev?.status === 200 || ev?.code === 'CONFIRMED') {
+    return `${timeStr} · OK (Lunas): ${escapeHTML(ev.invoice || ev.orderId || '')} ${amt}`.trim();
+  }
+  if (ev?.code === 'UNAUTHORIZED') {
+    return `${timeStr} · Gagal 401: Header X-Webhook-Secret / Bearer di HP tidak cocok dengan QRIS_WEBHOOK_SECRET Vercel.`;
+  }
+  if (ev?.code === 'INVALID_REQUEST') {
+    return `${timeStr} · Gagal 400: Format isi Body bukan JSON/teks valid (pakai Tipe konten text/plain).`;
+  }
+  if (ev?.code === 'AMOUNT_NOT_FOUND') {
+    return `${timeStr} · Gagal 400: Nominal Rp tidak ditemukan dari teks (${escapeHTML(ev.snippet || '-')}).`;
+  }
+  if (ev?.code === 'ORDER_NOT_FOUND') {
+    return `${timeStr} · 404: Nominal terbaca ${amt || '-'}, tetapi tidak ada pesanan QRIS aktif dengan nominal tepat itu.`;
+  }
+  if (ev?.code === 'AMBIGUOUS_AMOUNT') {
+    return `${timeStr} · 409: Ada lebih dari 1 pesanan dengan nominal ${amt}. Aktifkan Kode Unik 3 digit.`;
+  }
+  return `${timeStr} · HTTP ${ev?.status || '?'} (${escapeHTML(ev?.code || 'ERR')}) ${amt}`;
+}
 
 function renderWebhookStatusBadge() {
   const badge = document.getElementById('admin-webhook-status-badge');
-  if (!badge) return;
-  if (adminWebhookStatus.configured === true) {
-    badge.className = 'status-badge-step done';
-    badge.textContent = 'Webhook aktif (QRIS_WEBHOOK_SECRET terpasang)';
-  } else if (adminWebhookStatus.configured === false) {
-    badge.className = 'status-badge-step pending';
-    badge.textContent = 'Belum terpasang (isi QRIS_WEBHOOK_SECRET di server)';
-  } else {
-    badge.className = 'status-badge-step muted';
-    badge.textContent = 'Memeriksa status webhook server...';
+  if (badge) {
+    if (adminWebhookStatus.configured === true) {
+      badge.className = 'status-badge-step done';
+      badge.textContent = 'Webhook aktif (QRIS_WEBHOOK_SECRET terpasang)';
+    } else if (adminWebhookStatus.configured === false) {
+      badge.className = 'status-badge-step pending';
+      badge.textContent = 'Belum terpasang (isi QRIS_WEBHOOK_SECRET di server)';
+    } else {
+      badge.className = 'status-badge-step muted';
+      badge.textContent = 'Memeriksa status webhook server...';
+    }
+  }
+  const logBox = document.getElementById('admin-webhook-activity-list');
+  if (logBox) {
+    const events = Array.isArray(adminWebhookStatus.recentEvents) ? adminWebhookStatus.recentEvents : [];
+    if (events.length === 0) {
+      logBox.innerHTML = '<strong>Log Webhook Terakhir:</strong> Belum ada kiriman POST dari HP Android/MacroDroid yang sampai ke server.';
+    } else {
+      logBox.innerHTML = `<strong style="display:block; margin-bottom:4px; color:var(--ink-primary);">Log Webhook Terakhir (${events.length}):</strong>`
+        + events.slice(0, 5).map((ev) => {
+          const isOk = ev.status === 200 || ev.code === 'CONFIRMED';
+          return `<div style="padding:2px 0; color:${isOk ? 'var(--status-success)' : 'var(--status-danger, #B91C1C)'};">${describeWebhookEvent(ev)}</div>`;
+        }).join('');
+    }
   }
 }
 
-export async function checkWebhookStatus() {
+export async function checkWebhookStatus({ manual = false } = {}) {
   if (typeof fetch !== 'function') return adminWebhookStatus;
   try {
-    const res = await fetch('/api/qris-webhook', { cache: 'no-store' });
+    const res = await fetch('/api/qris-webhook', {
+      cache: 'no-store',
+      headers: hasInventoryAdminToken() ? inventoryAdminHeaders() : {}
+    });
     if (!res.ok) return adminWebhookStatus;
     const data = await res.json();
     adminWebhookStatus = {
       configured: Boolean(data?.configured),
-      endpoint: data?.endpoint || '/api/qris-webhook'
+      endpoint: data?.endpoint || '/api/qris-webhook',
+      recentEvents: Array.isArray(data?.recentEvents) ? data.recentEvents : []
     };
     renderWebhookStatusBadge();
+    if (manual) showToast('Log webhook server diperbarui.');
   } catch {}
   return adminWebhookStatus;
 }
@@ -2283,7 +2327,10 @@ function renderAdminPaymentsSection({ force = false } = {}) {
         <span class="admin-section-kicker">Verifikasi Otomatis GoPay Merchant</span>
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
           <h4 style="margin:0;">3. Konfirmasi Lunas Otomatis dari Notifikasi HP Merchant</h4>
-          <span id="admin-webhook-status-badge" class="status-badge-step muted">Memeriksa status webhook server...</span>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span id="admin-webhook-status-badge" class="status-badge-step muted">Memeriksa status webhook server...</span>
+            <button type="button" class="btn-secondary" style="padding:4px 10px; font-size:0.74rem;" onclick="window.checkWebhookStatus({ manual: true })">Cek Log Webhook</button>
+          </div>
         </div>
         <p style="font-size:0.8rem; color:var(--ink-secondary); line-height:1.5; margin:0;">
           Tetap gunakan QRIS GoPay Merchant Anda sendiri tanpa penyedia gateway lain. Saat HP kasir menerima notifikasi dana masuk dari <strong>GoPay Merchant</strong>, aplikasi penerus notifikasi (seperti MacroDroid di Android) mengirim nominal masuk ke endpoint aman di bawah ini agar pesanan langsung berstatus Lunas dan struk terbuka otomatis di HP pembeli.
@@ -2299,13 +2346,15 @@ function renderAdminPaymentsSection({ force = false } = {}) {
           </div>
         </label>
 
+        <div id="admin-webhook-activity-list" style="font-size:0.76rem; color:var(--ink-secondary); background:var(--surface-cream, #FAF7F2); border:1px solid var(--border-hairline); border-radius:8px; padding:10px 12px;"></div>
+
         <div style="font-size:0.78rem; color:var(--ink-secondary); line-height:1.6;">
           <strong style="color:var(--ink-primary); display:block; margin-bottom:4px;">Langkah singkat di HP Android kasir:</strong>
           <div>1. Pasang env <code>QRIS_WEBHOOK_SECRET</code> di pengaturan proyek Vercel lalu redeploy.</div>
-          <div>2. Di aplikasi MacroDroid (Android), buat Trigger: <em>Notification Received</em> dari aplikasi <strong>GoPay Merchant</strong> (isi filter berisi <code>Rp</code>).</div>
-          <div>3. Buat Action: <em>HTTP Request (POST)</em> ke URL:</div>
+          <div>2. Di MacroDroid (Android), buat Pemicu: <em>Notifikasi Diterima</em> dari aplikasi <strong>GoPay Merchant</strong> (isi filter Berisi: <code>Rp</code>).</div>
+          <div>3. Buat Tindakan: <em>Permintaan HTTP (POST)</em> ke URL:</div>
           <div class="webhook-code-box" style="margin:6px 0;">${escapeHTML(webhookUrl)}</div>
-          <div>4. Tambahkan Header <code>X-Webhook-Secret: &lt;QRIS_WEBHOOK_SECRET&gt;</code> dan JSON Body <code>{"text":"[not_ticker] [notification]"}</code>. Jika HP kasir belum disambungkan, admin tetap dapat menekan <strong>Konfirmasi Lunas</strong> sekali ketuk di tab Pesanan.</div>
+          <div>4. Di tab <em>Parameter header</em> tambah <code>X-Webhook-Secret: &lt;QRIS_WEBHOOK_SECRET&gt;</code>. Di tab <em>Badan konten</em>, pilih Tipe konten <code>text/plain</code> dan isi <code>[not_title] [notification]</code> (atau JSON <code>{"title":"[not_title]","text":"[notification]"}</code>). Jika HP kasir belum disambungkan, admin tetap dapat menekan <strong>Konfirmasi Lunas</strong> sekali ketuk di tab Pesanan.</div>
         </div>
       </section>
     </div>

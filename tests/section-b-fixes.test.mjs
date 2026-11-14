@@ -300,3 +300,59 @@ test('Section B #5: Dead .hero-kicker GSAP animations removed, clearProps never 
   assert.match(css, /\.qris-mode-switch\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(css, /\.admin-orders-table\s+td\[data-label="No\. Invoice"\]/);
 });
+
+test('Section B #6: products domain sync and openCartDrawer refresh stale cart totals when live inventory arrives after load', async () => {
+  setupMockDom();
+  const nativeSetInterval = globalThis.setInterval;
+  const spawnedTimers = [];
+  globalThis.setInterval = (fn, ms, ...args) => {
+    const id = nativeSetInterval(fn, ms, ...args);
+    spawnedTimers.push(id);
+    return id;
+  };
+  try {
+    const [app, store] = await Promise.all([
+      import('../scripts/app.js'),
+      import('../scripts/core/store.js')
+    ]);
+
+    const prod = {
+      id: 'prod-custom-delay',
+      name: 'Kopi Digital',
+      category: 'digital',
+      price: 1000,
+      isAvailable: true,
+      stock: 0,
+      description: 'Produk digital',
+      story: 'Riwayat singkat.',
+      image: './assets/notification-icon.svg',
+      variants: []
+    };
+    store.saveSettings((s) => ({ ...s, store: { ...s.store, isOpen: true } }));
+    store.saveProducts([prod], { fromCloud: true, catalogUpdatedAt: Date.now() });
+    const baseRev = store.getInventoryStock()?.revision || 0;
+    store.setInventoryStock({ revision: baseRev + 1, products: {} });
+    const cartLines = [{ key: `${prod.id}::`, productId: prod.id, variant: '', qty: 1, note: '' }];
+    store.saveCart(cartLines);
+    app.state.cart = cartLines;
+
+    app.initRealtimeSync();
+    app.updateCartUI();
+    assert.equal(document.getElementById('drawer-count').textContent, '(0 pesanan)');
+    assert.equal(document.getElementById('btn-checkout').disabled, true);
+
+    store.setInventoryStock({ revision: baseRev + 2, products: { [prod.id]: 98 } });
+    assert.equal(document.getElementById('drawer-count').textContent, '(1 pesanan)');
+    assert.match(document.getElementById('summary-subtotal').textContent, /1\.000/);
+    assert.equal(document.getElementById('btn-checkout').disabled, false);
+    assert.equal(document.getElementById('btn-checkout-whatsapp').disabled, false);
+
+    document.getElementById('drawer-count').textContent = 'stale';
+    app.openCartDrawer();
+    assert.equal(document.getElementById('drawer-count').textContent, '(1 pesanan)');
+    app.closeCartDrawer();
+  } finally {
+    spawnedTimers.forEach((id) => clearInterval(id));
+    globalThis.setInterval = nativeSetInterval;
+  }
+});

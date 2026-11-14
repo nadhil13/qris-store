@@ -2,12 +2,21 @@ import { PRODUCTS as SEED_PRODUCTS, CATEGORIES, getCategoryLabel } from './core/
 import { createModalManager, createDialogService, bindTabs } from './core/dialogs.js';
 
 let modalManager;
+let modalManagerDoc;
 let dialogService;
+let dialogServiceDoc;
 function overlays() {
-  return modalManager ||= createModalManager(document);
+  if (!modalManager || modalManagerDoc !== document) {
+    modalManagerDoc = document;
+    modalManager = createModalManager(document);
+  }
+  return modalManager;
 }
 function showDialog(message, options) {
-  dialogService ||= createDialogService(overlays(), document);
+  if (!dialogService || dialogServiceDoc !== document) {
+    dialogServiceDoc = document;
+    dialogService = createDialogService(overlays(), document);
+  }
   return dialogService(message, options);
 }
 import {
@@ -1058,6 +1067,7 @@ export function updateCartUI() {
 
 export function openCartDrawer() {
   sfx.playClick();
+  updateCartUI();
   setActiveMobileNav('mob-nav-cart');
   const drawer = document.getElementById('cart-drawer');
   const backdrop = document.getElementById('drawer-backdrop');
@@ -3276,36 +3286,42 @@ export function initEventBindings() {
   }
 }
 
-function initRealtimeSync() {
-  subscribe((change) => {
-    if (change.domain === 'products') {
-      renderCatalog();
-      renderCategoryBadges();
-      if (state.adminAuthenticated) renderAdminProductsTable();
-    } else if (change.domain === 'orders') {
-      updateCartUI();
-      updateOrderTrackerDockUI();
-      if (state.adminAuthenticated) {
-        if (change.remote && change.type !== 'admin-inventory') {
-          listInventoryOrders().then(() => refreshAdminDashboard()).catch(() => {});
-        } else {
-          refreshAdminDashboard();
+let realtimeSyncBound = false;
+let expiredSweepTimer = null;
+export function initRealtimeSync() {
+  if (!realtimeSyncBound) {
+    realtimeSyncBound = true;
+    subscribe((change) => {
+      if (change.domain === 'products') {
+        renderCatalog();
+        renderCategoryBadges();
+        updateCartUI();
+        if (state.adminAuthenticated) renderAdminProductsTable();
+      } else if (change.domain === 'orders') {
+        updateCartUI();
+        updateOrderTrackerDockUI();
+        if (state.adminAuthenticated) {
+          if (change.remote && change.type !== 'admin-inventory') {
+            listInventoryOrders().then(() => refreshAdminDashboard()).catch(() => {});
+          } else {
+            refreshAdminDashboard();
+          }
         }
+      } else if (change.domain === 'settings') {
+        updateStorefrontStatus();
+        updateCartUI();
+        if ((change.type === 'qris' || change.type === 'cloud-sync') && state.activeCheckoutOrderId) {
+          const order = getOrder(state.activeCheckoutOrderId);
+          if (order) renderCheckoutView(order);
+        }
+        if (state.adminAuthenticated) refreshAdminDashboard();
+      } else if (change.domain === 'cart') {
+        state.cart = getCart();
+        updateCartUI();
+        renderCatalog();
       }
-    } else if (change.domain === 'settings') {
-      updateStorefrontStatus();
-      updateCartUI();
-      if ((change.type === 'qris' || change.type === 'cloud-sync') && state.activeCheckoutOrderId) {
-        const order = getOrder(state.activeCheckoutOrderId);
-        if (order) renderCheckoutView(order);
-      }
-      if (state.adminAuthenticated) refreshAdminDashboard();
-    } else if (change.domain === 'cart') {
-      state.cart = getCart();
-      updateCartUI();
-      renderCatalog();
-    }
-  });
+    });
+  }
 
   // Story 3-step interactive dossier, timeline rail, variant chips, & QRIS channel/preset selector
   const storyTabs = Array.from(document.querySelectorAll?.('.story-step-tab') || []);
@@ -3487,10 +3503,12 @@ function initRealtimeSync() {
     });
   });
 
-  // Sweep expired orders periodically
-  setInterval(() => {
-    sweepExpiredOrders();
-  }, 10000);
+  // Sweep expired orders periodically (once)
+  if (!expiredSweepTimer) {
+    expiredSweepTimer = setInterval(() => {
+      sweepExpiredOrders();
+    }, 10000);
+  }
 }
 
 let activeGsapContext = null;
@@ -3995,30 +4013,34 @@ function setupHeroChoreography(gsap, isDesktop) {
   if (descEl) {
     entrance.fromTo(descEl, { y: 20 }, { y: 0, opacity: 1, duration: 0.48, clearProps: 'transform' }, '-=0.45');
   }
-  entrance
-    .fromTo('.hero-actions', { y: 22, scale: 0.96 }, { y: 0, scale: 1, opacity: 1, duration: 0.46, clearProps: 'transform' }, '-=0.38')
-    .fromTo('.hero-visual', { y: 44, scale: 0.93, rotationX: isDesktop ? 5 : 0, transformPerspective: 1100 }, { y: 0, scale: 1, rotationX: 0, opacity: 1, duration: 0.72, clearProps: 'transform' }, '-=0.54');
+  const hasSel = (sel) => Boolean(document.querySelector?.(sel));
+  if (hasSel('.hero-actions')) {
+    entrance.fromTo('.hero-actions', { y: 22, scale: 0.96 }, { y: 0, scale: 1, opacity: 1, duration: 0.46, clearProps: 'transform' }, '-=0.38');
+  }
+  if (hasSel('.hero-visual')) {
+    entrance.fromTo('.hero-visual', { y: 44, scale: 0.93, rotationX: isDesktop ? 5 : 0, transformPerspective: 1100 }, { y: 0, scale: 1, rotationX: 0, opacity: 1, duration: 0.72, clearProps: 'transform' }, '-=0.54');
+  }
 
-  const heroScroll = gsap.timeline({
-    scrollTrigger: {
-      trigger: '.hero-section',
-      start: 'top top',
-      end: 'bottom top',
-      scrub: 0.65,
-      invalidateOnRefresh: true
+  if (hasSel('.hero-section')) {
+    const heroScroll = gsap.timeline({
+      scrollTrigger: {
+        trigger: '.hero-section',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 0.65,
+        invalidateOnRefresh: true
+      }
+    });
+    if (hasSel('.hero-editorial')) heroScroll.to('.hero-editorial', { y: isDesktop ? -68 : -24, ease: 'none' }, 0);
+    if (hasSel('.hero-actions')) heroScroll.to('.hero-actions', { y: isDesktop ? 22 : 8, ease: 'none' }, 0);
+    if (isDesktop) {
+      if (hasSel('.hero-visual')) heroScroll.to('.hero-visual', { y: -96, scale: 0.92, rotationX: 4, rotationY: -5, transformPerspective: 1100, ease: 'none' }, 0);
+      if (hasSel('.showcase-card')) heroScroll.to('.showcase-card', { yPercent: -12, rotation: -3.6, transformPerspective: 1100, ease: 'none' }, 0);
+      if (hasSel('.showcase-tag')) heroScroll.to('.showcase-tag', { y: -44, x: 14, ease: 'none' }, 0);
+      if (hasSel('.showcase-img-wrap img')) heroScroll.to('.showcase-img-wrap img', { yPercent: 12, scale: 1.15, ease: 'none' }, 0);
+    } else if (hasSel('.hero-visual')) {
+      heroScroll.to('.hero-visual', { y: -26, scale: 0.96, ease: 'none' }, 0);
     }
-  });
-  heroScroll
-    .to('.hero-editorial', { y: isDesktop ? -68 : -24, ease: 'none' }, 0)
-    .to('.hero-actions', { y: isDesktop ? 22 : 8, ease: 'none' }, 0);
-  if (isDesktop) {
-    heroScroll
-      .to('.hero-visual', { y: -96, scale: 0.92, rotationX: 4, rotationY: -5, transformPerspective: 1100, ease: 'none' }, 0)
-      .to('.showcase-card', { yPercent: -12, rotation: -3.6, transformPerspective: 1100, ease: 'none' }, 0)
-      .to('.showcase-tag', { y: -44, x: 14, ease: 'none' }, 0)
-      .to('.showcase-img-wrap img', { yPercent: 12, scale: 1.15, ease: 'none' }, 0);
-  } else {
-    heroScroll.to('.hero-visual', { y: -26, scale: 0.96, ease: 'none' }, 0);
   }
 }
 
@@ -4059,19 +4081,21 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     scrub: 0.55
   });
 
-  const storyArrival = gsap.timeline({
-    scrollTrigger: {
-      trigger: '.luxury-story',
-      start: 'top 94%',
-      end: 'top 42%',
-      scrub: 0.65
-    }
-  });
-  storyArrival
-    .fromTo('.story-copy', { x: isDesktop ? -40 : 0, y: isDesktop ? 14 : 20, opacity: 1 }, { x: 0, y: 0, opacity: 1, ease: 'none' }, 0)
-    .fromTo('.story-visual', { x: isDesktop ? 42 : 0, y: 28, scale: 0.94, rotationY: isDesktop ? -5 : 0, transformPerspective: 1100, opacity: 1 }, { x: 0, y: 0, scale: 1, rotationY: 0, opacity: 1, ease: 'none' }, 0)
-    .fromTo('.story-metrics > div', { y: 24, scale: 0.96, opacity: 1 }, { y: 0, scale: 1, opacity: 1, stagger: 0.08, ease: 'none' }, 0.05)
-    .fromTo('.story-rail-item', { x: isDesktop ? -22 : 0, y: 14, opacity: 1 }, { x: 0, y: 0, opacity: 1, stagger: 0.06, ease: 'none' }, 0.08);
+  const hasSel = (sel) => Boolean(document.querySelector?.(sel));
+  if (hasSel('.luxury-story')) {
+    const storyArrival = gsap.timeline({
+      scrollTrigger: {
+        trigger: '.luxury-story',
+        start: 'top 94%',
+        end: 'top 42%',
+        scrub: 0.65
+      }
+    });
+    if (hasSel('.story-copy')) storyArrival.fromTo('.story-copy', { x: isDesktop ? -40 : 0, y: isDesktop ? 14 : 20, opacity: 1 }, { x: 0, y: 0, opacity: 1, ease: 'none' }, 0);
+    if (hasSel('.story-visual')) storyArrival.fromTo('.story-visual', { x: isDesktop ? 42 : 0, y: 28, scale: 0.94, rotationY: isDesktop ? -5 : 0, transformPerspective: 1100, opacity: 1 }, { x: 0, y: 0, scale: 1, rotationY: 0, opacity: 1, ease: 'none' }, 0);
+    if (hasSel('.story-metrics > div')) storyArrival.fromTo('.story-metrics > div', { y: 24, scale: 0.96, opacity: 1 }, { y: 0, scale: 1, opacity: 1, stagger: 0.08, ease: 'none' }, 0.05);
+    if (hasSel('.story-rail-item')) storyArrival.fromTo('.story-rail-item', { x: isDesktop ? -22 : 0, y: 14, opacity: 1 }, { x: 0, y: 0, opacity: 1, stagger: 0.06, ease: 'none' }, 0.08);
+  }
 
   const storyParallax = gsap.timeline({
     scrollTrigger: {
@@ -4184,24 +4208,26 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     end: 'top 64%',
     scrub: 0.55
   });
-  gsap.fromTo(
-    '.ritual-shell',
-    { y: 42, scale: 0.93, rotationX: isDesktop ? 4 : 1.5, transformPerspective: 1100, opacity: 1 },
-    {
-      y: 0,
-      scale: 1,
-      rotationX: 0,
-      opacity: 1,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '.ritual-shell',
-        start: 'top 95%',
-        end: 'top 56%',
-        scrub: 0.6
+  if (hasSel('.ritual-shell')) {
+    gsap.fromTo(
+      '.ritual-shell',
+      { y: 42, scale: 0.93, rotationX: isDesktop ? 4 : 1.5, transformPerspective: 1100, opacity: 1 },
+      {
+        y: 0,
+        scale: 1,
+        rotationX: 0,
+        opacity: 1,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.ritual-shell',
+          start: 'top 95%',
+          end: 'top 56%',
+          scrub: 0.6
+        }
       }
-    }
-  );
-  if (document.querySelector?.('.ritual-ticket')) {
+    );
+  }
+  if (hasSel('.ritual-ticket')) {
     gsap.fromTo(
       '.ritual-ticket',
       { y: 46, x: isDesktop ? 24 : 0, scale: 0.92, rotationY: isDesktop ? -9 : 0, rotationX: isDesktop ? 5 : 0, transformPerspective: 1100, opacity: 1 },
@@ -4222,7 +4248,7 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
       }
     );
   }
-  if (document.querySelector?.('.ritual-qr-scanline')) {
+  if (hasSel('.ritual-qr-scanline')) {
     gsap.fromTo(
       '.ritual-qr-scanline',
       { y: 0, opacity: 0.55 },
@@ -4242,64 +4268,70 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
       }
     );
   }
-  gsap.fromTo(
-    '.ritual-badge',
-    { y: 28, scale: 0.9, rotationZ: -2.5, opacity: 1 },
-    {
-      y: 0,
-      scale: 1,
-      rotationZ: 0,
-      opacity: 1,
-      stagger: 0.08,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '.ritual-shell',
-        start: 'top 94%',
-        end: 'top 62%',
-        scrub: 0.55
+  if (hasSel('.ritual-badge')) {
+    gsap.fromTo(
+      '.ritual-badge',
+      { y: 28, scale: 0.9, rotationZ: -2.5, opacity: 1 },
+      {
+        y: 0,
+        scale: 1,
+        rotationZ: 0,
+        opacity: 1,
+        stagger: 0.08,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.ritual-shell',
+          start: 'top 94%',
+          end: 'top 62%',
+          scrub: 0.55
+        }
       }
-    }
-  );
+    );
+  }
 
-  gsap.fromTo(
-    '.cta-shell',
-    { scale: 0.89, y: 48, rotationX: isDesktop ? 5 : 2, transformPerspective: 1100, opacity: 1 },
-    {
-      scale: 1,
-      y: 0,
-      rotationX: 0,
-      opacity: 1,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '.cta-shell',
-        start: 'top 96%',
-        end: 'top 58%',
-        scrub: 0.6
+  if (hasSel('.cta-shell')) {
+    gsap.fromTo(
+      '.cta-shell',
+      { scale: 0.89, y: 48, rotationX: isDesktop ? 5 : 2, transformPerspective: 1100, opacity: 1 },
+      {
+        scale: 1,
+        y: 0,
+        rotationX: 0,
+        opacity: 1,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.cta-shell',
+          start: 'top 96%',
+          end: 'top 58%',
+          scrub: 0.6
+        }
       }
-    }
-  );
+    );
+  }
   animateWordReveal(gsap, '.cta-copy h2', {
     trigger: '.cta-copy h2',
     start: 'top 95%',
     end: 'top 66%',
     scrub: 0.55
   });
-  gsap.fromTo(
-    '.cta-actions',
-    { y: 36, scale: 0.95, opacity: 1 },
-    {
-      y: 0,
-      scale: 1,
-      opacity: 1,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '.cta-shell',
-        start: 'top 95%',
-        end: 'top 60%',
-        scrub: 0.55
+  if (hasSel('.cta-actions')) {
+    gsap.fromTo(
+      '.cta-actions',
+      { y: 36, scale: 0.95, opacity: 1 },
+      {
+        y: 0,
+        scale: 1,
+        opacity: 1,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.cta-shell',
+          start: 'top 95%',
+          end: 'top 60%',
+          scrub: 0.55
+        }
       }
-    }
-  );
+    );
+  }
 
   animateWordReveal(gsap, '.footer-brand', {
     trigger: '.site-footer',
@@ -4307,23 +4339,26 @@ function setupStoryAndClosingChoreography(gsap, ScrollTrigger, isDesktop, cleanu
     end: 'bottom bottom',
     scrub: 0.45
   });
-  gsap.fromTo(
-    ['.footer-brand-col', '.footer-nav-col', '.footer-bottom'],
-    { y: 42, scale: 0.96, opacity: 1 },
-    {
-      y: 0,
-      scale: 1,
-      opacity: 1,
-      stagger: 0.08,
-      ease: 'none',
-      scrollTrigger: {
-        trigger: '.site-footer',
-        start: 'top 98%',
-        end: 'bottom bottom',
-        scrub: 0.45
+  const footerTargets = ['.footer-brand-col', '.footer-nav-col', '.footer-bottom'].filter(hasSel);
+  if (footerTargets.length && hasSel('.site-footer')) {
+    gsap.fromTo(
+      footerTargets,
+      { y: 42, scale: 0.96, opacity: 1 },
+      {
+        y: 0,
+        scale: 1,
+        opacity: 1,
+        stagger: 0.08,
+        ease: 'none',
+        scrollTrigger: {
+          trigger: '.site-footer',
+          start: 'top 98%',
+          end: 'bottom bottom',
+          scrub: 0.45
+        }
       }
-    }
-  );
+    );
+  }
 
   void ScrollTrigger;
 }

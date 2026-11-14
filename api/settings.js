@@ -354,7 +354,7 @@ function authorizeAdmin(req) {
 const MAX_SETTINGS_BODY = 256 * 1024;
 const MAX_CATALOG_INT = 1_000_000_000;
 
-function validateCatalogProducts(products) {
+export function validateCatalogProducts(products) {
   if (!Array.isArray(products)) return 'Catalog products must be an array';
   if (products.length > 2000) return 'Catalog exceeds 2000 products limit';
   const ids = new Set();
@@ -369,6 +369,9 @@ function validateCatalogProducts(products) {
     }
     if (p.stock !== undefined && p.stock !== null && (!Number.isSafeInteger(p.stock) || p.stock < 0 || p.stock > MAX_CATALOG_INT)) {
       return `Product "${p.id}" stock must be null or an integer between 0 and ${MAX_CATALOG_INT}`;
+    }
+    if (p.requiresShipping !== undefined && p.requiresShipping !== null && typeof p.requiresShipping !== 'boolean') {
+      return `Product "${p.id}" requiresShipping must be boolean when provided`;
     }
     if (p.variants !== undefined) {
       if (!Array.isArray(p.variants)) return `Product "${p.id}" variants must be an array`;

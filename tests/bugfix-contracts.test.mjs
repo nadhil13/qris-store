@@ -310,7 +310,7 @@ test('P2 #1-#4 & Section 2.A: source contracts (dead code, landmarks, headings, 
   ]) {
     assert.match(htmlSource, new RegExp(`<h3\\b[^>]*${adminH3Id}`), `Admin section ${adminH3Id} should be <h3>`);
   }
-  assert.match(htmlSource, /color:\s*#0C6B5E[\s\S]{0,120}>[\s\n]*Kirim ke WhatsApp/);
+  assert.match(htmlSource, /color:\s*#0C6B5E[\s\S]{0,120}>[\s\n]*Kirim (?:Pesanan )?ke WhatsApp/);
   assert.match(htmlSource, /color:\s*#0C6B5E[\s\S]{0,120}>[\s\n]*Konfirmasi via WhatsApp/);
 
   // Section 2.A: Contrast tokens & mobile touch targets in CSS

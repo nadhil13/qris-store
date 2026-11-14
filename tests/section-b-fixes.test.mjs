@@ -141,8 +141,7 @@ test('Section B #2: index.html & styles/main.css enforce accessible semantics, o
   assert.doesNotMatch(html, /<div[^>]+id="drawer-backdrop"/);
   assert.doesNotMatch(html, /<img[^>]+src=""/, 'Images must never have empty src=""');
   assert.doesNotMatch(html, /id="(payment-invoice-number|receipt-invoice|qv-title|tracker-invoice)"[^>]*>\s*-\s*</);
-  assert.match(html, /class="qris-mode-btn is-active"/);
-  assert.doesNotMatch(html, /id="btn-qris-mode-dynamic"[^>]*style="[^"]*background:/);
+  assert.doesNotMatch(html, /qris-mode-btn|qris-mode-switch|Salin String QRIS|copyQRISPayload|Statis Asli/);
   assert.match(html, /id="admin-orders-error-banner"[^>]*role="alert"/);
   assert.match(html, /id="admin-overview-queue"/);
   assert.match(html, /id="admin-overview-qris"/);
@@ -151,7 +150,7 @@ test('Section B #2: index.html & styles/main.css enforce accessible semantics, o
   assert.match(html, /Lacak Pesanan[^<]*sudut kanan bawah|sudut kanan bawah[^<]*Lacak Pesanan/i);
 
   assert.match(css, /--bg-card:\s*#fffcf7;/i);
-  assert.match(css, /\.qris-mode-btn\s*\{[\s\S]*?min-height:\s*44px;/);
+  assert.match(css, /\.customer-address-group\[hidden\]/);
   assert.match(css, /\.btn-admin-action\s*\{[\s\S]*?min-height:\s*44px;/);
   assert.match(css, /\.btn-admin-sm\s*\{[\s\S]*?min-height:\s*44px;/);
   assert.match(css, /\.btn-copy-raw\s*\{[\s\S]*?min-height:\s*44px;/);
@@ -293,11 +292,9 @@ test('Section B #5: Dead .hero-kicker GSAP animations removed, clearProps never 
   const [src, css] = await Promise.all([read('scripts/app.js'), read('styles/main.css')]);
   assert.doesNotMatch(src, /\.hero-kicker/);
   assert.doesNotMatch(src, /clearProps:\s*isScrub\s*\?\s*undefined/);
-  assert.match(src, /el\.classList\.toggle\(['"]is-active['"]/);
-  assert.match(src, /setModeState\(btnDynamic, mode === 'dynamic'\)/);
-  assert.match(src, /setModeState\(btnStatic, mode === 'static'\)/);
+  assert.doesNotMatch(src, /copyQRISPayload|Statis Asli|String QRIS:/);
+  assert.match(src, /QRIS Dinamis/);
   assert.match(css, /\.catalog-section\s*\{[\s\S]*?scroll-margin-top:/);
-  assert.match(css, /\.qris-mode-switch\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(css, /\.admin-orders-table\s+td\[data-label="No\. Invoice"\]/);
 });
 

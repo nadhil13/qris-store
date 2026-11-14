@@ -620,7 +620,64 @@ export const CATEGORIES = [
   { id: 'digital', label: 'Digital' }
 ];
 
-export function getCategoryLabel(id) {
-  const found = CATEGORIES.find((c) => c.id === id);
-  return found ? found.label : 'Lainnya';
+let customCategories = [];
+
+export function normalizeCategorySlug(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+}
+
+export function formatCategorySlug(slug) {
+  const clean = String(slug || '').replace(/[-_]+/g, ' ').trim();
+  if (!clean) return 'Lainnya';
+  return clean.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+export function setCustomCategories(list = []) {
+  const builtinIds = new Set(CATEGORIES.map((c) => c.id));
+  const seen = new Set();
+  const next = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const rawId = typeof item === 'string' ? item : item?.id;
+    const id = normalizeCategorySlug(rawId);
+    if (!id || id === 'semua' || builtinIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    const label = String((typeof item === 'object' && item?.label) || '').trim() || formatCategorySlug(id);
+    next.push({ id, label });
+  }
+  customCategories = next;
+  return customCategories;
+}
+
+export function getAllCategories(products = [], storeCategories = null) {
+  const merged = CATEGORIES.map((c) => ({ ...c }));
+  const byId = new Set(merged.map((c) => c.id));
+  const extras = Array.isArray(storeCategories) ? storeCategories : customCategories;
+  for (const cat of extras) {
+    const id = normalizeCategorySlug(cat?.id ?? cat);
+    if (!id || id === 'semua' || byId.has(id)) continue;
+    byId.add(id);
+    merged.push({ id, label: String(cat?.label || '').trim() || formatCategorySlug(id) });
+  }
+  for (const p of Array.isArray(products) ? products : []) {
+    const id = normalizeCategorySlug(p?.category);
+    if (!id || id === 'semua' || byId.has(id)) continue;
+    byId.add(id);
+    merged.push({ id, label: formatCategorySlug(id) });
+  }
+  return merged;
+}
+
+export function getCategoryLabel(id, extraCategories = null) {
+  const norm = normalizeCategorySlug(id) || String(id || '').trim();
+  const foundBuiltin = CATEGORIES.find((c) => c.id === norm);
+  if (foundBuiltin) return foundBuiltin.label;
+  const extras = Array.isArray(extraCategories) ? extraCategories : customCategories;
+  const foundCustom = extras.find((c) => normalizeCategorySlug(c?.id ?? c) === norm);
+  if (foundCustom) return String(foundCustom.label || '').trim() || formatCategorySlug(norm);
+  return norm ? formatCategorySlug(norm) : 'Lainnya';
 }

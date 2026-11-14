@@ -44,6 +44,7 @@ local function run()
   for _,p in ipairs(products) do
     if type(p)~='table' or type(p.id)~='string' or catalog[p.id] or type(p.name)~='string' or not integer(p.price,1000000000) then return fail('CATALOG_INVALID',503) end
     if p.stock~=nil and p.stock~=cjson.null and not integer(p.stock,1000000000) then return fail('CATALOG_INVALID',503) end
+    if p.requiresShipping~=nil and p.requiresShipping~=cjson.null and type(p.requiresShipping)~='boolean' then return fail('CATALOG_INVALID',503) end
     if p.variants~=nil and type(p.variants)~='table' then return fail('CATALOG_INVALID',503) end
     local labels={}
     for _,v in ipairs(p.variants or {}) do
@@ -127,7 +128,7 @@ local function run()
       if count>=RECORD_LIMIT then return fail('ORDER_CAPACITY_REACHED',503) end
       if type(settings.store)=='table' and settings.store.isOpen==false then return fail('STORE_CLOSED') end
       local items,quantities={},{}
-      local subtotal,itemCount,digitalOnly=0,0,true
+      local subtotal,itemCount,digitalOnly,allDigital=0,0,true,true
       local seen={}
       for _,line in ipairs(input.items) do
         local p=catalog[line.productId]
@@ -149,14 +150,32 @@ local function run()
         quantities[p.id]=(quantities[p.id] or 0)+line.qty
         if quantities[p.id]>99 or (state.stock[p.id]~=cjson.null and quantities[p.id]>state.stock[p.id]) then return fail('OUT_OF_STOCK') end
         itemCount=itemCount+line.qty; subtotal=subtotal+price*line.qty
-        if p.category~='digital' then digitalOnly=false end
+        local needsCourier=(p.requiresShipping==true) or ((p.requiresShipping==nil or p.requiresShipping==cjson.null) and p.category~='digital')
+        if needsCourier then digitalOnly=false end
+        if p.category~='digital' then allDigital=false end
         table.insert(items,{productId=p.id,name=p.name,image=p.image or '',variant=label,qty=line.qty,unitPrice=price,note=line.note})
       end
+      local storeSettings=type(settings.store)=='table' and settings.store or {}
+      local shippingEnabled=storeSettings.shippingEnabled~=false
+      local pickupEnabled=storeSettings.pickupEnabled~=false
       local shipping
-      if digitalOnly then shipping={id='digital',name='Dikirim digital via WhatsApp',price=0,eta='Setelah pembayaran'} else
-        for _,candidate in ipairs(input.commerce.shipping) do if candidate.id==input.shippingId then shipping=candidate end end
+      if digitalOnly then
+        if allDigital then shipping={id='digital',name='Dikirim digital via WhatsApp',price=0,eta='Setelah pembayaran'}
+        else shipping={id='no_courier',name='Tanpa kurir (diproses toko)',price=0,eta='Sesuai konfirmasi toko'} end
+      elseif not shippingEnabled and not pickupEnabled then
+        if input.shippingId=='no_courier' then
+          shipping={id='no_courier',name='Tanpa kurir (diatur toko)',price=0,eta='Sesuai konfirmasi toko'}
+        else return fail('INVALID_SHIPPING',400) end
+      else
+        for _,candidate in ipairs(input.commerce.shipping) do
+          if candidate.id==input.shippingId then
+            if (candidate.id=='pickup' and pickupEnabled) or (candidate.id~='pickup' and shippingEnabled) then
+              shipping=candidate
+            end
+          end
+        end
         if not shipping then return fail('INVALID_SHIPPING',400) end
-        if shipping.id~='pickup' and #input.customer.address==0 then return fail('ADDRESS_REQUIRED',400) end
+        if shipping.id~='pickup' and shipping.id~='no_courier' and #input.customer.address==0 then return fail('ADDRESS_REQUIRED',400) end
       end
       local discount=0
       if input.voucherCode~='' then
@@ -165,7 +184,7 @@ local function run()
         if not voucher then return fail('INVALID_VOUCHER',400) end
         discount=math.floor(subtotal*voucher.percent/100+0.5)
       end
-      local packaging=(not digitalOnly and subtotal>0) and input.commerce.packagingFee or 0
+      local packaging=(not digitalOnly and shipping.id~='no_courier' and subtotal>0) and input.commerce.packagingFee or 0
       local shippingCost=subtotal>0 and shipping.price or 0
       local baseTotal=math.max(0,subtotal-discount+shippingCost+packaging)
       local uniqueFlag=settings.uniqueCodeEnabled==true
@@ -280,8 +299,9 @@ local function run()
       state.holds[input.id]=nil
     elseif input.action=='cancel' then
       if order.status=='cancelled' then return success(order) end
-      if order.status=='completed' or order.status=='expired' then return fail('INVALID_TRANSITION') end
-      release(record.quantities); state.holds[input.id]=nil; transition(order,'cancelled',input.note)
+      if state.holds[input.id] then release(record.quantities); state.holds[input.id]=nil
+      elseif order.status~='expired' then release(record.quantities) end
+      transition(order,'cancelled',input.note)
     elseif input.action=='advance' then
       local nextStatus={paid='processing',processing='ready',ready='completed'}
       local target=nextStatus[input.expectedStatus]

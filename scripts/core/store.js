@@ -6,7 +6,7 @@
 // Cross-device: settings go to /api/settings and orders to /api/orders; each
 // record carries an updatedAt version and the newer copy wins on merge.
 
-import { PRODUCTS } from './catalog.js';
+import { PRODUCTS, setCustomCategories } from './catalog.js';
 import { applyExpiry, STATUS } from './orders.js';
 import { inventoryAdminHeaders, hasInventoryAdminToken, rejectUnauthorized, onAdminLogout } from './auth.js';
 
@@ -31,7 +31,10 @@ export const DEFAULT_SETTINGS = {
     whatsapp: '6281234567890',
     address: '',
     hours: '08:00 - 22:00',
-    isOpen: true
+    isOpen: true,
+    shippingEnabled: true,
+    pickupEnabled: true,
+    categories: []
   },
   qris: {
     payload: DEMO_STATIC_QRIS,
@@ -151,6 +154,8 @@ export function isRealtimeSupported() {
 // Products
 
 let inventoryStock = null;
+let serverTimeOffset = 0;
+export const getServerNow = () => Date.now() + serverTimeOffset;
 function sameInventorySnapshot(a, b) {
   if (!a || !b || a.revision !== b.revision) return false;
   const keysA = Object.keys(a.products);
@@ -163,6 +168,9 @@ export function setInventoryStock(snapshot) {
   if (!snapshot || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0
     || !snapshot.products || typeof snapshot.products !== 'object' || Array.isArray(snapshot.products)
     || Object.values(snapshot.products).some(stock => stock !== null && (!Number.isSafeInteger(stock) || stock < 0 || stock > 1e9))) return false;
+  if (Number.isFinite(snapshot.serverTime)) {
+    serverTimeOffset = Number(snapshot.serverTime) - Date.now();
+  }
   if (inventoryStock && snapshot.revision < inventoryStock.revision) return false;
   if (inventoryStock && sameInventorySnapshot(inventoryStock, snapshot)) return true;
   inventoryStock = structuredClone(snapshot);
@@ -269,9 +277,11 @@ export function acceptsOrder(current, next) {
   const b = Number(next.revision ?? next.updatedAt ?? 0);
   if (b < a) return false;
   const rank = s => [STATUS.AWAITING, STATUS.PAID, STATUS.PROCESSING, STATUS.READY, STATUS.COMPLETED].indexOf(s);
-  if ([STATUS.COMPLETED, STATUS.CANCELLED, STATUS.EXPIRED].includes(current.status) && next.status !== current.status) return false;
-  if (rank(current.status) > rank(next.status) && next.status !== STATUS.CANCELLED) return false;
-  return b !== a || next.status === current.status || rank(next.status) > rank(current.status) || next.status === STATUS.CANCELLED || (current.status === STATUS.AWAITING && next.status === STATUS.EXPIRED);
+  if (current.status === STATUS.CANCELLED && next.status !== STATUS.CANCELLED) return false;
+  if ([STATUS.COMPLETED, STATUS.EXPIRED].includes(current.status) && next.status !== current.status && next.status !== STATUS.CANCELLED) return false;
+  const allowsTerminal = next.status === STATUS.CANCELLED || (current.status === STATUS.AWAITING && next.status === STATUS.EXPIRED);
+  if (rank(current.status) > rank(next.status) && !allowsTerminal) return false;
+  return b !== a || next.status === current.status || rank(next.status) > rank(current.status) || allowsTerminal;
 }
 export function saveAdminOrder(order, { silent = false } = {}) {
   const current = adminOrders.get(order.id);
@@ -442,11 +452,17 @@ export function clearOrders() {
 
 function mergeSettings(saved) {
   const base = structuredClone(DEFAULT_SETTINGS);
-  if (!saved || typeof saved !== 'object') return base;
+  if (!saved || typeof saved !== 'object') {
+    return base;
+  }
+  const mergedStore = { ...base.store, ...(saved.store || {}) };
+  mergedStore.shippingEnabled = mergedStore.shippingEnabled !== false;
+  mergedStore.pickupEnabled = mergedStore.pickupEnabled !== false;
+  mergedStore.categories = setCustomCategories(mergedStore.categories);
   return {
     ...base,
     ...saved,
-    store: { ...base.store, ...(saved.store || {}) },
+    store: mergedStore,
     qris: { ...base.qris, ...(saved.qris || {}) },
     payment: { ...base.payment, ...(saved.payment || {}) },
     shipping: Array.isArray(saved.shipping) && saved.shipping.length ? saved.shipping : base.shipping,
@@ -455,7 +471,9 @@ function mergeSettings(saved) {
 }
 
 export function getSettings() {
-  return mergeSettings(read(KEYS.settings, null));
+  const merged = mergeSettings(read(KEYS.settings, null));
+  setCustomCategories(merged.store?.categories);
+  return merged;
 }
 
 export function saveSettings(patchOrFn, detail = {}) {
@@ -560,15 +578,22 @@ export function applyRemoteSettings(remote) {
   if (Array.isArray(remote.products) && Number(remote.catalogUpdatedAt || 0) > 0) {
     applyRemoteCatalog(remote);
   }
-  if (!remote.qris || !remote.qris.payload) return null;
+  const remotePayload = remote.qris?.payload || remote.payload;
+  if (!remotePayload) return null;
   const current = getSettings();
-  const remoteTime = Number(remote.updatedAt || remote.qris.updatedAt || 0);
+  const remoteTime = Number(remote.updatedAt || remote.qris?.updatedAt || 0);
   if (!(remoteTime > sharedVersion(current))) return null;
 
   const remoteStore = remote.store && typeof remote.store === 'object' ? remote.store : {};
-  const nextStore = { ...current.store, ...remoteStore };
-  const remoteUniqueCode = Boolean(remote.qris.uniqueCodeEnabled);
-  const contentChanged = remote.qris.payload !== current.qris.payload
+  const nextStore = {
+    ...current.store,
+    ...remoteStore,
+    shippingEnabled: remoteStore.shippingEnabled !== undefined ? remoteStore.shippingEnabled !== false : current.store.shippingEnabled !== false,
+    pickupEnabled: remoteStore.pickupEnabled !== undefined ? remoteStore.pickupEnabled !== false : current.store.pickupEnabled !== false,
+    categories: remoteStore.categories !== undefined ? setCustomCategories(remoteStore.categories) : setCustomCategories(current.store.categories)
+  };
+  const remoteUniqueCode = Boolean(remote.qris?.uniqueCodeEnabled ?? remote.uniqueCodeEnabled);
+  const contentChanged = remotePayload !== current.qris.payload
     || remoteUniqueCode !== Boolean(current.qris.uniqueCodeEnabled)
     || JSON.stringify(nextStore) !== JSON.stringify(current.store);
 
@@ -577,8 +602,8 @@ export function applyRemoteSettings(remote) {
     sharedUpdatedAt: remoteTime,
     qris: {
       ...s.qris,
-      payload: remote.qris.payload,
-      merchantName: remote.qris.merchantName || s.qris.merchantName,
+      payload: remotePayload,
+      merchantName: remote.qris?.merchantName || remote.merchantName || s.qris.merchantName,
       uniqueCodeEnabled: remoteUniqueCode,
       updatedAt: remoteTime
     },

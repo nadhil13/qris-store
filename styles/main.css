@@ -2198,43 +2198,6 @@ a {
   box-shadow: var(--shadow-subtle);
 }
 
-.qris-mode-switch {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 14px;
-  background: var(--bg-canvas-subtle);
-  padding: 4px;
-  border-radius: var(--radius-full);
-}
-
-.qris-mode-btn {
-  flex: 1 1 auto;
-  min-height: 44px;
-  padding: 8px 14px;
-  border-radius: var(--radius-full);
-  font-size: 0.8rem;
-  font-weight: 700;
-  border: none;
-  background: transparent;
-  color: var(--ink-secondary);
-  cursor: pointer;
-  transition: background-color var(--trans-fast), color var(--trans-fast);
-}
-
-.qris-mode-btn.is-active {
-  background: var(--accent-terracotta);
-  color: #FFFFFF;
-}
-
-.qris-mode-helper {
-  font-size: 0.78rem;
-  color: var(--ink-tertiary);
-  margin-bottom: 12px;
-  line-height: 1.45;
-}
-
 .payment-content {
   padding: 24px;
   overflow-y: auto;
@@ -3355,21 +3318,6 @@ a {
     font-size: 0.78rem;
   }
 
-  .qris-mode-switch {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
-    padding: 4px;
-    border-radius: var(--radius-md);
-  }
-
-  .qris-mode-btn {
-    border-radius: calc(var(--radius-md) - 3px);
-    padding: 8px;
-    font-size: 0.74rem;
-    line-height: 1.25;
-  }
-
   .payment-content {
     padding: 14px;
   }
@@ -3430,6 +3378,16 @@ a {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.customer-address-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.customer-address-group[hidden] {
+  display: none;
 }
 
 .customer-field-label {
@@ -4835,14 +4793,16 @@ a {
   .admin-section-nav {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 6px;
-    overflow-x: auto;
+    overflow-x: visible;
     padding-bottom: 2px;
   }
 
   .admin-section-nav-item {
     flex: 0 0 auto;
     min-height: 44px;
+    padding: 0 11px;
     white-space: nowrap;
   }
 
@@ -4996,6 +4956,47 @@ a {
   font-size: 0.74rem;
   font-weight: 700;
   color: var(--ink-secondary);
+}
+
+.admin-category-row,
+.admin-new-category-box {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.admin-category-row select,
+.admin-new-category-box .customer-input-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-new-category-box {
+  margin-top: 6px;
+}
+
+.admin-new-category-box[hidden] {
+  display: none;
+}
+
+.admin-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.84rem;
+  color: var(--ink-primary);
+  line-height: 1.45;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 6px 0;
+}
+
+.admin-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--brand-forest);
 }
 
 /* Sold Out Badges on Storefront Catalog */

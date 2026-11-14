@@ -97,8 +97,18 @@ export function findVoucher(code, vouchers = []) {
   return vouchers.find((v) => v.active !== false && v.code.toUpperCase() === normalized) || null;
 }
 
+export function productRequiresShipping(product) {
+  if (!product) return false;
+  if (typeof product.requiresShipping === 'boolean') return product.requiresShipping;
+  return product.category !== 'digital';
+}
+
 export function isDigitalOnly(lines) {
-  return lines.length > 0 && lines.every((l) => l.product && l.product.category === 'digital');
+  return lines.length > 0 && lines.every((l) => l.product && !productRequiresShipping(l.product));
+}
+
+export function isStrictDigitalOnly(lines) {
+  return lines.length > 0 && lines.every((l) => l.product && l.product.category === 'digital' && !productRequiresShipping(l.product));
 }
 
 export function computeTotals({ lines, shipping, voucher, packagingFee = 0 }) {
@@ -107,8 +117,9 @@ export function computeTotals({ lines, shipping, voucher, packagingFee = 0 }) {
   const subtotal = purchasable.reduce((sum, l) => sum + l.lineTotal, 0);
   const discount = voucher ? Math.round(subtotal * (Number(voucher.percent) || 0) / 100) : 0;
   const digitalOnly = isDigitalOnly(purchasable);
+  const noCourier = digitalOnly || shipping?.id === 'no_courier' || shipping?.id === 'digital';
   const shippingCost = subtotal > 0 && shipping && !digitalOnly ? Number(shipping.price) || 0 : 0;
-  const packaging = subtotal > 0 && !digitalOnly ? Number(packagingFee) || 0 : 0;
+  const packaging = subtotal > 0 && !noCourier ? Number(packagingFee) || 0 : 0;
   const total = Math.max(0, subtotal - discount + shippingCost + packaging);
   return { itemCount, subtotal, discount, shippingCost, packaging, total, digitalOnly };
 }

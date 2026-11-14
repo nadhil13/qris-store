@@ -11,7 +11,7 @@
 // { paid: true, reference } when money has arrived.
 
 import { convertStaticToDynamicQRIS } from '../qris.js';
-import { getOrder, getAdminOrder, updateOrder, moveStockForOrder, subscribe, sweepExpiredOrders } from './store.js';
+import { getOrder, getAdminOrder, updateOrder, saveAdminOrder, moveStockForOrder, subscribe, sweepExpiredOrders, getServerNow } from './store.js';
 import { markPaid, cancelOrder, advanceOrder, isExpired, isPaidStatus, remainingMs, STATUS } from './orders.js';
 import { isInventoryOrder, transitionInventoryOrder, refreshInventoryOrder } from './inventory.js';
 
@@ -46,7 +46,7 @@ export function buildPaymentPayload(order, staticPayload) {
 
 async function inventoryTransition(action, orderId, detail) {
   try { return { ok: true, order: await transitionInventoryOrder(action, orderId, detail) }; }
-  catch (error) { return { ok: false, reason: error.message }; }
+  catch (error) { return { ok: false, reason: error.message, code: error.code }; }
 }
 
 export function advancePaymentOrder(orderId) {
@@ -77,7 +77,14 @@ export function cancelOrderById(orderId, { by = 'admin', note = '' } = {}) {
   if (!current) return { ok: false, reason: 'not-found' };
   if (isInventoryOrder(current)) return inventoryTransition('cancel', orderId, { note });
   const wasPaid = isPaidStatus(current.status);
-  const saved = updateOrder(orderId, (o) => cancelOrder(o, { by, note }), { type: 'cancelled' });
+  const owned = Boolean(getOrder(orderId));
+  let saved = null;
+  if (owned) {
+    saved = updateOrder(orderId, (o) => cancelOrder(o, { by, note }), { type: 'cancelled' });
+  } else {
+    const cancelled = cancelOrder(current, { by, note });
+    if (cancelled) saved = saveAdminOrder(cancelled, { type: 'cancelled' });
+  }
   if (!saved) return { ok: false, reason: current.status };
   if (wasPaid) moveStockForOrder(saved, +1);
   return { ok: true, order: saved };
@@ -89,6 +96,7 @@ export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
   let last = getOrder(orderId);
   let stopped = false;
   let polling = false;
+  const nowMs = () => (typeof getServerNow === 'function' ? getServerNow() : Date.now());
 
   const stopAll = () => {
     stopped = true;
@@ -110,24 +118,7 @@ export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
     }
   };
 
-  const unsubscribe = subscribe((change) => {
-    if (change.domain === 'orders' && (!change.id || change.id === orderId)) push();
-  });
-
-  const tick = setInterval(() => {
-    if (stopped || !last) return;
-    if (last.status !== STATUS.AWAITING) {
-      stopAll();
-      return;
-    }
-    if (remainingMs(last) <= 0) {
-      sweepExpiredOrders();
-      push();
-    }
-    onTick && onTick(remainingMs(last), last);
-  }, 1000);
-
-  const poll = setInterval(async () => {
+  const checkServerOrder = async () => {
     if (stopped || polling || !last) return;
     if (last.status !== STATUS.AWAITING) {
       stopAll();
@@ -152,9 +143,42 @@ export function watchOrder(orderId, { onUpdate, onTick, onError } = {}) {
     } finally {
       polling = false;
     }
-  }, 2000);
+  };
 
-  if (last && onTick && last.status === STATUS.AWAITING) onTick(remainingMs(last), last);
+  const unsubscribe = subscribe((change) => {
+    if (change.domain === 'orders' && (!change.id || change.id === orderId)) push();
+  });
+
+  const tick = setInterval(() => {
+    if (stopped || !last) return;
+    if (last.status !== STATUS.AWAITING) {
+      stopAll();
+      return;
+    }
+    const now = nowMs();
+    const msLeft = remainingMs(last, now);
+    if (msLeft <= 0) {
+      if (isInventoryOrder(last)) {
+        checkServerOrder();
+      } else {
+        sweepExpiredOrders(now);
+        push();
+      }
+    }
+    onTick && onTick(msLeft, last);
+  }, 1000);
+
+  const poll = setInterval(checkServerOrder, 2000);
+
+  if (last && onTick && last.status === STATUS.AWAITING) {
+    const now = nowMs();
+    const msLeft = remainingMs(last, now);
+    if (msLeft <= 0) {
+      if (isInventoryOrder(last)) checkServerOrder();
+      else { sweepExpiredOrders(now); push(); }
+    }
+    onTick(msLeft, last);
+  }
 
   return stopAll;
 }

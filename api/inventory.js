@@ -9,6 +9,7 @@ export const INVENTORY_SEED_PRODUCTS = SEED_PRODUCTS.map((product) => ({
   price: product.price,
   stock: product.stock ?? null,
   category: product.category,
+  requiresShipping: product.requiresShipping !== undefined ? Boolean(product.requiresShipping) : product.category !== 'digital',
   isAvailable: product.isAvailable !== false,
   image: product.image,
   variants: Array.isArray(product.variants) ? product.variants : []

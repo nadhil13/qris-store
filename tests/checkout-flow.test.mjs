@@ -134,16 +134,16 @@ assert.ok(qrBox.innerHTML.includes('<svg class="qr-svg"'), 'qrBox must contain <
 assert.ok(!qrBox.innerHTML.includes('Menyiapkan QRIS Dinamis'), 'Spinner text must be replaced');
 assert.ok(qrBox.innerHTML.length > 5000, 'SVG payload must be complete');
 
-// Test 2: Static QRIS mode also updates SVG
+// Test 2: Buyer payment QRIS stays in Dynamic mode even if called with legacy 'static' argument
 switchQRISDisplayMode('static', {
   id: 'test-order-1',
   invoice: 'AN2611099158',
   totals: { total: 80000 }
 });
-assert.ok(qrBox.innerHTML.includes('<svg class="qr-svg"'), 'qrBox in static mode also renders SVG');
+assert.ok(qrBox.innerHTML.includes('<svg class="qr-svg"'), 'qrBox always renders SVG');
 
 const pill = document.getElementById('qris-acquirer-pill');
-assert.match(pill.textContent, /QRIS Statis$/, 'Static mode must not label the QRIS as dynamic');
+assert.match(pill.textContent, /QRIS Dinamis$/, 'Checkout QRIS must always remain dynamic');
 
 switchQRISDisplayMode('dynamic', {
   id: 'test-order-1',
@@ -286,7 +286,8 @@ globalThis.fetch = async (url, options = {}) => {
   return { ok: true, json: async () => ({ ok: true, order: { ...canonical, id: payload.id, payment: { method: 'whatsapp' } } }) };
 };
 await app.checkoutViaWhatsApp();
-assert.match(whatsappMessage, /reservasi 10 menit/);
+assert.match(whatsappMessage, /Status: Konfirmasi & ketersediaan lewat WhatsApp \(berlaku hingga /);
+assert.doesNotMatch(whatsappMessage, /String QRIS:|00020101/);
 assert.equal(app.state.cart.length, 0);
 
 // Login is authorized by the backend, never by a fixed browser credential.

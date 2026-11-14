@@ -20,6 +20,7 @@ const FLOW = [STATUS.PAID, STATUS.PROCESSING, STATUS.READY, STATUS.COMPLETED];
 export function fulfillmentKind(order) {
   if (order?.shipping?.id === 'digital') return 'digital';
   if (order?.shipping?.id === 'pickup') return 'pickup';
+  if (order?.shipping?.id === 'no_courier') return 'direct';
   return 'delivery';
 }
 
@@ -28,9 +29,10 @@ export function statusLabel(status, order) {
   switch (status) {
     case STATUS.AWAITING: return 'Menunggu pembayaran';
     case STATUS.PAID: return 'Pembayaran diterima';
-    case STATUS.PROCESSING: return kind === 'digital' ? 'Sedang disiapkan' : 'Sedang dikemas';
+    case STATUS.PROCESSING: return (kind === 'digital' || kind === 'direct') ? 'Sedang disiapkan' : 'Sedang dikemas';
     case STATUS.READY:
       if (kind === 'pickup') return 'Siap diambil';
+      if (kind === 'direct') return 'Siap diproses toko';
       if (kind === 'digital') return 'Dikirim ke WhatsApp';
       return 'Dalam pengiriman';
     case STATUS.COMPLETED: return 'Selesai';
@@ -124,7 +126,7 @@ export function advanceOrder(order, { now = Date.now(), by = 'admin' } = {}) {
 }
 
 export function cancelOrder(order, { now = Date.now(), by = 'admin', note = '' } = {}) {
-  if (!order || [STATUS.COMPLETED, STATUS.CANCELLED, STATUS.EXPIRED].includes(order.status)) return null;
+  if (!order || order.status === STATUS.CANCELLED) return null;
   return transition(order, STATUS.CANCELLED, { now, by, note });
 }
 

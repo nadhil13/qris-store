@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"></noscript>
-  <link rel="stylesheet" href="styles/main.css?v=20261114-v30">
+  <link rel="stylesheet" href="styles/main.css?v=20261114-v31">
   <script>
     if ('serviceWorker' in navigator) {
       const hadController = Boolean(navigator.serviceWorker.controller);
@@ -498,14 +498,16 @@
           <input type="tel" class="customer-input-field" id="customer-phone" placeholder="08..."
             autocomplete="tel" inputmode="tel" aria-describedby="error-customer-phone checkout-privacy-note" oninput="window.updateCustomerInfo()" />
           <p class="customer-field-error" id="error-customer-phone" role="alert" hidden></p>
-          <label for="customer-address" class="customer-field-label">Alamat atau catatan lokasi</label>
-          <input type="text" class="customer-input-field" id="customer-address"
-            placeholder="Kosongkan jika ambil di toko" autocomplete="street-address" aria-describedby="error-customer-address checkout-privacy-note" oninput="window.updateCustomerInfo()" />
-          <p class="customer-field-error" id="error-customer-address" role="alert" hidden></p>
+          <div id="customer-address-group" class="customer-address-group">
+            <label for="customer-address" class="customer-field-label">Alamat atau catatan lokasi</label>
+            <input type="text" class="customer-input-field" id="customer-address"
+              placeholder="Kosongkan jika ambil di toko" autocomplete="street-address" aria-describedby="error-customer-address checkout-privacy-note" oninput="window.updateCustomerInfo()" />
+            <p class="customer-field-error" id="error-customer-address" role="alert" hidden></p>
+          </div>
         </div>
         <p class="checkout-privacy-note" id="checkout-privacy-note">
-          Nama, nomor, dan alamat dikirim ke server toko untuk membuat pesanan dan menahan stok, lalu dipakai penjual untuk menghubungi dan mengantar pesanan Anda.
-          <a href="#privasi" onclick="window.closeCartDrawer(); window.toggleFooterPrivacy?.(true)">Baca cara data disimpan</a>
+          Nama dan nomor WhatsApp (serta alamat bila menggunakan kurir) dipakai untuk memproses pesanan dan menghubungi Anda.
+          <a href="#privasi" onclick="window.closeCartDrawer(); window.toggleFooterPrivacy?.(true)">Baca informasi privasi</a>
         </p>
 
         <div style="margin-top: 10px;">
@@ -610,21 +612,6 @@
               <div class="merchant-nmid" id="qris-nmid-display">NMID: ID1026533086801 · JAKARTA BARAT</div>
             </div>
 
-            <!-- Mode Switcher: Dinamis vs Statis Asli -->
-            <div class="qris-mode-switch" role="group" aria-label="Pilih mode tampilan QRIS">
-              <button type="button" id="btn-qris-mode-dynamic" class="qris-mode-btn is-active" aria-pressed="true"
-                onclick="window.switchQRISDisplayMode('dynamic')">
-                Dinamis: Nominal Terisi
-              </button>
-              <button type="button" id="btn-qris-mode-static" class="qris-mode-btn" aria-pressed="false"
-                onclick="window.switchQRISDisplayMode('static')">
-                Statis Asli: Poster Toko
-              </button>
-            </div>
-            <p id="qris-mode-helper" class="qris-mode-helper">
-              Mode Dinamis: Tagihan terkunci otomatis di scanner aplikasi perbankan Anda.
-            </p>
-
             <!-- Dynamic QR Code SVG Injection -->
             <div class="qris-qr-box" id="qris-svg-container">
               <div style="font-size: 0.8rem; color: var(--ink-secondary); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
@@ -648,8 +635,8 @@
             </div>
 
             <div id="payment-expired-banner" style="display:none; background:#FEE2E2; color:#991B1B; padding:12px; border-radius:8px; margin:12px 0; text-align:center;">
-              <strong>Waktu Pembayaran 10 Menit Habis</strong>
-              <p style="font-size:0.8rem; margin:4px 0 8px;">Pesanan ini telah hangus otomatis demi menjaga reservasi stok toko.</p>
+              <strong>Waktu Pembayaran 10 Menit Habis · Pesanan Dibatalkan Otomatis</strong>
+              <p style="font-size:0.8rem; margin:4px 0 8px;">Batas waktu pembayaran telah berakhir sehingga pesanan ini dibatalkan otomatis. Silakan buat pesanan ulang.</p>
               <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:10px 16px; min-height:44px; font-size:0.85rem; margin:0 auto;">Buat Pesanan Ulang</button>
             </div>
 
@@ -691,15 +678,10 @@
 
             <div class="simulator-actions">
               <p>Pembayaran dikonfirmasi oleh toko setelah dana diterima.</p>
-              <div style="display: flex; gap: 8px;">
-                <button type="button" class="btn-copy-raw" style="flex: 1;" onclick="window.copyQRISPayload()">
-                  Salin String QRIS
-                </button>
-                <button type="button" class="btn-copy-raw" style="flex: 1; border-color: #146C36; color: #0C6B5E;"
-                  onclick="window.sendOrderToWhatsApp()">
-                  Kirim ke WhatsApp
-                </button>
-              </div>
+              <button type="button" class="btn-copy-raw" style="width: 100%; border-color: #146C36; color: #0C6B5E;"
+                onclick="window.sendOrderToWhatsApp()">
+                Kirim Pesanan ke WhatsApp
+              </button>
             </div>
           </div>
         </div>
@@ -1155,14 +1137,21 @@
                 </div>
                 <div class="admin-field-group">
                   <label class="admin-field-label" for="new-prod-category">Kategori *</label>
-                  <select id="new-prod-category" class="customer-input-field" required>
-                    <option value="makanan">Makanan Gourmet</option>
-                    <option value="minuman">Minuman Artisan</option>
-                    <option value="barang">Kriya & Rumah</option>
-                    <option value="fashion">Fashion & Busana</option>
-                    <option value="gadget">Gadget & Tech</option>
-                    <option value="digital">Produk Digital</option>
-                  </select>
+                  <div class="admin-category-row">
+                    <select id="new-prod-category" class="customer-input-field" required>
+                      <option value="makanan">Makanan Gourmet</option>
+                      <option value="minuman">Minuman Artisan</option>
+                      <option value="barang">Kriya & Rumah</option>
+                      <option value="fashion">Fashion & Busana</option>
+                      <option value="gadget">Gadget & Tech</option>
+                      <option value="digital">Produk Digital</option>
+                    </select>
+                    <button type="button" class="btn-secondary btn-admin-sm" id="btn-toggle-new-category" onclick="window.toggleCustomCategoryInput()">+ Kategori</button>
+                  </div>
+                  <div id="admin-new-category-box" class="admin-new-category-box" hidden>
+                    <input type="text" id="admin-new-category-name" class="customer-input-field" placeholder="Nama kategori baru" maxlength="36" />
+                    <button type="button" class="btn-primary btn-admin-sm" style="background: var(--brand-forest);" onclick="window.addCustomProductCategory()">Tambah</button>
+                  </div>
                 </div>
                 <div class="admin-field-group">
                   <label class="admin-field-label" for="new-prod-price">Harga (Rp) *</label>
@@ -1173,6 +1162,12 @@
                   <label class="admin-field-label" for="new-prod-tag">Label / Badge</label>
                   <input type="text" id="new-prod-tag" class="customer-input-field"
                     placeholder="Contoh: Menu Baru, Best Seller" />
+                </div>
+                <div class="admin-field-group" style="grid-column: 1 / -1;">
+                  <label class="admin-checkbox-label" for="new-prod-requires-shipping">
+                    <input type="checkbox" id="new-prod-requires-shipping" checked />
+                    <span>Gunakan pengiriman kurir / fisik untuk produk ini (hilangkan centang untuk produk digital atau tanpa kurir)</span>
+                  </label>
                 </div>
                 <div class="admin-field-group" style="grid-column: 1 / -1;">
                   <label class="admin-field-label" for="new-prod-image">URL Foto Produk</label>
@@ -1242,6 +1237,13 @@
               <p>Jam ditampilkan sebagai informasi. Status buka atau tutup diatur manual, bukan jadwal otomatis.</p>
               <label><input type="checkbox" id="admin-storefront-is-open" checked /> Toko sedang buka</label>
               <button type="button" class="btn-primary" onclick="window.saveAdminStorefrontSetting('availability')">Simpan ketersediaan</button>
+            </section>
+            <section class="admin-settings-card" aria-labelledby="admin-store-shipping-title">
+              <h4 id="admin-store-shipping-title">Pengaturan Kurir &amp; Pengambilan</h4>
+              <p>Tentukan apakah kurir pengantaran dan opsi ambil di toko aktif bagi pembeli.</p>
+              <label class="admin-checkbox-label" for="admin-storefront-shipping-enabled"><input type="checkbox" id="admin-storefront-shipping-enabled" checked /> <span>Aktifkan layanan kurir pengantaran</span></label>
+              <label class="admin-checkbox-label" for="admin-storefront-pickup-enabled"><input type="checkbox" id="admin-storefront-pickup-enabled" checked /> <span>Aktifkan opsi ambil di toko</span></label>
+              <button type="button" class="btn-primary" onclick="window.saveAdminStorefrontSetting('shipping')">Simpan pengaturan kurir</button>
             </section>
             <section class="admin-settings-card" aria-labelledby="admin-store-catalog-title">
               <h4 id="admin-store-catalog-title">Produk yang tampil ke pelanggan</h4>
@@ -1382,8 +1384,8 @@
         </div>
         <div class="footer-privacy-grid">
           <div class="footer-privacy-item">
-            <h3>Catatan server toko</h3>
-            <p>Nama, nomor WhatsApp, alamat, isi keranjang, dan total tagihan disimpan di server toko (database Redis/KV) sebagai catatan pesanan untuk konfirmasi pembayaran dan pengiriman.</p>
+            <h3>Data pesanan</h3>
+            <p>Nama, nomor WhatsApp, alamat pengiriman (bila memakai kurir), rincian pesanan, dan total tagihan dicatat untuk memproses transaksi dan pengiriman Anda.</p>
           </div>
           <div class="footer-privacy-item">
             <h3>Penyimpanan browser lokal</h3>
@@ -1415,7 +1417,7 @@
   <script src="scripts/vendor/qrcode.min.js"></script>
   <script src="scripts/vendor/gsap.min.js"></script>
   <script src="scripts/vendor/ScrollTrigger.min.js"></script>
-  <script type="module" src="scripts/app.js?v=20261114-v30"></script>
+  <script type="module" src="scripts/app.js?v=20261114-v31"></script>
 </body>
 
 </html>

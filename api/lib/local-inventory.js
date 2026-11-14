@@ -24,6 +24,9 @@ function resolveCatalog(settings) {
     if (p.stock !== undefined && p.stock !== null && !isSafeStockInt(p.stock)) {
       return { error: fail('CATALOG_INVALID', 503) };
     }
+    if (p.requiresShipping !== undefined && p.requiresShipping !== null && typeof p.requiresShipping !== 'boolean') {
+      return { error: fail('CATALOG_INVALID', 503) };
+    }
     if (p.variants !== undefined && !Array.isArray(p.variants)) {
       return { error: fail('CATALOG_INVALID', 503) };
     }
@@ -142,6 +145,7 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
       let subtotal = 0;
       let itemCount = 0;
       let digitalOnly = true;
+      let allDigital = true;
 
       for (const line of input.items) {
         const p = catalog.get(line.productId);
@@ -170,17 +174,33 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
         }
         itemCount += line.qty;
         subtotal += price * line.qty;
-        if (p.category !== 'digital') digitalOnly = false;
+        const needsCourier = p.requiresShipping === true || ((p.requiresShipping === undefined || p.requiresShipping === null) && p.category !== 'digital');
+        if (needsCourier) digitalOnly = false;
+        if (p.category !== 'digital') allDigital = false;
         items.push({ productId: p.id, name: p.name, image: p.image || '', variant: label, qty: line.qty, unitPrice: price, note: line.note });
       }
 
+      const storeSettings = settings.store && typeof settings.store === 'object' ? settings.store : {};
+      const shippingEnabled = storeSettings.shippingEnabled !== false;
+      const pickupEnabled = storeSettings.pickupEnabled !== false;
       let shipping;
       if (digitalOnly) {
-        shipping = { id: 'digital', name: 'Dikirim digital via WhatsApp', price: 0, eta: 'Setelah pembayaran' };
+        shipping = allDigital
+          ? { id: 'digital', name: 'Dikirim digital via WhatsApp', price: 0, eta: 'Setelah pembayaran' }
+          : { id: 'no_courier', name: 'Tanpa kurir (diproses toko)', price: 0, eta: 'Sesuai konfirmasi toko' };
+      } else if (!shippingEnabled && !pickupEnabled) {
+        if (input.shippingId === 'no_courier') {
+          shipping = { id: 'no_courier', name: 'Tanpa kurir (diatur toko)', price: 0, eta: 'Sesuai konfirmasi toko' };
+        } else {
+          return fail('INVALID_SHIPPING', 400);
+        }
       } else {
-        shipping = input.commerce.shipping.find((c) => c.id === input.shippingId);
+        shipping = input.commerce.shipping.find((c) => {
+          if (c.id !== input.shippingId) return false;
+          return c.id === 'pickup' ? pickupEnabled : shippingEnabled;
+        });
         if (!shipping) return fail('INVALID_SHIPPING', 400);
-        if (shipping.id !== 'pickup' && input.customer.address.length === 0) return fail('ADDRESS_REQUIRED', 400);
+        if (shipping.id !== 'pickup' && shipping.id !== 'no_courier' && input.customer.address.length === 0) return fail('ADDRESS_REQUIRED', 400);
       }
 
       let discount = 0;
@@ -190,7 +210,7 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
         discount = Math.floor((subtotal * voucher.percent) / 100 + 0.5);
       }
 
-      const packaging = (!digitalOnly && subtotal > 0) ? input.commerce.packagingFee : 0;
+      const packaging = (!digitalOnly && shipping.id !== 'no_courier' && subtotal > 0) ? input.commerce.packagingFee : 0;
       const shippingCost = subtotal > 0 ? shipping.price : 0;
       const baseTotal = Math.max(0, subtotal - discount + shippingCost + packaging);
       const uniqueFlag = (settings.qris && typeof settings.qris === 'object' && settings.qris.uniqueCodeEnabled !== undefined)
@@ -363,9 +383,12 @@ export function createLocalInventoryEngine({ getSettings = getInMemorySettings, 
       delete state.holds[input.id];
     } else if (input.action === 'cancel') {
       if (order.status === 'cancelled') return { ok: true, order: clone(order), stock: snapshot(now) };
-      if (order.status === 'completed' || order.status === 'expired') return fail('INVALID_TRANSITION', 409);
-      release(existingRecord.quantities);
-      delete state.holds[input.id];
+      if (state.holds[input.id]) {
+        release(existingRecord.quantities);
+        delete state.holds[input.id];
+      } else if (order.status !== 'expired') {
+        release(existingRecord.quantities);
+      }
       transition(order, 'cancelled', now, input.note);
     } else if (input.action === 'advance') {
       const nextStatus = { paid: 'processing', processing: 'ready', ready: 'completed' };

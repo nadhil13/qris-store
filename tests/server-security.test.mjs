@@ -91,10 +91,12 @@ for (const endpoint of ['settings', 'orders', 'inventory']) {
     });
   }
 }
-test('64 KiB UTF-8 settings body remains accepted in no-KV development', async () => {
+test('64 KiB UTF-8 settings body clears the body limit while failing closed without admin token', async () => {
   const body = JSON.stringify({ padding: 'é'.repeat(32761) });
   assert.equal(Buffer.byteLength(body), 65536);
-  assert.equal((await request('/api/settings', { method: 'POST', body })).status, 200);
+  const exact = await request('/api/settings', { method: 'POST', body });
+  assert.equal(exact.status, 503);
+  assert.equal(JSON.parse(exact.body).code, 'ADMIN_UNAVAILABLE');
   const oversized = JSON.stringify({ padding: 'é'.repeat(32762) });
   assert.equal((await request('/api/settings', { method: 'POST', body: oversized })).status, 413);
 });

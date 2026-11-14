@@ -1,4 +1,11 @@
-import { PRODUCTS as SEED_PRODUCTS, CATEGORIES, getCategoryLabel } from './core/catalog.js';
+import {
+  PRODUCTS as SEED_PRODUCTS,
+  CATEGORIES,
+  normalizeCategorySlug,
+  getAllCategories,
+  setCustomCategories,
+  getCategoryLabel
+} from './core/catalog.js';
 import { createModalManager, createDialogService, bindTabs } from './core/dialogs.js';
 
 let modalManager;
@@ -33,7 +40,9 @@ import {
   resolveLines,
   findVoucher,
   computeTotals,
-  isDigitalOnly
+  isDigitalOnly,
+  isStrictDigitalOnly,
+  productRequiresShipping
 } from './core/cart.js';
 import {
   STATUS,
@@ -101,6 +110,7 @@ import {
   savePrefs,
   subscribe,
   isRealtimeSupported,
+  getServerNow,
   STORAGE_KEYS
 } from './core/store.js';
 import {
@@ -357,6 +367,74 @@ export function showToast(message, { duration = 3200 } = {}) {
   showToast.timer = setTimeout(() => {
     toast.classList.remove('show');
   }, duration);
+}
+
+function handleCategoryTabSelect(btn) {
+  if (!btn) return;
+  sfx.playClick();
+  document.querySelectorAll('.category-tabs .tab-btn').forEach((b) => {
+    b.classList.remove('active');
+    b.setAttribute?.('aria-pressed', 'false');
+  });
+  btn.classList.add('active');
+  btn.setAttribute?.('aria-pressed', 'true');
+  state.activeCategory = btn.dataset.category;
+  renderCatalog();
+  syncCategoryTabSlider();
+}
+
+function bindCategoryTabButton(btn) {
+  if (!btn || btn._catTabBound) return;
+  btn._catTabBound = true;
+  btn.addEventListener?.('click', () => handleCategoryTabSelect(btn));
+}
+
+export function renderCategoryTabs() {
+  const container = document.querySelector?.('.category-tabs');
+  if (!container || typeof document?.createElement !== 'function' || typeof container.appendChild !== 'function') {
+    renderCategoryBadges();
+    return;
+  }
+  const products = getProducts();
+  const settings = getSettings();
+  const allCats = getAllCategories(products, settings.store?.categories);
+  const allowedIds = new Set(['semua', ...allCats.map((c) => c.id)]);
+  if (!allowedIds.has(state.activeCategory)) state.activeCategory = 'semua';
+
+  const existingButtons = Array.from(container.querySelectorAll?.('.tab-btn') || []);
+  const byCat = new Map();
+  existingButtons.forEach((btn) => {
+    const catId = btn.dataset?.category;
+    if (!allowedIds.has(catId)) {
+      btn.remove?.();
+    } else {
+      byCat.set(catId, btn);
+    }
+  });
+
+  const slider = document.getElementById?.('tab-active-slider');
+  for (const cat of allCats) {
+    let btn = byCat.get(cat.id);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tab-btn';
+      btn.dataset.category = cat.id;
+      btn.innerHTML = `<span>${escapeHTML(cat.label)}</span><span class="tab-count">0</span>`;
+      if (slider && slider.parentNode === container) container.insertBefore(btn, slider);
+      else container.appendChild(btn);
+    }
+    bindCategoryTabButton(btn);
+  }
+
+  Array.from(container.querySelectorAll?.('.tab-btn') || []).forEach((btn) => {
+    const active = btn.dataset?.category === state.activeCategory;
+    btn.classList?.toggle?.('active', active);
+    btn.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  });
+
+  renderCategoryBadges();
+  syncCategoryTabSlider(true);
 }
 
 export function renderCategoryBadges() {
@@ -813,7 +891,7 @@ function validateCheckoutCustomer({ digitalOnly = false, shippingId = 'instant' 
   const phone = String(state.customer?.phone || '').trim();
   const address = String(state.customer?.address || '').trim();
   const phoneDigits = phone.replace(/\D/g, '');
-  const needsAddress = !digitalOnly && shippingId !== 'pickup';
+  const needsAddress = !digitalOnly && shippingId !== 'pickup' && shippingId !== 'no_courier';
 
   let firstInvalid = null;
   let firstMessage = '';
@@ -869,16 +947,32 @@ export function applyVoucher() {
 }
 
 const DIGITAL_SHIPPING = { id: 'digital', name: 'Dikirim digital via WhatsApp', price: 0, eta: 'Setelah pembayaran' };
+const NO_COURIER_SHIPPING = { id: 'no_courier', name: 'Tanpa kurir (diproses toko)', price: 0, eta: 'Sesuai konfirmasi toko' };
+
+function resolveAvailableShippingMethods(settings, purchasableLines) {
+  const digitalOnly = isDigitalOnly(purchasableLines);
+  const strictDigital = isStrictDigitalOnly(purchasableLines);
+  if (digitalOnly) {
+    return [strictDigital ? DIGITAL_SHIPPING : NO_COURIER_SHIPPING];
+  }
+  const shippingEnabled = settings?.store?.shippingEnabled !== false;
+  const pickupEnabled = settings?.store?.pickupEnabled !== false;
+  const list = (Array.isArray(settings?.shipping) ? settings.shipping : []).filter((s) =>
+    s.id === 'pickup' ? pickupEnabled : shippingEnabled
+  );
+  return list.length ? list : [NO_COURIER_SHIPPING];
+}
 
 export function getCalculatedCart() {
   const products = getProducts();
   const lines = resolveLines(state.cart, products);
   const settings = getSettings();
-  const digitalOnly = isDigitalOnly(lines.filter((l) => l.available));
-  const chosen = settings.shipping.find((s) => s.id === state.activeShippingId) || settings.shipping[0];
+  const purchasable = lines.filter((l) => l.available);
+  const digitalOnly = isDigitalOnly(purchasable);
+  const availableShipping = resolveAvailableShippingMethods(settings, purchasable);
+  const chosen = availableShipping.find((s) => s.id === state.activeShippingId) || availableShipping[0];
   if (!digitalOnly && chosen && chosen.id !== state.activeShippingId) state.activeShippingId = chosen.id;
-  // Orders record the digital option so tracker labels read "dikirim ke WhatsApp".
-  const activeShipping = digitalOnly ? DIGITAL_SHIPPING : chosen;
+  const activeShipping = chosen;
   const voucher = state.activeVoucherCode ? { code: state.activeVoucherCode, percent: state.voucherDiscountPercent } : null;
   const totals = computeTotals({
     lines,
@@ -886,31 +980,44 @@ export function getCalculatedCart() {
     voucher,
     packagingFee: settings.packagingFee
   });
-  return { lines, totals, settings, activeShipping, voucher };
+  return { lines, totals, settings, activeShipping, availableShipping, voucher };
 }
 
-function renderShippingOptions(settings, totals) {
+function renderShippingOptions(settings, totals, activeShipping, availableShipping = []) {
   const grid = document.getElementById('shipping-methods-grid');
   const note = document.getElementById('shipping-digital-note');
   const title = document.getElementById('shipping-section-title');
+  const addressGroup = document.getElementById('customer-address-group');
   const addressEl = document.getElementById('customer-address');
+  const errorAddressEl = document.getElementById('error-customer-address');
   const digital = totals.digitalOnly;
+  const noCourierOnly = digital || activeShipping?.id === 'no_courier';
 
-  if (note) note.hidden = !digital;
-  if (grid) grid.hidden = digital;
-  if (title) title.textContent = digital ? 'Pengiriman' : 'Metode Pengiriman';
+  if (note) {
+    note.hidden = !noCourierOnly;
+    if (noCourierOnly) {
+      note.textContent = activeShipping?.id === 'no_courier'
+        ? 'Pesanan ini tidak memerlukan kurir pengiriman. Tanpa ongkir dan alamat kurir.'
+        : 'Produk digital dikirim ke WhatsApp Anda setelah pembayaran diterima. Tanpa ongkir dan alamat.';
+    }
+  }
+  if (grid) grid.hidden = noCourierOnly;
+  if (title) title.textContent = noCourierOnly ? 'Pengiriman' : 'Metode Pengiriman';
+  if (addressGroup) addressGroup.hidden = noCourierOnly;
+  if (noCourierOnly && errorAddressEl) errorAddressEl.hidden = true;
   if (addressEl) {
-    const pickup = state.activeShippingId === 'pickup';
-    addressEl.hidden = digital;
-    addressEl.placeholder = pickup ? 'Catatan untuk toko (opsional)' : 'Alamat pengantaran lengkap';
+    const pickup = activeShipping?.id === 'pickup';
+    addressEl.hidden = noCourierOnly;
+    addressEl.placeholder = pickup ? 'Catatan pengambilan di toko (opsional)' : 'Alamat pengantaran lengkap';
     addressEl.setAttribute('aria-label', addressEl.placeholder);
   }
-  if (!grid || digital) return;
+  if (!grid || noCourierOnly) return;
 
-  const signature = JSON.stringify(settings.shipping) + state.activeShippingId;
+  const list = availableShipping.length ? availableShipping : settings.shipping;
+  const signature = JSON.stringify(list) + state.activeShippingId;
   if (grid.dataset.signature === signature) return;
   grid.dataset.signature = signature;
-  grid.innerHTML = settings.shipping.map((s) => `
+  grid.innerHTML = list.map((s) => `
     <button type="button" class="shipping-method-card ${s.id === state.activeShippingId ? 'active' : ''}" data-action="select-shipping" data-shipping-id="${escapeHTML(s.id)}"
       aria-pressed="${s.id === state.activeShippingId}">
       <span class="shipping-name">${escapeHTML(s.name)}</span>
@@ -986,7 +1093,7 @@ export function updateCartUI() {
   const totalEl = document.getElementById('summary-total');
   const btnCheckout = document.getElementById('btn-checkout');
 
-  const { lines, totals, settings, activeShipping, voucher } = getCalculatedCart();
+  const { lines, totals, settings, activeShipping, availableShipping, voucher } = getCalculatedCart();
 
   if (countBadge) countBadge.textContent = totals.itemCount;
   if (mobBadge) mobBadge.textContent = totals.itemCount;
@@ -1005,7 +1112,13 @@ export function updateCartUI() {
   if (drawerCount) drawerCount.textContent = `(${totals.itemCount} pesanan)`;
 
   if (subtotalEl) subtotalEl.textContent = formatIDR(totals.subtotal);
-  if (shippingEl) shippingEl.textContent = totals.digitalOnly ? 'Gratis (digital)' : formatIDR(totals.shippingCost);
+  if (shippingEl) {
+    if (totals.digitalOnly || activeShipping?.id === 'no_courier') {
+      shippingEl.textContent = isStrictDigitalOnly(lines.filter((l) => l.available)) ? 'Gratis (digital)' : 'Tanpa kurir';
+    } else {
+      shippingEl.textContent = formatIDR(totals.shippingCost);
+    }
+  }
   if (packagingRow) packagingRow.style.display = totals.packaging > 0 ? 'flex' : 'none';
   if (packagingEl) packagingEl.textContent = formatIDR(totals.packaging);
   if (totalEl) totalEl.textContent = formatIDR(totals.total);
@@ -1020,7 +1133,7 @@ export function updateCartUI() {
     }
   }
 
-  renderShippingOptions(settings, totals);
+  renderShippingOptions(settings, totals, activeShipping, availableShipping);
 
   if (btnCheckout) {
     btnCheckout.disabled = checkoutPending || (!getPendingReservation() && (totals.itemCount === 0 || settings.store.isOpen === false));
@@ -1135,9 +1248,20 @@ export async function openCheckoutModal(existingOrderId = null) {
   }
   catch (error) { showToast(formatInventoryError(error)); return; }
   finally { setCheckoutPending(false); }
-  if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder) <= 0) {
+  const alreadyExpiredOrCancelled = newOrder.status === STATUS.EXPIRED
+    || newOrder.status === STATUS.CANCELLED
+    || (newOrder.status === STATUS.AWAITING && remainingMs(newOrder, getServerNow()) <= 0);
+  if (!existingOrderId && (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder, getServerNow()) <= 0)) {
     showToast(`Reservasi berstatus ${statusLabel(newOrder.status, newOrder)}. Tidak ada tagihan baru dibuat.`);
     return;
+  }
+  if (existingOrderId && isPaidStatus(newOrder.status)) {
+    showToast(`Pesanan berstatus ${statusLabel(newOrder.status, newOrder)}. Tidak perlu pembayaran ulang.`);
+    return;
+  }
+  if (alreadyExpiredOrCancelled && newOrder.status === STATUS.AWAITING && !isInventoryOrder(newOrder)) {
+    sweepExpiredOrders(getServerNow());
+    newOrder = getOrder(newOrder.id) || newOrder;
   }
   await Promise.race([settingsSync, new Promise((resolve) => setTimeout(resolve, 400))]);
 
@@ -1169,7 +1293,19 @@ export async function openCheckoutModal(existingOrderId = null) {
     state.activeOrderStopWatch = watchOrder(newOrder.id, {
       onTick: (msRemaining, currentOrder) => {
         const clockEl = document.getElementById('payment-countdown-clock');
-        if (clockEl) clockEl.textContent = formatCountdown(msRemaining);
+        const expiredNow = msRemaining <= 0;
+        if (clockEl) clockEl.textContent = expiredNow ? '00:00 (Batal Otomatis)' : formatCountdown(msRemaining);
+        if (expiredNow) {
+          const polling = document.querySelector('.polling-indicator');
+          if (polling) polling.style.display = 'none';
+          const banner = document.getElementById('payment-expired-banner');
+          if (banner && banner.style.display !== 'block') {
+            renderPaymentTerminationBanner(banner, 'expired');
+            banner.style.display = 'block';
+            updateOrderTrackerDockUI();
+            renderCatalog();
+          }
+        }
       },
       onUpdate: (updatedOrder, previousOrder) => {
         if (updatedOrder.status === STATUS.PAID) {
@@ -1203,14 +1339,14 @@ function renderPaymentTerminationBanner(banner, mode) {
   if (mode === 'cancelled') {
     banner.innerHTML = `
       <strong>Pesanan Dibatalkan</strong>
-      <p style="font-size:0.8rem; margin:4px 0 8px;">Pesanan ini dibatalkan oleh toko dan reservasi stok telah dikembalikan.</p>
-      <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:6px 14px; font-size:0.8rem; margin:0 auto;">Buat Pesanan Ulang</button>
+      <p style="font-size:0.8rem; margin:4px 0 8px;">Pesanan ini dibatalkan dan reservasi stok telah dikembalikan.</p>
+      <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:10px 16px; min-height:44px; font-size:0.85rem; margin:0 auto;">Buat Pesanan Ulang</button>
     `;
   } else {
     banner.innerHTML = `
-      <strong>Waktu Pembayaran 10 Menit Habis</strong>
-      <p style="font-size:0.8rem; margin:4px 0 8px;">Pesanan ini telah hangus otomatis demi menjaga reservasi stok toko.</p>
-      <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:6px 14px; font-size:0.8rem; margin:0 auto;">Buat Pesanan Ulang</button>
+      <strong>Waktu Pembayaran 10 Menit Habis · Pesanan Dibatalkan Otomatis</strong>
+      <p style="font-size:0.8rem; margin:4px 0 8px;">Batas waktu pembayaran telah berakhir sehingga pesanan ini dibatalkan otomatis. Silakan buat pesanan ulang.</p>
+      <button type="button" class="btn-primary" onclick="window.restartExpiredOrder()" style="background:#B91C1C; padding:10px 16px; min-height:44px; font-size:0.85rem; margin:0 auto;">Buat Pesanan Ulang</button>
     `;
   }
 }
@@ -1231,7 +1367,7 @@ function renderCheckoutView(order) {
   const banner = document.getElementById('payment-expired-banner');
   const polling = document.querySelector('.polling-indicator');
   const clockEl = document.getElementById('payment-countdown-clock');
-  const msLeft = remainingMs(order);
+  const msLeft = remainingMs(order, getServerNow());
   const cancelled = order.status === STATUS.CANCELLED;
   const expired = !cancelled && (msLeft <= 0 || order.status === STATUS.EXPIRED);
 
@@ -1240,7 +1376,7 @@ function renderCheckoutView(order) {
     banner.style.display = (cancelled || expired) ? 'block' : 'none';
   }
   if (polling) polling.style.display = (cancelled || expired) ? 'none' : 'flex';
-  if (clockEl) clockEl.textContent = cancelled ? 'Dibatalkan' : (expired ? '00:00 (Hangus)' : formatCountdown(msLeft));
+  if (clockEl) clockEl.textContent = cancelled ? 'Dibatalkan' : (expired ? '00:00 (Batal Otomatis)' : formatCountdown(msLeft));
 
   if (amountEl) amountEl.textContent = formatIDR(order.totals.total);
   if (uniqueBadgeEl) {
@@ -1260,7 +1396,7 @@ function renderCheckoutView(order) {
     vaEl.textContent = 'Toko ini belum mengaktifkan integrasi penyedia Virtual Account perbankan.';
   }
 
-  switchQRISDisplayMode(state.currentQRISDisplayMode || 'dynamic', order);
+  switchQRISDisplayMode('dynamic', order);
 }
 
 function showPaymentSnapshotError(error) {
@@ -1271,7 +1407,7 @@ function showPaymentSnapshotError(error) {
 }
 
 export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
-  state.currentQRISDisplayMode = mode;
+  state.currentQRISDisplayMode = 'dynamic';
   const order = explicitOrder || (state.activeCheckoutOrderId ? getOrder(state.activeCheckoutOrderId) : null) || state.activeOrder;
   const settings = getSettings();
   let rawStatic;
@@ -1281,41 +1417,21 @@ export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
   const pill = document.getElementById('qris-acquirer-pill');
   if (pill) {
     const acquirer = acquirerLabel(describeQRIS(rawStatic).acquirer);
-    const modeLabel = mode === 'static' ? 'QRIS Statis' : 'QRIS Dinamis';
-    pill.textContent = acquirer ? `${acquirer} · ${modeLabel}` : modeLabel;
+    pill.textContent = acquirer ? `${acquirer} · QRIS Dinamis` : 'QRIS Dinamis';
   }
 
-  const btnDynamic = document.getElementById('btn-qris-mode-dynamic');
-  const btnStatic = document.getElementById('btn-qris-mode-static');
-  const helperText = document.getElementById('qris-mode-helper');
   const amountLabelEl = document.getElementById('qris-amount-label');
   const qrContainer = document.getElementById('qris-svg-container');
-
-  const setModeState = (el, active) => {
-    if (!el) return;
-    if (typeof el.classList?.toggle === 'function') el.classList.toggle('is-active', active);
-    else if (active) el.classList?.add?.('is-active');
-    else el.classList?.remove?.('is-active');
-    el.setAttribute?.('aria-pressed', active ? 'true' : 'false');
-  };
-  setModeState(btnDynamic, mode === 'dynamic');
-  setModeState(btnStatic, mode === 'static');
+  if (amountLabelEl) amountLabelEl.textContent = 'Total Tagihan Otomatis (Terkunci di HP):';
 
   let payload = rawStatic;
-  if (mode === 'static') {
-    if (amountLabelEl) amountLabelEl.textContent = 'Nominal Bayar (Ketik di HP):';
-    if (helperText) helperText.textContent = 'Mode Statis Asli: Scan QR poster lalu ketik nominal pesanan Anda di aplikasi bank.';
-  } else {
-    try {
-      const amount = order ? order.totals.total : 10000;
-      const invoice = order ? order.invoice : 'INV01';
-      payload = convertStaticToDynamicQRIS(rawStatic, amount, invoice);
-    } catch (error) {
-      if (isInventoryOrder(order)) { showPaymentSnapshotError(error); return; }
-      payload = rawStatic;
-    }
-    if (amountLabelEl) amountLabelEl.textContent = 'Total Tagihan Otomatis (Terkunci di HP):';
-    if (helperText) helperText.textContent = 'Mode Dinamis: Tagihan terkunci otomatis di scanner aplikasi perbankan Anda.';
+  try {
+    const amount = order ? order.totals.total : 10000;
+    const invoice = order ? order.invoice : 'INV01';
+    payload = convertStaticToDynamicQRIS(rawStatic, amount, invoice);
+  } catch (error) {
+    if (isInventoryOrder(order)) { showPaymentSnapshotError(error); return; }
+    payload = rawStatic;
   }
 
   state.activeCheckoutPayload = payload;
@@ -1334,23 +1450,9 @@ export function switchQRISDisplayMode(mode = 'dynamic', explicitOrder = null) {
       const canvasEl = qrContainer.querySelector('canvas');
       const rendered = renderQRCodeCanvas(canvasEl, payload, { size: 236 });
       if (!rendered) {
-        qrContainer.innerHTML = `<div class="qr-fallback" style="padding:15px; font-size:0.8rem; text-align:center; color:#374151;">Scan QRIS atau salin string di bawah ini.<br><small style="word-break:break-all; font-family:monospace; display:block; margin-top:6px;">${escapeHTML(payload)}</small></div>`;
+        qrContainer.innerHTML = '<div class="qr-fallback" style="padding:15px; font-size:0.82rem; text-align:center; color:#374151;">Gagal membuat kode QRIS di perangkat ini. Muat ulang halaman atau hubungi toko lewat WhatsApp.</div>';
       }
     }
-  }
-}
-
-export function copyQRISPayload() {
-  if (isInventoryOrder(getOrder(state.activeCheckoutOrderId)) && !state.activeCheckoutPayload) { showToast('Snapshot QRIS pesanan belum tersedia.'); return; }
-  const payload = state.activeCheckoutPayload || getSettings().qris.payload || DEMO_STATIC_QRIS;
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(payload).then(() => {
-      showToast('Payload string QRIS berhasil disalin ke clipboard.');
-    }).catch(() => {
-      return showDialog('Salin data string QRIS berikut:', { kind: 'prompt', value: payload, readOnly: true });
-    });
-  } else {
-    return showDialog('Salin data string QRIS berikut:', { kind: 'prompt', value: payload, readOnly: true });
   }
 }
 
@@ -1407,7 +1509,7 @@ export function downloadQRISImage() {
   // Same generator as the on-screen QR, including the low-ECC retry for long payloads.
   const matrix = qrMatrix(payload);
   if (!matrix) {
-    showToast('Gagal membuat gambar QR. Salin string QRIS sebagai gantinya.');
+    showToast('Gagal membuat gambar QR. Silakan coba lagi atau hubungi toko via WhatsApp.');
     return;
   }
   const count = matrix.length;
@@ -1487,15 +1589,16 @@ function handlePaymentCompleted(order) {
 function handlePaymentExpired(order) {
   stopActiveOrderWatch();
   const clockEl = document.getElementById('payment-countdown-clock');
-  if (clockEl) clockEl.textContent = '00:00 (Hangus)';
+  if (clockEl) clockEl.textContent = '00:00 (Batal Otomatis)';
   const banner = document.getElementById('payment-expired-banner');
   renderPaymentTerminationBanner(banner, 'expired');
   if (banner) banner.style.display = 'block';
   const polling = document.querySelector('.polling-indicator');
   if (polling) polling.style.display = 'none';
   renderCatalog();
+  updateCartUI();
   updateOrderTrackerDockUI();
-  showToast('Batas waktu pembayaran 10 menit telah habis. Silakan buat pesanan ulang.');
+  showToast('Waktu pembayaran 10 menit telah habis dan pesanan dibatalkan otomatis. Silakan buat pesanan ulang.');
 }
 
 function handlePaymentCancelled(order) {
@@ -1591,6 +1694,53 @@ export function closeReceiptModal() {
   showToast('Pesanan aktif. Anda dapat memantau prosesnya di dock bawah.');
 }
 
+function buildWhatsAppOrderMessage(order, settings) {
+  const storeName = String(settings?.store?.name || 'Atelier Nusantara').trim();
+  const lines = [
+    `*PESANAN ${storeName.toUpperCase()}*`,
+    '----------------------------------------',
+    `No. Invoice: ${order.invoice || '-'}`,
+    `Waktu: ${formatDateTime(order.createdAt || Date.now())}`,
+    '',
+    '*Data Pemesan:*',
+    `- Nama: ${order.customer?.name || '-'}`,
+    `- WhatsApp: ${order.customer?.phone || '-'}`,
+    `- Pengiriman: ${order.shipping?.name || 'Ambil di toko'}`
+  ];
+  if (order.shipping?.id && !['digital', 'no_courier'].includes(order.shipping.id)) {
+    lines.push(`- Alamat/Catatan: ${order.customer?.address || '-'}`);
+  } else if (order.customer?.address) {
+    lines.push(`- Catatan: ${order.customer.address}`);
+  }
+  lines.push('', '*Rincian Pesanan:*');
+  (order.items || []).forEach((item) => {
+    const variantPart = item.variant ? ` [${item.variant}]` : '';
+    const notePart = item.note ? ` (catatan: ${item.note})` : '';
+    lines.push(`- ${item.name} (x${item.qty})${variantPart}${notePart}: ${formatIDR(Number(item.unitPrice || 0) * Number(item.qty || 1))}`);
+  });
+  lines.push('', `Subtotal: ${formatIDR(order.totals?.subtotal || 0)}`);
+  if (Number(order.totals?.discount || 0) > 0) {
+    lines.push(`Diskon${order.voucherCode ? ` (${order.voucherCode})` : ''}: -${formatIDR(order.totals.discount)}`);
+  }
+  if (Number(order.totals?.shippingCost || 0) > 0) {
+    lines.push(`Ongkos Kirim: ${formatIDR(order.totals.shippingCost)}`);
+  }
+  if (Number(order.totals?.packaging || 0) > 0) {
+    lines.push(`Kemasan: ${formatIDR(order.totals.packaging)}`);
+  }
+  lines.push(`*TOTAL: ${formatIDR(order.totals?.total || 0)}*`);
+  if (order.status === STATUS.AWAITING) {
+    const methodLabel = order.payment?.method === 'whatsapp'
+      ? 'Konfirmasi & ketersediaan lewat WhatsApp'
+      : 'Pembayaran QRIS Dinamis';
+    lines.push(`Status: ${methodLabel} (berlaku hingga ${formatTime(order.expiresAt)})`);
+  } else {
+    lines.push(`Status: ${statusLabel(order.status, order)}`);
+  }
+  lines.push('----------------------------------------', 'Mohon konfirmasi pesanan ini. Terima kasih!');
+  return lines.join('\n');
+}
+
 export async function checkoutViaWhatsApp(existingOrderId = null) {
   if (typeof existingOrderId !== 'string') existingOrderId = null;
   const pending = getPendingReservation();
@@ -1617,35 +1767,14 @@ export async function checkoutViaWhatsApp(existingOrderId = null) {
   }
   catch (error) { popup?.close(); showToast(formatInventoryError(error)); return; }
   finally { setCheckoutPending(false); }
-  if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder) <= 0 || newOrder.payment?.method !== 'whatsapp') {
+  if (newOrder.status !== STATUS.AWAITING || remainingMs(newOrder, getServerNow()) <= 0 || newOrder.payment?.method !== 'whatsapp') {
     popup?.close();
     showToast('Reservasi tidak menunggu konfirmasi WhatsApp. Periksa pelacak pesanan.');
     return;
   }
   rememberMyOrder(newOrder.id);
 
-  let msg = `*PESANAN BARU: ${(settings.store.name || 'Atelier Nusantara').toUpperCase()}*\n`;
-  msg += `----------------------------------------\n`;
-  msg += `No. Invoice: ${newOrder.invoice}\n`;
-  msg += `Waktu: ${formatDateTime(newOrder.createdAt)}\n\n`;
-  msg += `*Data Pemesan:*\n`;
-  msg += `• Nama: ${newOrder.customer.name || '-'}\n`;
-  msg += `• WhatsApp: ${newOrder.customer.phone || '-'}\n`;
-  msg += `• Pengiriman: ${newOrder.shipping?.name || 'Ambil di toko'}\n`;
-  if (newOrder.shipping?.id !== 'digital') msg += `• Alamat/Catatan: ${newOrder.customer.address || '-'}\n`;
-  msg += `\n*Rincian Pesanan:*\n`;
-  newOrder.items.forEach((i) => {
-    msg += `• ${i.name} (x${i.qty}) ${i.variant ? `[${i.variant}]` : ''} ${i.note ? `catatan: ${i.note}` : ''}: ${formatIDR(i.unitPrice * i.qty)}\n`;
-  });
-  msg += `\nSubtotal: ${formatIDR(newOrder.totals.subtotal)}\n`;
-  if (newOrder.totals.discount > 0) msg += `Diskon (${newOrder.voucherCode}): -${formatIDR(newOrder.totals.discount)}\n`;
-  if (newOrder.totals.shippingCost > 0) msg += `Ongkos Kirim: ${formatIDR(newOrder.totals.shippingCost)}\n`;
-  if (newOrder.totals.packaging > 0) msg += `Kemasan: ${formatIDR(newOrder.totals.packaging)}\n`;
-  msg += `*TOTAL: ${formatIDR(newOrder.totals.total)}*\n`;
-  msg += `Pembayaran: dikonfirmasi lewat chat ini sebelum ${formatTime(newOrder.expiresAt)} (reservasi 10 menit)\n`;
-  msg += `----------------------------------------\n`;
-  msg += `Mohon konfirmasi ketersediaan pesanan ini. Terima kasih!`;
-
+  const msg = buildWhatsAppOrderMessage(newOrder, settings);
   const waNum = configuredWhatsApp(settings.store.whatsapp);
   const url = `https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`;
   const fallback = document.getElementById('checkout-whatsapp-link');
@@ -1675,22 +1804,24 @@ export async function checkoutViaWhatsApp(existingOrderId = null) {
 }
 
 export function sendOrderToWhatsApp() {
-  const order = getOrder(state.activeCheckoutOrderId);
+  const order = getOrder(state.activeCheckoutOrderId) || state.activeOrder;
   if (!order) return;
-  const settings = getSettings();
-  let msg = `*SALINAN TAGIHAN QRIS: ATELIER NUSANTARA*\n`;
-  msg += `----------------------------------------\n`;
-  msg += `No. Invoice: ${order.invoice}\n`;
-  msg += `Pemesan: ${order.customer.name || 'Pelanggan'}\n`;
-  msg += `Total Tagihan: ${formatIDR(order.totals.total)}\n`;
-  msg += `Status: Menunggu Pembayaran (Batas 10 Menit)\n`;
-  let payload;
-  try { payload = buildPaymentPayload(order, settings.qris.payload); }
-  catch (error) { showPaymentSnapshotError(error); return; }
-  msg += `String QRIS: ${payload}\n`;
+  if (order.status === STATUS.CANCELLED || order.status === STATUS.EXPIRED || (order.status === STATUS.AWAITING && remainingMs(order, getServerNow()) <= 0)) {
+    showToast('Pesanan sudah kedaluwarsa atau dibatalkan. Silakan buat pesanan ulang.');
+    return;
+  }
   const waNum = requireWhatsApp();
   if (!waNum) return;
-  window.open(`https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`, '_blank');
+  const settings = getSettings();
+  const msg = buildWhatsAppOrderMessage(order, settings);
+  const url = `https://wa.me/${waNum}?text=${encodeURIComponent(msg)}`;
+  const popup = window.open(url, '_blank');
+  if (popup) popup.opener = null;
+  else {
+    const fallback = document.getElementById('checkout-whatsapp-link');
+    if (fallback) { fallback.href = url; fallback.hidden = false; }
+    showToast('Popup WhatsApp diblokir. Gunakan tombol WhatsApp di keranjang atau buka WhatsApp Anda.');
+  }
 }
 
 export function shareReceiptWhatsApp() {
@@ -2182,8 +2313,8 @@ function syncAdminOrderAlerts(orders) {
   }
 }
 
-const storefrontBaselines = { availability: null, merchantWhatsApp: null };
-const storefrontDirtyDomains = { availability: false, merchantWhatsApp: false };
+const storefrontBaselines = { availability: null, merchantWhatsApp: null, shipping: null };
+const storefrontDirtyDomains = { availability: false, merchantWhatsApp: false, shipping: false };
 
 function readAvailabilityDraft() {
   return [
@@ -2194,6 +2325,13 @@ function readAvailabilityDraft() {
 
 function readMerchantWhatsAppDraft() {
   return document.getElementById('admin-storefront-whatsapp')?.value;
+}
+
+function readShippingDraft() {
+  return [
+    Boolean(document.getElementById('admin-storefront-shipping-enabled')?.checked),
+    Boolean(document.getElementById('admin-storefront-pickup-enabled')?.checked)
+  ];
 }
 
 export function refreshAdminDashboard() {
@@ -2227,6 +2365,8 @@ export function refreshAdminDashboard() {
   const hoursInput = document.getElementById('admin-storefront-hours');
   const openInput = document.getElementById('admin-storefront-is-open');
   const storefrontWa = document.getElementById('admin-storefront-whatsapp');
+  const shippingEnabledInput = document.getElementById('admin-storefront-shipping-enabled');
+  const pickupEnabledInput = document.getElementById('admin-storefront-pickup-enabled');
   const syncStatus = document.getElementById('admin-live-sync');
 
   if (omzetEl) omzetEl.textContent = formatIDR(totalOmzet);
@@ -2277,6 +2417,15 @@ export function refreshAdminDashboard() {
   if (!storefrontDirtyDomains.merchantWhatsApp) {
     if (storefrontWa) storefrontWa.value = settings.store.whatsapp || '';
     storefrontBaselines.merchantWhatsApp = readMerchantWhatsAppDraft();
+  }
+
+  if (storefrontBaselines.shipping !== null && JSON.stringify(readShippingDraft()) !== JSON.stringify(storefrontBaselines.shipping)) {
+    storefrontDirtyDomains.shipping = true;
+  }
+  if (!storefrontDirtyDomains.shipping) {
+    if (shippingEnabledInput) shippingEnabledInput.checked = settings.store.shippingEnabled !== false;
+    if (pickupEnabledInput) pickupEnabledInput.checked = settings.store.pickupEnabled !== false;
+    storefrontBaselines.shipping = readShippingDraft();
   }
   if (syncStatus) {
     if (adminOrdersSyncState === 'loading') {
@@ -2338,7 +2487,7 @@ function renderAdminOrderTable() {
     } else {
       actionBtn = `<span style="font-size:0.78rem; color:var(--ink-secondary);">Selesai</span>`;
     }
-    if (!isComplete) {
+    if (o.status !== STATUS.CANCELLED) {
       actionBtn += `<button type="button" class="btn-admin-action" data-action="admin-cancel-order" data-order-id="${escapeHTML(o.id)}">Batalkan</button>`;
     }
 
@@ -2390,10 +2539,15 @@ export async function adminCancelOrder(orderId) {
   sfx.playClick();
   const res = await cancelOrderById(orderId, { by: 'admin_dashboard', note: 'Dibatalkan oleh admin' });
   if (res.ok) {
+    if (state.activeCheckoutOrderId === orderId) handlePaymentCancelled(res.order);
     refreshAdminDashboard();
+    renderCatalog();
+    updateCartUI();
+    updateOrderTrackerDockUI();
     showToast(`Pesanan ${res.order.invoice} dibatalkan.`);
   } else {
-    showToast(`Gagal membatalkan pesanan: ${res.reason}`);
+    const errText = formatInventoryError({ code: res.code, message: res.reason });
+    showToast(`Gagal membatalkan pesanan: ${errText}`);
   }
 }
 
@@ -2422,14 +2576,16 @@ function renderAdminProductsTable() {
   if (!tbody) return;
   const products = getProducts();
 
-  tbody.innerHTML = products.map((p) => `
+  tbody.innerHTML = products.map((p) => {
+    const usesCourier = productRequiresShipping(p);
+    return `
     <tr>
       <td data-label="Produk">
         <div style="display:flex; align-items:center; gap:10px;">
           <img src="${escapeHTML(p.image)}" width="36" height="36" style="border-radius:4px; object-fit:cover;" alt="" />
           <div>
             <strong>${escapeHTML(p.name)}</strong>
-            <span style="display:block; font-size:0.75rem; color:var(--ink-secondary);">${formatProductStockLabel(p)}</span>
+            <span style="display:block; font-size:0.75rem; color:var(--ink-secondary);">${formatProductStockLabel(p)} &middot; ${usesCourier ? 'Kurir aktif' : 'Tanpa kurir'}</span>
           </div>
         </div>
       </td>
@@ -2451,7 +2607,74 @@ function renderAdminProductsTable() {
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
+}
+
+export function syncProductCategoryOptions(preferredValue = '') {
+  const select = document.getElementById('new-prod-category');
+  if (!select || typeof document?.createElement !== 'function' || typeof select.appendChild !== 'function') return;
+  const previous = preferredValue || select.value || 'makanan';
+  const categories = getAllCategories(getCatalogProducts(), getSettings().store?.categories);
+  select.innerHTML = '';
+  categories.forEach((cat) => {
+    const opt = document.createElement('option');
+    opt.value = cat.id;
+    opt.textContent = cat.label;
+    select.appendChild(opt);
+  });
+  if (categories.some((c) => c.id === previous)) {
+    select.value = previous;
+  } else if (categories.length) {
+    select.value = categories[0].id;
+  }
+}
+
+export function toggleCustomCategoryInput(forceOpen) {
+  const box = document.getElementById('admin-new-category-box');
+  const input = document.getElementById('admin-new-category-name');
+  if (!box) return;
+  const nextVisible = typeof forceOpen === 'boolean' ? forceOpen : box.hidden;
+  box.hidden = !nextVisible;
+  if (nextVisible) {
+    if (input) { input.value = ''; input.focus?.(); }
+  } else if (input) {
+    input.value = '';
+  }
+}
+
+export async function addCustomProductCategory() {
+  const input = document.getElementById('admin-new-category-name');
+  const label = String(input?.value ?? '').trim();
+  if (label.length < 2 || label.length > 36) {
+    showToast('Nama kategori baru harus 2 hingga 36 karakter.');
+    input?.focus?.();
+    return;
+  }
+  const id = normalizeCategorySlug(label);
+  if (!id || id === 'semua') {
+    showToast('Gunakan huruf atau angka untuk nama kategori.');
+    input?.focus?.();
+    return;
+  }
+  const settings = getSettings();
+  const existing = getAllCategories(getCatalogProducts(), settings.store?.categories);
+  if (existing.some((c) => c.id === id)) {
+    syncProductCategoryOptions(id);
+    toggleCustomCategoryInput(false);
+    showToast(`Kategori "${existing.find((c) => c.id === id).label}" dipilih.`);
+    return;
+  }
+  try {
+    const nextCustom = setCustomCategories([...(settings.store?.categories || []), { id, label }]);
+    await saveSharedSettings((s) => ({ ...s, store: { ...s.store, categories: nextCustom } }));
+    syncProductCategoryOptions(id);
+    renderCategoryTabs();
+    toggleCustomCategoryInput(false);
+    showToast(`Kategori "${label}" berhasil ditambahkan.`);
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function resetProductFormFields() {
@@ -2459,8 +2682,10 @@ function resetProductFormFields() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   }
-  const catSelect = document.getElementById('new-prod-category');
-  if (catSelect) catSelect.value = 'makanan';
+  syncProductCategoryOptions('makanan');
+  toggleCustomCategoryInput(false);
+  const shipCheckbox = document.getElementById('new-prod-requires-shipping');
+  if (shipCheckbox) shipCheckbox.checked = true;
 }
 
 export function toggleAddProductForm(forceOpen) {
@@ -2471,6 +2696,7 @@ export function toggleAddProductForm(forceOpen) {
     ? forceOpen
     : formBox.style.display === 'none';
   formBox.style.display = nextVisible ? 'flex' : 'none';
+  if (nextVisible) syncProductCategoryOptions();
   if (!nextVisible || forceOpen === undefined) {
     state.editingProductId = null;
     if (wasEditing || (forceOpen === undefined && nextVisible)) {
@@ -2496,16 +2722,19 @@ export function openProductEditForm(productId) {
   const imgInput = document.getElementById('new-prod-image');
   const descInput = document.getElementById('new-prod-desc');
   const storyInput = document.getElementById('new-prod-story');
+  const shipCheckbox = document.getElementById('new-prod-requires-shipping');
   const title = document.getElementById('admin-product-form-title');
   const label = document.getElementById('admin-product-submit-label');
 
+  syncProductCategoryOptions(p.category || 'makanan');
   if (nameInput) nameInput.value = p.name || '';
-  if (catSelect) catSelect.value = p.category || 'makanan';
+  if (catSelect) catSelect.value = normalizeCategorySlug(p.category) || 'makanan';
   if (priceInput) priceInput.value = p.price || '';
   if (tagInput) tagInput.value = p.tags && p.tags[0] ? p.tags[0] : '';
   if (imgInput) imgInput.value = p.image || '';
   if (descInput) descInput.value = p.desc || '';
   if (storyInput) storyInput.value = p.story || '';
+  if (shipCheckbox) shipCheckbox.checked = productRequiresShipping(p);
   if (title) title.textContent = `Edit Produk: ${p.name}`;
   if (label) label.textContent = 'Simpan Perubahan Produk';
 }
@@ -2515,13 +2744,15 @@ export async function submitNewProduct(e) {
   sfx.playClick();
 
   const name = String(document.getElementById('new-prod-name')?.value ?? '').trim();
-  const category = document.getElementById('new-prod-category')?.value || 'makanan';
+  const category = normalizeCategorySlug(document.getElementById('new-prod-category')?.value || 'makanan') || 'makanan';
   const rawPrice = Number(document.getElementById('new-prod-price')?.value);
   const price = rawPrice;
   const tag = String(document.getElementById('new-prod-tag')?.value ?? '').trim();
   let image = String(document.getElementById('new-prod-image')?.value ?? '').trim();
   const desc = String(document.getElementById('new-prod-desc')?.value ?? '').trim() || 'Koleksi pilihan toko.';
   const story = String(document.getElementById('new-prod-story')?.value ?? '').trim();
+  const shipCheckbox = document.getElementById('new-prod-requires-shipping');
+  const requiresShipping = shipCheckbox ? Boolean(shipCheckbox.checked) : category !== 'digital';
 
   if (!name) {
     showToast('Mohon isi nama produk terlebih dahulu.');
@@ -2561,6 +2792,7 @@ export async function submitNewProduct(e) {
       Object.assign(target, {
         name,
         category,
+        requiresShipping,
         price,
         tags: tag ? [tag] : target.tags,
         desc,
@@ -2575,6 +2807,7 @@ export async function submitNewProduct(e) {
       id: `prod-custom-${Date.now()}`,
       name,
       category,
+      requiresShipping,
       price,
       tags: tag ? [tag] : ['Baru'],
       desc,
@@ -2596,8 +2829,10 @@ export async function submitNewProduct(e) {
   }
 
   toggleAddProductForm(false);
+  renderCategoryTabs();
   refreshAdminDashboard();
   renderCatalog();
+  updateCartUI();
   } catch (error) { showToast(error.message); }
 }
 
@@ -3002,6 +3237,14 @@ export async function saveAdminStorefrontSetting(key) {
     storefrontDirtyDomains.availability = false;
     storefrontBaselines.availability = null;
     showToast('Ketersediaan toko berhasil disimpan.');
+  } else if (key === 'shipping') {
+    const shippingEnabled = Boolean(document.getElementById('admin-storefront-shipping-enabled')?.checked);
+    const pickupEnabled = Boolean(document.getElementById('admin-storefront-pickup-enabled')?.checked);
+    await saveSharedSettings((s) => ({ ...s, store: { ...s.store, shippingEnabled, pickupEnabled } }));
+    storefrontDirtyDomains.shipping = false;
+    storefrontBaselines.shipping = null;
+    updateCartUI();
+    showToast('Pengaturan kurir & pengambilan berhasil disimpan.');
   }
   refreshAdminDashboard();
   } catch (error) { showToast(error.message); }
@@ -3124,20 +3367,18 @@ export function initEventBindings() {
   if (initEventBindings._bound) return;
   initEventBindings._bound = true;
   // Category tabs
-  document.querySelectorAll('.category-tabs .tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      sfx.playClick();
-      document.querySelectorAll('.category-tabs .tab-btn').forEach((b) => {
-        b.classList.remove('active');
-        b.setAttribute?.('aria-pressed', 'false');
-      });
-      btn.classList.add('active');
-      btn.setAttribute?.('aria-pressed', 'true');
-      state.activeCategory = btn.dataset.category;
-      renderCatalog();
-      syncCategoryTabSlider();
+  document.querySelectorAll('.category-tabs .tab-btn').forEach((btn) => bindCategoryTabButton(btn));
+
+  // Auto-sync shipping checkbox default when selecting digital vs physical category for new products
+  const newProdCatSelect = document.getElementById('new-prod-category');
+  const newProdShipCheckbox = document.getElementById('new-prod-requires-shipping');
+  if (newProdCatSelect && newProdShipCheckbox) {
+    newProdCatSelect.addEventListener?.('change', () => {
+      if (!state.editingProductId) {
+        newProdShipCheckbox.checked = newProdCatSelect.value !== 'digital';
+      }
     });
-  });
+  }
 
   // Search
   const searchInput = document.getElementById('search-input');
@@ -3294,9 +3535,12 @@ export function initRealtimeSync() {
     subscribe((change) => {
       if (change.domain === 'products') {
         renderCatalog();
-        renderCategoryBadges();
+        renderCategoryTabs();
         updateCartUI();
-        if (state.adminAuthenticated) renderAdminProductsTable();
+        if (state.adminAuthenticated) {
+          syncProductCategoryOptions();
+          renderAdminProductsTable();
+        }
       } else if (change.domain === 'orders') {
         updateCartUI();
         updateOrderTrackerDockUI();
@@ -3309,12 +3553,16 @@ export function initRealtimeSync() {
         }
       } else if (change.domain === 'settings') {
         updateStorefrontStatus();
+        renderCategoryTabs();
         updateCartUI();
         if ((change.type === 'qris' || change.type === 'cloud-sync') && state.activeCheckoutOrderId) {
           const order = getOrder(state.activeCheckoutOrderId);
           if (order) renderCheckoutView(order);
         }
-        if (state.adminAuthenticated) refreshAdminDashboard();
+        if (state.adminAuthenticated) {
+          syncProductCategoryOptions();
+          refreshAdminDashboard();
+        }
       } else if (change.domain === 'cart') {
         state.cart = getCart();
         updateCartUI();
@@ -4424,6 +4672,8 @@ export function initGSAPAnimations() {
 
 function initApp() {
   updateStorefrontStatus();
+  renderCategoryTabs();
+  syncProductCategoryOptions();
   renderCatalog();
   updateCartUI();
   updateOrderTrackerDockUI();
@@ -4516,8 +4766,10 @@ if (typeof window !== 'undefined') {
   window.clearActiveOrder = clearActiveOrder;
   window.openMerchantConfigModal = openMerchantConfigModal;
   window.switchQRISDisplayMode = switchQRISDisplayMode;
-  window.copyQRISPayload = copyQRISPayload;
   window.downloadQRISImage = downloadQRISImage;
+  window.toggleCustomCategoryInput = toggleCustomCategoryInput;
+  window.addCustomProductCategory = addCustomProductCategory;
+  window.renderCategoryTabs = renderCategoryTabs;
   window.checkoutViaWhatsApp = checkoutViaWhatsApp;
   window.sendOrderToWhatsApp = sendOrderToWhatsApp;
   window.shareReceiptWhatsApp = shareReceiptWhatsApp;
